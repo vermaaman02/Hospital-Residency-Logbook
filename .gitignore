@@ -1,0 +1,86 @@
+# ========================
+# ENVIRONMENT & SECRETS
+# ========================
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+*.pem
+*.key
+*.cert
+
+# ========================
+# DEPENDENCIES
+# ========================
+node_modules/
+.pnp/
+.pnp.js
+.yarn/install-state.gz
+
+# ========================
+# NEXT.JS BUILD
+# ========================
+.next/
+out/
+build/
+dist/
+
+# # ========================
+# # PRISMA
+# # ========================
+# prisma/*.db
+# prisma/*.db-journal
+
+# ========================
+# TESTING
+# ========================
+coverage/
+*.lcov
+.nyc_output/
+
+# ========================
+# IDE & EDITOR
+# ========================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# DEBUG & LOGS
+# ========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.log
+*.log
+
+# ========================
+# OS FILES
+# ========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ========================
+# MISC
+# ========================
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.turbo
