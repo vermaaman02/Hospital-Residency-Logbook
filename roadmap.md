@@ -1251,13 +1251,13 @@ npx prisma migrate deploy
 - [x] HOD: Batch & semester management (Manage Users page)
 - [x] HOD: Faculty-student assignment (with semester selector)
 
-### Phase 3: Academic Modules (Week 5-6)
+### Phase 3: Academic Modules (Week 5-6) ✅ COMPLETED
 
-- [ ] **B1: Academic Case Presentations** (20 entries)
-- [ ] **B2: Seminars / Evidence Based Discussions** (10 entries)
-- [ ] **B3: Journal Club Discussions** (10 entries)
-- [ ] Digital signature flow for academic entries
-- [ ] Faculty remark system
+- [x] **B1: Academic Case Presentations** (20 entries)
+- [x] **B2: Seminars / Evidence Based Discussions** (10 entries)
+- [x] **B3: Journal Club Discussions** (10 entries)
+- [x] Digital signature flow for academic entries
+- [x] Faculty remark system
 
 ### Phase 4: Clinical Skills & Case Management (Week 7-10)
 

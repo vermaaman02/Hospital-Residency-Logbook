@@ -1,6 +1,7 @@
 /**
  * @module FacultyReviewsClient
  * @description Client component for faculty to review and sign-off student entries.
+ * Supports: Rotation Postings, Attendance, Case Presentations, Seminars, Journal Clubs.
  */
 
 "use client";
@@ -30,10 +31,25 @@ import {
 	rejectRotationPosting,
 } from "@/actions/rotation-postings";
 import { signAttendanceSheet } from "@/actions/attendance";
+import {
+	signCasePresentation,
+	rejectCasePresentation,
+} from "@/actions/case-presentations";
+import { signSeminar, rejectSeminar } from "@/actions/seminars";
+import { signJournalClub, rejectJournalClub } from "@/actions/journal-clubs";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Check, X, Loader2, FileText, Calendar } from "lucide-react";
+import {
+	Check,
+	X,
+	Loader2,
+	FileText,
+	Calendar,
+	Presentation,
+	BookOpen,
+	Newspaper,
+} from "lucide-react";
 
 interface UserInfo {
 	firstName: string | null;
@@ -68,15 +84,41 @@ interface PendingAttendance {
 	user: UserInfo;
 }
 
+interface AcademicEntry {
+	id: string;
+	slNo: number;
+	date: Date | string | null;
+	patientInfo?: string | null;
+	completeDiagnosis?: string | null;
+	category?: string | null;
+	journalArticle?: string | null;
+	typeOfStudy?: string | null;
+	facultyRemark: string | null;
+	status: string;
+	user: UserInfo;
+}
+
 interface FacultyReviewsClientProps {
 	pendingRotations: PendingRotation[];
 	pendingAttendance: PendingAttendance[];
+	pendingCasePresentations: AcademicEntry[];
+	pendingSeminars: AcademicEntry[];
+	pendingJournalClubs: AcademicEntry[];
 	isHod: boolean;
 }
+
+type RejectType =
+	| "rotation"
+	| "casePresentation"
+	| "seminar"
+	| "journalClub";
 
 export function FacultyReviewsClient({
 	pendingRotations,
 	pendingAttendance,
+	pendingCasePresentations,
+	pendingSeminars,
+	pendingJournalClubs,
 	isHod,
 }: FacultyReviewsClientProps) {
 	const router = useRouter();
@@ -84,15 +126,28 @@ export function FacultyReviewsClient({
 	const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
 	const [rejectTarget, setRejectTarget] = useState<{
 		id: string;
-		type: string;
+		type: RejectType;
 	} | null>(null);
 	const [rejectRemark, setRejectRemark] = useState("");
 
-	function handleSignRotation(id: string) {
+	function handleSign(id: string, type: RejectType) {
 		startTransition(async () => {
 			try {
-				await signRotationPosting(id);
-				toast.success("Rotation posting signed");
+				switch (type) {
+					case "rotation":
+						await signRotationPosting(id);
+						break;
+					case "casePresentation":
+						await signCasePresentation(id);
+						break;
+					case "seminar":
+						await signSeminar(id);
+						break;
+					case "journalClub":
+						await signJournalClub(id);
+						break;
+				}
+				toast.success("Entry signed successfully");
 				router.refresh();
 			} catch {
 				toast.error("Failed to sign");
@@ -100,14 +155,27 @@ export function FacultyReviewsClient({
 		});
 	}
 
-	function handleRejectRotation() {
+	function handleReject() {
 		if (!rejectTarget || !rejectRemark.trim()) {
 			toast.error("Please provide a remark");
 			return;
 		}
 		startTransition(async () => {
 			try {
-				await rejectRotationPosting(rejectTarget.id, rejectRemark);
+				switch (rejectTarget.type) {
+					case "rotation":
+						await rejectRotationPosting(rejectTarget.id, rejectRemark);
+						break;
+					case "casePresentation":
+						await rejectCasePresentation(rejectTarget.id, rejectRemark);
+						break;
+					case "seminar":
+						await rejectSeminar(rejectTarget.id, rejectRemark);
+						break;
+					case "journalClub":
+						await rejectJournalClub(rejectTarget.id, rejectRemark);
+						break;
+				}
 				toast.success("Revision requested");
 				setRejectDialogOpen(false);
 				setRejectRemark("");
@@ -130,13 +198,18 @@ export function FacultyReviewsClient({
 		});
 	}
 
-	function openRejectDialog(id: string, type: string) {
+	function openRejectDialog(id: string, type: RejectType) {
 		setRejectTarget({ id, type });
 		setRejectRemark("");
 		setRejectDialogOpen(true);
 	}
 
-	const totalPending = pendingRotations.length + pendingAttendance.length;
+	const totalPending =
+		pendingRotations.length +
+		pendingAttendance.length +
+		pendingCasePresentations.length +
+		pendingSeminars.length +
+		pendingJournalClubs.length;
 
 	return (
 		<div className="space-y-6">
@@ -147,7 +220,7 @@ export function FacultyReviewsClient({
 			</div>
 
 			<Tabs defaultValue="rotations">
-				<TabsList>
+				<TabsList className="flex-wrap h-auto">
 					<TabsTrigger value="rotations">
 						<FileText className="h-4 w-4 mr-1" />
 						Rotations ({pendingRotations.length})
@@ -158,14 +231,28 @@ export function FacultyReviewsClient({
 							Attendance ({pendingAttendance.length})
 						</TabsTrigger>
 					)}
+					<TabsTrigger value="casePresentations">
+						<Presentation className="h-4 w-4 mr-1" />
+						Case Presentations ({pendingCasePresentations.length})
+					</TabsTrigger>
+					<TabsTrigger value="seminars">
+						<BookOpen className="h-4 w-4 mr-1" />
+						Seminars ({pendingSeminars.length})
+					</TabsTrigger>
+					<TabsTrigger value="journalClubs">
+						<Newspaper className="h-4 w-4 mr-1" />
+						Journal Clubs ({pendingJournalClubs.length})
+					</TabsTrigger>
 				</TabsList>
 
+				{/* Rotations Tab */}
 				<TabsContent value="rotations" className="mt-4 space-y-4">
-					{pendingRotations.length === 0 ?
+					{pendingRotations.length === 0 ? (
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending rotation postings to review
 						</div>
-					:	pendingRotations.map((rotation) => (
+					) : (
+						pendingRotations.map((rotation) => (
 							<Card key={rotation.id}>
 								<CardHeader className="pb-3">
 									<div className="flex items-start justify-between">
@@ -203,18 +290,22 @@ export function FacultyReviewsClient({
 									<div className="flex items-center gap-2">
 										<Button
 											size="sm"
-											onClick={() => handleSignRotation(rotation.id)}
+											onClick={() => handleSign(rotation.id, "rotation")}
 											disabled={isPending}
 										>
-											{isPending ?
+											{isPending ? (
 												<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-											:	<Check className="h-3.5 w-3.5 mr-1" />}
+											) : (
+												<Check className="h-3.5 w-3.5 mr-1" />
+											)}
 											Sign Off
 										</Button>
 										<Button
 											variant="outline"
 											size="sm"
-											onClick={() => openRejectDialog(rotation.id, "rotation")}
+											onClick={() =>
+												openRejectDialog(rotation.id, "rotation")
+											}
 											disabled={isPending}
 										>
 											<X className="h-3.5 w-3.5 mr-1" />
@@ -224,20 +315,21 @@ export function FacultyReviewsClient({
 								</CardContent>
 							</Card>
 						))
-					}
+					)}
 				</TabsContent>
 
+				{/* Attendance Tab — HOD only */}
 				{isHod && (
 					<TabsContent value="attendance" className="mt-4 space-y-4">
-						{pendingAttendance.length === 0 ?
+						{pendingAttendance.length === 0 ? (
 							<div className="border rounded-lg p-8 text-center text-muted-foreground">
 								No pending attendance sheets to review
 							</div>
-						:	pendingAttendance.map((sheet) => {
+						) : (
+							pendingAttendance.map((sheet) => {
 								const presentDays = sheet.entries.filter(
 									(e) => e.presentAbsent?.toLowerCase() === "present",
 								).length;
-
 								return (
 									<Card key={sheet.id}>
 										<CardHeader className="pb-3">
@@ -270,9 +362,11 @@ export function FacultyReviewsClient({
 													onClick={() => handleSignAttendance(sheet.id)}
 													disabled={isPending}
 												>
-													{isPending ?
+													{isPending ? (
 														<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-													:	<Check className="h-3.5 w-3.5 mr-1" />}
+													) : (
+														<Check className="h-3.5 w-3.5 mr-1" />
+													)}
 													Sign Off
 												</Button>
 											</div>
@@ -280,9 +374,82 @@ export function FacultyReviewsClient({
 									</Card>
 								);
 							})
-						}
+						)}
 					</TabsContent>
 				)}
+
+				{/* Case Presentations Tab */}
+				<TabsContent value="casePresentations" className="mt-4 space-y-4">
+					{pendingCasePresentations.length === 0 ? (
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending case presentations to review
+						</div>
+					) : (
+						pendingCasePresentations.map((entry) => (
+							<AcademicReviewCard
+								key={entry.id}
+								entry={entry}
+								type="casePresentation"
+								title={`Case Presentation #${entry.slNo}`}
+								subtitle={entry.completeDiagnosis ?? "No diagnosis"}
+								detail={entry.patientInfo ?? ""}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "casePresentation")}
+								onReject={() =>
+									openRejectDialog(entry.id, "casePresentation")
+								}
+							/>
+						))
+					)}
+				</TabsContent>
+
+				{/* Seminars Tab */}
+				<TabsContent value="seminars" className="mt-4 space-y-4">
+					{pendingSeminars.length === 0 ? (
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending seminars to review
+						</div>
+					) : (
+						pendingSeminars.map((entry) => (
+							<AcademicReviewCard
+								key={entry.id}
+								entry={entry}
+								type="seminar"
+								title={`Seminar #${entry.slNo}`}
+								subtitle={entry.completeDiagnosis ?? "No diagnosis"}
+								detail={entry.patientInfo ?? ""}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "seminar")}
+								onReject={() => openRejectDialog(entry.id, "seminar")}
+							/>
+						))
+					)}
+				</TabsContent>
+
+				{/* Journal Clubs Tab */}
+				<TabsContent value="journalClubs" className="mt-4 space-y-4">
+					{pendingJournalClubs.length === 0 ? (
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending journal clubs to review
+						</div>
+					) : (
+						pendingJournalClubs.map((entry) => (
+							<AcademicReviewCard
+								key={entry.id}
+								entry={entry}
+								type="journalClub"
+								title={`Journal Club #${entry.slNo}`}
+								subtitle={entry.journalArticle ?? "No article"}
+								detail={entry.typeOfStudy ?? ""}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "journalClub")}
+								onReject={() =>
+									openRejectDialog(entry.id, "journalClub")
+								}
+							/>
+						))
+					)}
+				</TabsContent>
 			</Tabs>
 
 			{/* Reject Dialog */}
@@ -309,7 +476,7 @@ export function FacultyReviewsClient({
 						</Button>
 						<Button
 							variant="destructive"
-							onClick={handleRejectRotation}
+							onClick={handleReject}
 							disabled={isPending || !rejectRemark.trim()}
 						>
 							{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -319,5 +486,77 @@ export function FacultyReviewsClient({
 				</DialogContent>
 			</Dialog>
 		</div>
+	);
+}
+
+/* ─── Reusable Academic Review Card ─── */
+
+interface AcademicReviewCardProps {
+	entry: AcademicEntry;
+	type: RejectType;
+	title: string;
+	subtitle: string;
+	detail: string;
+	isPending: boolean;
+	onSign: () => void;
+	onReject: () => void;
+}
+
+function AcademicReviewCard({
+	entry,
+	type: _type,
+	title,
+	subtitle,
+	detail,
+	isPending,
+	onSign,
+	onReject,
+}: AcademicReviewCardProps) {
+	return (
+		<Card>
+			<CardHeader className="pb-3">
+				<div className="flex items-start justify-between">
+					<div>
+						<CardTitle className="text-base">{title}</CardTitle>
+						<CardDescription>
+							{entry.user.firstName} {entry.user.lastName}
+							{entry.date &&
+								` — ${format(new Date(entry.date), "dd MMM yyyy")}`}
+						</CardDescription>
+					</div>
+					<Badge
+						variant="outline"
+						className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+					>
+						Submitted
+					</Badge>
+				</div>
+			</CardHeader>
+			<CardContent>
+				<div className="text-sm text-muted-foreground mb-4 space-y-1">
+					<p className="font-medium text-foreground">{subtitle}</p>
+					{detail && <p>{detail}</p>}
+				</div>
+				<div className="flex items-center gap-2">
+					<Button size="sm" onClick={onSign} disabled={isPending}>
+						{isPending ? (
+							<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+						) : (
+							<Check className="h-3.5 w-3.5 mr-1" />
+						)}
+						Sign Off
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={onReject}
+						disabled={isPending}
+					>
+						<X className="h-3.5 w-3.5 mr-1" />
+						Request Revision
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
 	);
 }

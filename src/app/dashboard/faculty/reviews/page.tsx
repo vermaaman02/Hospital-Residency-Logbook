@@ -27,34 +27,58 @@ export default async function FacultyReviewsPage() {
 	});
 	const studentIds = assignments.map((a) => a.studentId);
 
-	// Get pending rotation postings from assigned students
+	// For HOD, get ALL submitted entries; for faculty, only assigned students
+	const studentFilter =
+		authResult.role === "hod"
+			? { status: "SUBMITTED" as const }
+			: { userId: { in: studentIds }, status: "SUBMITTED" as const };
+
+	// Get pending rotation postings
 	const pendingRotations = await prisma.rotationPosting.findMany({
-		where: {
-			userId: { in: studentIds },
-			status: "SUBMITTED",
-		},
+		where: studentFilter,
 		include: {
-			user: {
-				select: { firstName: true, lastName: true, email: true },
-			},
+			user: { select: { firstName: true, lastName: true, email: true } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
 
-	// Get pending attendance sheets from all students (HOD signs these)
+	// Get pending attendance sheets (HOD only)
 	const pendingAttendance =
-		authResult.role === "hod" ?
-			await prisma.attendanceSheet.findMany({
-				where: { status: "SUBMITTED" },
-				include: {
-					user: {
-						select: { firstName: true, lastName: true, email: true },
+		authResult.role === "hod"
+			? await prisma.attendanceSheet.findMany({
+					where: { status: "SUBMITTED" },
+					include: {
+						user: { select: { firstName: true, lastName: true, email: true } },
+						entries: true,
 					},
-					entries: true,
-				},
-				orderBy: { createdAt: "desc" },
-			})
-		:	[];
+					orderBy: { createdAt: "desc" },
+				})
+			: [];
+
+	// Get pending academic entries (Case Presentations, Seminars, Journal Clubs)
+	const pendingCasePresentations = await prisma.casePresentation.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingSeminars = await prisma.seminar.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingJournalClubs = await prisma.journalClub.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
 
 	return (
 		<div className="space-y-6">
@@ -72,6 +96,9 @@ export default async function FacultyReviewsPage() {
 			<FacultyReviewsClient
 				pendingRotations={pendingRotations}
 				pendingAttendance={pendingAttendance}
+				pendingCasePresentations={pendingCasePresentations}
+				pendingSeminars={pendingSeminars}
+				pendingJournalClubs={pendingJournalClubs}
 				isHod={authResult.role === "hod"}
 			/>
 		</div>
