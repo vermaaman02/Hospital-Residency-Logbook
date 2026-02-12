@@ -40,9 +40,12 @@ import {
 	ShieldAlert,
 	Star,
 	Users,
+	UserCog,
 	FileText,
 	ChevronLeft,
 	ChevronRight,
+	UserCircle,
+	HeartHandshake,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -89,6 +92,18 @@ const studentNavSections: NavSection[] = [
 				title: "Attendance",
 				href: "/dashboard/student/attendance",
 				icon: <CalendarDays className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
+				title: "Training & Mentoring",
+				href: "/dashboard/student/training-mentoring",
+				icon: <HeartHandshake className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
+				title: "My Profile",
+				href: "/dashboard/student/profile",
+				icon: <UserCircle className="h-4 w-4" />,
 				roles: ["student"],
 			},
 		],
@@ -221,9 +236,15 @@ const facultyNavSections: NavSection[] = [
 		title: "Review",
 		items: [
 			{
-				title: "Pending Reviews",
-				href: "/dashboard/faculty/pending-reviews",
+				title: "Reviews & Sign-off",
+				href: "/dashboard/faculty/reviews",
 				icon: <ClipboardList className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Training & Mentoring",
+				href: "/dashboard/faculty/training-mentoring",
+				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["faculty"],
 			},
 			{
@@ -264,6 +285,12 @@ const hodNavSections: NavSection[] = [
 		title: "Management",
 		items: [
 			{
+				title: "Manage Users",
+				href: "/dashboard/hod/manage-users",
+				icon: <UserCog className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
 				title: "Assignments",
 				href: "/dashboard/hod/assignments",
 				icon: <ClipboardList className="h-4 w-4" />,
@@ -279,6 +306,23 @@ const hodNavSections: NavSection[] = [
 				title: "Evaluations",
 				href: "/dashboard/hod/evaluations",
 				icon: <Star className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Review & Evaluate",
+		items: [
+			{
+				title: "Reviews & Sign-off",
+				href: "/dashboard/faculty/reviews",
+				icon: <ClipboardList className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Training & Mentoring",
+				href: "/dashboard/faculty/training-mentoring",
+				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["hod"],
 			},
 		],

@@ -1241,15 +1241,15 @@ npx prisma migrate deploy
 - [x] Seed database with case categories & procedure categories
 - [ ] Deploy initial version to Railway
 
-### Phase 2: Administrative Modules (Week 3-4)
+### Phase 2: Administrative Modules (Week 3-4) ✅ COMPLETED
 
-- [ ] **A1: Rotation Postings** — CRUD + faculty sign-off
-- [ ] **A2: Thesis Tracking** — Topic, guide, semester records
-- [ ] **A3: Weekly Attendance** — Calendar-based weekly entry
-- [ ] **A4: Resident Training & Mentoring Record** — 5-point scoring
-- [ ] Student profile page with metadata
-- [ ] HOD: Batch & semester management
-- [ ] HOD: Faculty-student assignment
+- [x] **A1: Rotation Postings** — CRUD + faculty sign-off
+- [x] **A2: Thesis Tracking** — Topic, guide, semester records
+- [x] **A3: Weekly Attendance** — Calendar-based weekly entry
+- [x] **A4: Resident Training & Mentoring Record** — 5-point scoring
+- [x] Student profile page with metadata
+- [x] HOD: Batch & semester management (Manage Users page)
+- [x] HOD: Faculty-student assignment (with semester selector)
 
 ### Phase 3: Academic Modules (Week 5-6)
 

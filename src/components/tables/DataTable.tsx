@@ -16,7 +16,9 @@
  */
 
 "use client";
-/* eslint-disable react-compiler/react-compiler */
+// TanStack Table is incompatible with React Compiler memoization — safe to skip
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore react-compiler
 
 import { useState } from "react";
 import {
