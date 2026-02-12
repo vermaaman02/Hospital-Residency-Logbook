@@ -1,0 +1,699 @@
+// =============================================================================
+// AIIMS Patna PG Residency Digital Logbook — Prisma Schema
+// =============================================================================
+// Reference: roadmap.md Section 5
+// Every model maps to a physical logbook section from PG Logbook .md
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ======================== USER & AUTH ========================
+
+model User {
+  id              String   @id @default(cuid())
+  clerkId         String   @unique
+  email           String   @unique
+  firstName       String
+  lastName        String
+  role            Role     @default(STUDENT)
+  batch           String?  // e.g., "July 2022"
+  currentSemester Int?     @default(1)
+  department      String?  @default("Emergency Medicine")
+  profileImage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  rotationPostings          RotationPosting[]
+  attendanceSheets          AttendanceSheet[]
+  casePresentations         CasePresentation[]
+  seminars                  Seminar[]
+  journalClubs              JournalClub[]
+  clinicalSkillsAdult       ClinicalSkillAdult[]
+  clinicalSkillsPediatric   ClinicalSkillPediatric[]
+  caseManagementLogs        CaseManagementLog[]
+  procedureLogs             ProcedureLog[]
+  diagnosticSkills          DiagnosticSkill[]
+  imagingLogs               ImagingLog[]
+  coursesAttended           CourseAttended[]
+  conferenceParticipation   ConferenceParticipation[]
+  researchActivities        ResearchActivity[]
+  disasterDrills            DisasterDrill[]
+  qualityImprovement        QualityImprovement[]
+  evaluations               ResidentEvaluation[]
+  thesis                    Thesis?
+  transportLogs             TransportLog[]
+  consentLogs               ConsentLog[]
+  badNewsLogs               BadNewsLog[]
+  trainingMentoringRecords  TrainingMentoringRecord[]
+
+  // Faculty relations
+  assignedStudents FacultyStudentAssignment[] @relation("FacultyAssignments")
+  assignedFaculty  FacultyStudentAssignment[] @relation("StudentAssignments")
+  signedEntries    DigitalSignature[]
+
+  @@index([clerkId])
+  @@index([role])
+}
+
+enum Role {
+  HOD
+  FACULTY
+  STUDENT
+}
+
+model FacultyStudentAssignment {
+  id        String   @id @default(cuid())
+  facultyId String
+  studentId String
+  semester  Int
+  createdAt DateTime @default(now())
+
+  faculty User @relation("FacultyAssignments", fields: [facultyId], references: [id])
+  student User @relation("StudentAssignments", fields: [studentId], references: [id])
+
+  @@unique([facultyId, studentId, semester])
+  @@index([facultyId])
+  @@index([studentId])
+}
+
+// ======================== DIGITAL SIGNATURE ========================
+
+model DigitalSignature {
+  id         String   @id @default(cuid())
+  signedById String
+  signedBy   User     @relation(fields: [signedById], references: [id])
+  entityType String   // e.g., "RotationPosting", "CaseManagementLog", etc.
+  entityId   String   // ID of the signed record
+  remark     String?
+  signedAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([signedById])
+}
+
+// ======================== MODULE 1: ROTATION POSTINGS ========================
+
+model RotationPosting {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  slNo          Int
+  rotationName  String      // e.g., "Emergency Medicine", "Critical Care"
+  isElective    Boolean     @default(false)
+  startDate     DateTime?
+  endDate       DateTime?
+  totalDuration String?
+  status        EntryStatus @default(DRAFT)
+  facultyRemark String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== MODULE 2: THESIS TRACKING ========================
+
+model Thesis {
+  id              String                @id @default(cuid())
+  userId          String                @unique
+  user            User                  @relation(fields: [userId], references: [id])
+  topic           String?
+  chiefGuide      String?
+  semesterRecords ThesisSemesterRecord[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+}
+
+model ThesisSemesterRecord {
+  id            String @id @default(cuid())
+  thesisId      String
+  thesis        Thesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+  semester      Int    // 1-6
+  srJrMember    String?
+  srMember      String?
+  facultyMember String?
+
+  @@index([thesisId])
+}
+
+// ======================== MODULE 3: ATTENDANCE ========================
+
+model AttendanceSheet {
+  id               String            @id @default(cuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  weekStartDate    DateTime
+  weekEndDate      DateTime
+  batch            String?
+  postedDepartment String?
+  entries          AttendanceEntry[]
+  status           EntryStatus       @default(DRAFT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model AttendanceEntry {
+  id                String          @id @default(cuid())
+  attendanceSheetId String
+  attendanceSheet   AttendanceSheet @relation(fields: [attendanceSheetId], references: [id], onDelete: Cascade)
+  date              DateTime?
+  day               DayOfWeek
+  presentAbsent     String?         // "Present", "Absent", or remarks
+  hodName           String?
+
+  @@index([attendanceSheetId])
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+// ======================== MODULE 4: ACADEMIC RECORDS ========================
+
+model CasePresentation {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  slNo              Int
+  date              DateTime?
+  patientInfo       String?         // Name/Age/Sex/UHID
+  completeDiagnosis String?
+  category          PatientCategory?
+  facultyRemark     String?
+  status            EntryStatus     @default(DRAFT)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Seminar {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  slNo              Int
+  date              DateTime?
+  patientInfo       String?
+  completeDiagnosis String?
+  category          PatientCategory?
+  facultyRemark     String?
+  status            EntryStatus     @default(DRAFT)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model JournalClub {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  slNo            Int
+  date            DateTime?
+  journalArticle  String?
+  typeOfStudy     String?
+  facultyRemark   String?
+  status          EntryStatus @default(DRAFT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== MODULE 5: CLINICAL SKILL TRAINING ========================
+
+model ClinicalSkillAdult {
+  id                      String          @id @default(cuid())
+  userId                  String
+  user                    User            @relation(fields: [userId], references: [id])
+  slNo                    Int
+  skillName               String          // e.g., "Initial Assessment Non-Trauma"
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int             @default(0)
+  status                  EntryStatus     @default(DRAFT)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ClinicalSkillPediatric {
+  id                      String          @id @default(cuid())
+  userId                  String
+  user                    User            @relation(fields: [userId], references: [id])
+  slNo                    Int
+  skillName               String
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int             @default(0)
+  status                  EntryStatus     @default(DRAFT)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum ConfidenceLevel {
+  VC // Very Confident
+  FC // Fairly Confident
+  SC // Slightly Confident
+  NC // Not Confident
+}
+
+// ======================== MODULE 6: CASE MANAGEMENT LOGS ========================
+
+model CaseManagementLog {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  category          CaseCategory
+  slNo              Int
+  caseSubCategory   String          // e.g., "Acute Airway Obstruction"
+  date              DateTime?
+  patientInfo       String?         // Name/Age/Sex/UHID
+  completeDiagnosis String?
+  competencyLevel   CompetencyLevel?
+  totalCaseTally    Int             @default(0)
+  status            EntryStatus     @default(DRAFT)
+  facultyRemark     String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([category])
+  @@index([status])
+}
+
+enum CaseCategory {
+  RESUSCITATION
+  RESUSCITATION_SPECIAL
+  CARDIOVASCULAR
+  VASCULAR
+  RESPIRATORY
+  NEUROLOGICAL
+  INFECTIOUS
+  METABOLIC_ENDOCRINE
+  TOXICOLOGICAL_ENVIRONMENTAL
+  HEMATOLOGICAL
+  ONCOLOGY_PALLIATIVE
+  PSYCHIATRIC_PSYCHOSOCIAL
+  GERIATRIC
+  DERMATOLOGICAL
+  RHEUMATOLOGICAL_ORTHOPEDIC
+  NEPHROLOGY_UROLOGY
+  GASTROENTEROLOGY_HEPATIC
+  SURGICAL
+  OBSTETRICS_GYNECOLOGICAL
+  ENT
+  OCULAR
+  TRAUMA
+  FORENSIC_DISASTER
+  PEDIATRIC
+}
+
+enum CompetencyLevel {
+  CBD // Case Based Discussion
+  S   // Simulation
+  O   // Observed
+  MS  // Managed under Supervision
+  MI  // Managed Independently
+}
+
+// ======================== MODULE 7: PROCEDURE LOGS ========================
+
+model ProcedureLog {
+  id                   String            @id @default(cuid())
+  userId               String
+  user                 User              @relation(fields: [userId], references: [id])
+  procedureCategory    ProcedureCategory
+  slNo                 Int
+  date                 DateTime?
+  patientInfo          String?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus       @default(DRAFT)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([procedureCategory])
+  @@index([status])
+}
+
+enum ProcedureCategory {
+  AIRWAY_ADULT
+  AIRWAY_ADULT_ALTERNATIVE
+  AIRWAY_PEDIATRIC_NEONATAL
+  BREATHING_VENTILATOR
+  NEEDLE_THORACOCENTESIS_ICD
+  PERIPHERAL_IV_ADULT
+  PERIPHERAL_IV_PEDIATRIC
+  CENTRAL_IV
+  CENTRAL_IV_PICC
+  ARTERIAL_PUNCTURE_ABG
+  INTRAOSSEOUS_VENOUS_CUTDOWN
+  HEMODYNAMIC_MONITORING_CVP
+  CARDIOVERSION_DEFIBRILLATION_ADULT
+  CARDIOVERSION_DEFIBRILLATION_PEDIATRIC
+  CPR_ADULT
+  PERICARDIOCENTESIS_CARDIAC_PACING
+  CPR_SPECIAL_PEDIATRIC_NEONATAL
+  NASOGASTRIC_TUBE
+  FOLEYS_CATHETERISATION
+  GUIDED_SUPRAPUBIC_CATHETERISATION
+  PARACENTESIS
+  LUMBAR_PUNCTURE
+  INCISION_DRAINAGE
+  PER_RECTAL_PROCTOSCOPY
+  PENILE_EMERGENCIES
+  NASAL_PACKING
+  ENT_DIAGNOSTIC_EXAMINATION
+  ENT_FOREIGN_BODY_REMOVAL
+  TRACHEOSTOMY_MANAGEMENT
+  WOUND_MANAGEMENT_SIMPLE_COMPLEX
+  WOUND_MANAGEMENT_ANIMAL_BITE
+  WOUND_MANAGEMENT_BURNS_AMPUTATION
+  CERVICAL_COLLAR
+  SPINAL_IMMOBILIZATION
+  PELVIC_STABILIZATION
+  SPLINTING_FRACTURES
+  PLASTER_TECHNIQUE
+  REDUCTION_DISLOCATION
+  OTHER_PROCEDURES
+  REGIONAL_ANAESTHESIA_NERVE_BLOCK
+  PROCEDURAL_SEDATION
+  MAXILLOFACIAL_DENTAL
+  EMERGENCY_BURR_HOLE_EVD
+  PER_VAGINAL_SPECULUM
+  VAGINAL_DELIVERY
+  SEXUAL_ABUSE_EXAMINATION
+  OPHTHALMIC_SLIT_LAMP
+  OPHTHALMIC_FB_REMOVAL
+  ANY_OTHER
+}
+
+enum SkillLevel {
+  S  // Simulation
+  O  // Observed
+  A  // Assisted
+  PS // Performed under Supervision
+  PI // Performed Independently
+  TM // Team Member (for CPR)
+  TL // Team Leader (for CPR)
+}
+
+// ======================== MODULE 8: DIAGNOSTIC SKILLS ========================
+
+model DiagnosticSkill {
+  id                      String             @id @default(cuid())
+  userId                  String
+  user                    User               @relation(fields: [userId], references: [id])
+  diagnosticCategory      DiagnosticCategory
+  slNo                    Int
+  skillName               String             // e.g., "Respiratory Acidosis acute/chronic"
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int                @default(0)
+  status                  EntryStatus        @default(DRAFT)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([diagnosticCategory])
+  @@index([status])
+}
+
+enum DiagnosticCategory {
+  ABG_ANALYSIS
+  ECG_ANALYSIS
+  OTHER_DIAGNOSTIC
+}
+
+// ======================== MODULE 9: IMAGING LOGS ========================
+
+model ImagingLog {
+  id                   String          @id @default(cuid())
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id])
+  imagingCategory      ImagingCategory
+  slNo                 Int
+  date                 DateTime?
+  patientInfo          String?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus     @default(DRAFT)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([imagingCategory])
+  @@index([status])
+}
+
+enum ImagingCategory {
+  ULTRASOUND_ECHO_NON_TRAUMA
+  POCUS_TRAUMA
+  XRAY_CT_NON_TRAUMA
+  XRAY_CT_MRI_BRAIN
+  XRAY_CT_TRAUMA
+}
+
+// ======================== MODULE 10: OTHER LOGS ========================
+
+model TransportLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  slNo                 Int
+  date                 DateTime?
+  patientInfo          String?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ConsentLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  slNo                 Int
+  date                 DateTime?
+  patientInfo          String?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model BadNewsLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  slNo                 Int
+  date                 DateTime?
+  patientInfo          String?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== MODULE 11: COURSES & CONFERENCES ========================
+
+model CourseAttended {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  slNo            Int
+  date            DateTime?
+  courseName      String?
+  conductedAt     String?
+  confidenceLevel String?
+  status          EntryStatus @default(DRAFT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ConferenceParticipation {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  slNo              Int
+  date              DateTime?
+  conferenceName    String?
+  conductedAt       String?
+  participationRole String?
+  status            EntryStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ResearchActivity {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  slNo              Int
+  date              DateTime?
+  activity          String?
+  conductedAt       String?
+  participationRole String?
+  status            EntryStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== MODULE 12: DISASTER & QUALITY ========================
+
+model DisasterDrill {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  slNo           Int
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model QualityImprovement {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  slNo           Int
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== MODULE 13: RESIDENT EVALUATION ========================
+
+model ResidentEvaluation {
+  id                   String      @id @default(cuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  semester             Int         // 1-6
+  reviewNo             Int         // 1 or 2 per semester
+
+  // 5 domains, each scored 1-5
+  knowledgeScore       Int?        // 1-5
+  clinicalSkillScore   Int?        // 1-5
+  proceduralSkillScore Int?        // 1-5
+  softSkillScore       Int?        // 1-5
+  researchScore        Int?        // 1-5
+
+  // End semester assessment
+  theoryMarks          String?
+  practicalMarks       String?
+
+  description          String?
+  roleInActivity       String?
+  facultyRemark        String?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([semester])
+  @@index([status])
+}
+
+// ======================== MODULE 14: TRAINING & MENTORING ========================
+
+model TrainingMentoringRecord {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  semester  Int
+  score     Int         // 1=Requires remedial, 2=Inconsistent, 3=Meets, 4=Exceeds, 5=Exceptional
+  remarks   String?
+  status    EntryStatus @default(DRAFT)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ======================== SHARED ENUMS ========================
+
+enum EntryStatus {
+  DRAFT
+  SUBMITTED
+  SIGNED
+  REJECTED
+  NEEDS_REVISION
+}
+
+enum PatientCategory {
+  ADULT_NON_TRAUMA
+  ADULT_TRAUMA
+  PEDIATRIC_NON_TRAUMA
+  PEDIATRIC_TRAUMA
+}
