@@ -37,6 +37,17 @@ import {
 } from "@/actions/case-presentations";
 import { signSeminar, rejectSeminar } from "@/actions/seminars";
 import { signJournalClub, rejectJournalClub } from "@/actions/journal-clubs";
+import {
+	signClinicalSkill,
+	rejectClinicalSkill,
+} from "@/actions/clinical-skills";
+import {
+	signCaseManagementEntry,
+	rejectCaseManagementEntry,
+} from "@/actions/case-management";
+import { CONFIDENCE_LEVELS } from "@/lib/constants/clinical-skills";
+import { CASE_CATEGORY_LABELS } from "@/lib/constants/case-categories";
+import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -49,6 +60,8 @@ import {
 	Presentation,
 	BookOpen,
 	Newspaper,
+	Stethoscope,
+	ClipboardList,
 } from "lucide-react";
 
 interface UserInfo {
@@ -104,14 +117,48 @@ interface FacultyReviewsClientProps {
 	pendingCasePresentations: AcademicEntry[];
 	pendingSeminars: AcademicEntry[];
 	pendingJournalClubs: AcademicEntry[];
+	pendingClinicalSkillsAdult: ClinicalSkillReviewEntry[];
+	pendingClinicalSkillsPediatric: ClinicalSkillReviewEntry[];
+	pendingCaseManagement: CaseManagementReviewEntry[];
 	isHod: boolean;
+}
+
+interface ClinicalSkillReviewEntry {
+	id: string;
+	slNo: number;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
+}
+
+interface CaseManagementReviewEntry {
+	id: string;
+	slNo: number;
+	category: string;
+	caseSubCategory: string;
+	date: Date | string | null;
+	patientInfo: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	totalCaseTally: number;
+	facultyRemark: string | null;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
 }
 
 type RejectType =
 	| "rotation"
 	| "casePresentation"
 	| "seminar"
-	| "journalClub";
+	| "journalClub"
+	| "clinicalSkillAdult"
+	| "clinicalSkillPediatric"
+	| "caseManagement";
 
 export function FacultyReviewsClient({
 	pendingRotations,
@@ -119,6 +166,9 @@ export function FacultyReviewsClient({
 	pendingCasePresentations,
 	pendingSeminars,
 	pendingJournalClubs,
+	pendingClinicalSkillsAdult,
+	pendingClinicalSkillsPediatric,
+	pendingCaseManagement,
 	isHod,
 }: FacultyReviewsClientProps) {
 	const router = useRouter();
@@ -145,6 +195,15 @@ export function FacultyReviewsClient({
 						break;
 					case "journalClub":
 						await signJournalClub(id);
+						break;
+					case "clinicalSkillAdult":
+						await signClinicalSkill("adult", id);
+						break;
+					case "clinicalSkillPediatric":
+						await signClinicalSkill("pediatric", id);
+						break;
+					case "caseManagement":
+						await signCaseManagementEntry(id);
 						break;
 				}
 				toast.success("Entry signed successfully");
@@ -174,6 +233,15 @@ export function FacultyReviewsClient({
 						break;
 					case "journalClub":
 						await rejectJournalClub(rejectTarget.id, rejectRemark);
+						break;
+					case "clinicalSkillAdult":
+						await rejectClinicalSkill("adult", rejectTarget.id, rejectRemark);
+						break;
+					case "clinicalSkillPediatric":
+						await rejectClinicalSkill("pediatric", rejectTarget.id, rejectRemark);
+						break;
+					case "caseManagement":
+						await rejectCaseManagementEntry(rejectTarget.id, rejectRemark);
 						break;
 				}
 				toast.success("Revision requested");
@@ -209,7 +277,10 @@ export function FacultyReviewsClient({
 		pendingAttendance.length +
 		pendingCasePresentations.length +
 		pendingSeminars.length +
-		pendingJournalClubs.length;
+		pendingJournalClubs.length +
+		pendingClinicalSkillsAdult.length +
+		pendingClinicalSkillsPediatric.length +
+		pendingCaseManagement.length;
 
 	return (
 		<div className="space-y-6">
@@ -242,6 +313,17 @@ export function FacultyReviewsClient({
 					<TabsTrigger value="journalClubs">
 						<Newspaper className="h-4 w-4 mr-1" />
 						Journal Clubs ({pendingJournalClubs.length})
+					</TabsTrigger>
+					<TabsTrigger value="clinicalSkills">
+						<Stethoscope className="h-4 w-4 mr-1" />
+						Clinical Skills (
+						{pendingClinicalSkillsAdult.length +
+							pendingClinicalSkillsPediatric.length}
+						)
+					</TabsTrigger>
+					<TabsTrigger value="caseManagement">
+						<ClipboardList className="h-4 w-4 mr-1" />
+						Case Mgmt ({pendingCaseManagement.length})
 					</TabsTrigger>
 				</TabsList>
 
@@ -448,6 +530,260 @@ export function FacultyReviewsClient({
 								}
 							/>
 						))
+					)}
+				</TabsContent>
+
+				{/* Clinical Skills Tab */}
+				<TabsContent value="clinicalSkills" className="mt-4 space-y-4">
+					{pendingClinicalSkillsAdult.length === 0 &&
+					pendingClinicalSkillsPediatric.length === 0 ? (
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending clinical skills to review
+						</div>
+					) : (
+						<>
+							{pendingClinicalSkillsAdult.length > 0 && (
+								<div className="space-y-3">
+									<h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+										Adult Skills ({pendingClinicalSkillsAdult.length})
+									</h3>
+									{pendingClinicalSkillsAdult.map((skill) => {
+										const confLabel =
+											CONFIDENCE_LEVELS.find(
+												(c) => c.value === skill.confidenceLevel,
+											)?.label ?? skill.confidenceLevel;
+										return (
+											<Card key={skill.id}>
+												<CardHeader className="pb-3">
+													<div className="flex items-start justify-between">
+														<div>
+															<CardTitle className="text-base">
+																{skill.skillName}
+															</CardTitle>
+															<CardDescription>
+																{skill.user.firstName} {skill.user.lastName} —
+																Tally: {skill.totalTimesPerformed}
+																{confLabel && ` — ${confLabel}`}
+															</CardDescription>
+														</div>
+														<Badge
+															variant="outline"
+															className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+														>
+															Submitted
+														</Badge>
+													</div>
+												</CardHeader>
+												<CardContent>
+													{skill.representativeDiagnosis && (
+														<p className="text-sm text-muted-foreground mb-3">
+															{skill.representativeDiagnosis}
+														</p>
+													)}
+													<div className="flex items-center gap-2">
+														<Button
+															size="sm"
+															onClick={() =>
+																handleSign(skill.id, "clinicalSkillAdult")
+															}
+															disabled={isPending}
+														>
+															{isPending ? (
+																<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+															) : (
+																<Check className="h-3.5 w-3.5 mr-1" />
+															)}
+															Sign Off
+														</Button>
+														<Button
+															variant="outline"
+															size="sm"
+															onClick={() =>
+																openRejectDialog(
+																	skill.id,
+																	"clinicalSkillAdult",
+																)
+															}
+															disabled={isPending}
+														>
+															<X className="h-3.5 w-3.5 mr-1" />
+															Request Revision
+														</Button>
+													</div>
+												</CardContent>
+											</Card>
+										);
+									})}
+								</div>
+							)}
+							{pendingClinicalSkillsPediatric.length > 0 && (
+								<div className="space-y-3">
+									<h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+										Pediatric Skills (
+										{pendingClinicalSkillsPediatric.length})
+									</h3>
+									{pendingClinicalSkillsPediatric.map((skill) => {
+										const confLabel =
+											CONFIDENCE_LEVELS.find(
+												(c) => c.value === skill.confidenceLevel,
+											)?.label ?? skill.confidenceLevel;
+										return (
+											<Card key={skill.id}>
+												<CardHeader className="pb-3">
+													<div className="flex items-start justify-between">
+														<div>
+															<CardTitle className="text-base">
+																{skill.skillName}
+															</CardTitle>
+															<CardDescription>
+																{skill.user.firstName} {skill.user.lastName} —
+																Tally: {skill.totalTimesPerformed}
+																{confLabel && ` — ${confLabel}`}
+															</CardDescription>
+														</div>
+														<Badge
+															variant="outline"
+															className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+														>
+															Submitted
+														</Badge>
+													</div>
+												</CardHeader>
+												<CardContent>
+													{skill.representativeDiagnosis && (
+														<p className="text-sm text-muted-foreground mb-3">
+															{skill.representativeDiagnosis}
+														</p>
+													)}
+													<div className="flex items-center gap-2">
+														<Button
+															size="sm"
+															onClick={() =>
+																handleSign(
+																	skill.id,
+																	"clinicalSkillPediatric",
+																)
+															}
+															disabled={isPending}
+														>
+															{isPending ? (
+																<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+															) : (
+																<Check className="h-3.5 w-3.5 mr-1" />
+															)}
+															Sign Off
+														</Button>
+														<Button
+															variant="outline"
+															size="sm"
+															onClick={() =>
+																openRejectDialog(
+																	skill.id,
+																	"clinicalSkillPediatric",
+																)
+															}
+															disabled={isPending}
+														>
+															<X className="h-3.5 w-3.5 mr-1" />
+															Request Revision
+														</Button>
+													</div>
+												</CardContent>
+											</Card>
+										);
+									})}
+								</div>
+							)}
+						</>
+					)}
+				</TabsContent>
+
+				{/* Case Management Tab */}
+				<TabsContent value="caseManagement" className="mt-4 space-y-4">
+					{pendingCaseManagement.length === 0 ? (
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending case management entries to review
+						</div>
+					) : (
+						pendingCaseManagement.map((entry) => {
+							const catLabel =
+								CASE_CATEGORY_LABELS[entry.category] ?? entry.category;
+							const compLabel =
+								COMPETENCY_LEVEL_OPTIONS.find(
+									(o) => o.value === entry.competencyLevel,
+								)?.label ?? entry.competencyLevel;
+							return (
+								<Card key={entry.id}>
+									<CardHeader className="pb-3">
+										<div className="flex items-start justify-between">
+											<div>
+												<CardTitle className="text-base">
+													{entry.caseSubCategory}
+												</CardTitle>
+												<CardDescription>
+													{entry.user.firstName} {entry.user.lastName} —{" "}
+													{catLabel}
+													{entry.date &&
+														` — ${format(new Date(entry.date), "dd MMM yyyy")}`}
+												</CardDescription>
+											</div>
+											<Badge
+												variant="outline"
+												className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+											>
+												Submitted
+											</Badge>
+										</div>
+									</CardHeader>
+									<CardContent>
+										<div className="text-sm text-muted-foreground mb-3 space-y-1">
+											{entry.patientInfo && <p>{entry.patientInfo}</p>}
+											{entry.completeDiagnosis && (
+												<p className="font-medium text-foreground">
+													{entry.completeDiagnosis}
+												</p>
+											)}
+											{compLabel && (
+												<p>
+													Competency:{" "}
+													<Badge variant="outline" className="text-xs">
+														{compLabel}
+													</Badge>
+												</p>
+											)}
+											<p>Tally: {entry.totalCaseTally}</p>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button
+												size="sm"
+												onClick={() =>
+													handleSign(entry.id, "caseManagement")
+												}
+												disabled={isPending}
+											>
+												{isPending ? (
+													<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+												) : (
+													<Check className="h-3.5 w-3.5 mr-1" />
+												)}
+												Sign Off
+											</Button>
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() =>
+													openRejectDialog(entry.id, "caseManagement")
+												}
+												disabled={isPending}
+											>
+												<X className="h-3.5 w-3.5 mr-1" />
+												Request Revision
+											</Button>
+										</div>
+									</CardContent>
+								</Card>
+							);
+						})
 					)}
 				</TabsContent>
 			</Tabs>

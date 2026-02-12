@@ -1259,16 +1259,19 @@ npx prisma migrate deploy
 - [x] Digital signature flow for academic entries
 - [x] Faculty remark system
 
-### Phase 4: Clinical Skills & Case Management (Week 7-10)
+### Phase 4: Clinical Skills & Case Management (Week 7-10) ✅ COMPLETED
 
-- [ ] **C1: Clinical Skills — Adult** (10 skills with confidence tracking)
-- [ ] **C2: Clinical Skills — Pediatric** (10 skills)
-- [ ] **D1-D24: ALL Case Management Logs** (25 categories, 300+ case types)
-  - Reusable CaseManagementForm component
-  - Category selector with pre-populated case types
+- [x] **C1: Clinical Skills — Adult** (10 skills with confidence tracking)
+- [x] **C2: Clinical Skills — Pediatric** (10 skills)
+- [x] **D1-D24: ALL Case Management Logs** (25 categories, 300+ case types)
+  - Reusable CaseManagementEntryForm component
+  - Category selector with pre-populated case types (24 categories, 308 sub-types)
   - Competency level tracking (CBD/S/O/MS/MI)
   - Running tally per case type
   - Faculty sign-off per entry
+- [x] ClinicalSkillsTable reusable component (auto-initialize, confidence badges)
+- [x] CaseManagementTable reusable component (table with all actions)
+- [x] Faculty reviews updated with Clinical Skills + Case Management tabs
 
 ### Phase 5: Procedure Logs (Week 11-14)
 

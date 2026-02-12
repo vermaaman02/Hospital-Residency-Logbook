@@ -573,3 +573,27 @@ export const TOTAL_CASE_SUB_TYPES = CASE_CATEGORIES.reduce(
   (sum, cat) => sum + cat.subCategories.length,
   0,
 );
+
+/** Convert enum value to URL-safe slug (lowercase, hyphens) */
+export function categoryEnumToSlug(enumValue: string): string {
+  return enumValue.toLowerCase().replace(/_/g, "-");
+}
+
+/** Convert URL slug back to enum value (uppercase, underscores) */
+export function categorySlugToEnum(slug: string): string | undefined {
+  const enumValue = slug.toUpperCase().replace(/-/g, "_");
+  const exists = CASE_CATEGORIES.find((c) => c.enumValue === enumValue);
+  return exists ? enumValue : undefined;
+}
+
+/** Find a category config by slug */
+export function getCategoryBySlug(slug: string): CaseCategoryConfig | undefined {
+  const enumValue = categorySlugToEnum(slug);
+  if (!enumValue) return undefined;
+  return CASE_CATEGORIES.find((c) => c.enumValue === enumValue);
+}
+
+/** Get sub-category options formatted for form selects */
+export function getSubCategoryOptions(categoryEnum: string): { value: string; label: string }[] {
+  return getSubCategories(categoryEnum).map((sc) => ({ value: sc, label: sc }));
+}

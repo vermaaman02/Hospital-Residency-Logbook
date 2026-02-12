@@ -80,6 +80,33 @@ export default async function FacultyReviewsPage() {
 		orderBy: { createdAt: "desc" },
 	});
 
+	// Get pending clinical skills (Adult + Pediatric)
+	const pendingClinicalSkillsAdult = await prisma.clinicalSkillAdult.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { slNo: "asc" },
+	});
+
+	const pendingClinicalSkillsPediatric =
+		await prisma.clinicalSkillPediatric.findMany({
+			where: studentFilter,
+			include: {
+				user: { select: { firstName: true, lastName: true, email: true } },
+			},
+			orderBy: { slNo: "asc" },
+		});
+
+	// Get pending case management entries
+	const pendingCaseManagement = await prisma.caseManagementLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -99,6 +126,15 @@ export default async function FacultyReviewsPage() {
 				pendingCasePresentations={pendingCasePresentations}
 				pendingSeminars={pendingSeminars}
 				pendingJournalClubs={pendingJournalClubs}
+				pendingClinicalSkillsAdult={JSON.parse(
+					JSON.stringify(pendingClinicalSkillsAdult),
+				)}
+				pendingClinicalSkillsPediatric={JSON.parse(
+					JSON.stringify(pendingClinicalSkillsPediatric),
+				)}
+				pendingCaseManagement={JSON.parse(
+					JSON.stringify(pendingCaseManagement),
+				)}
 				isHod={authResult.role === "hod"}
 			/>
 		</div>
