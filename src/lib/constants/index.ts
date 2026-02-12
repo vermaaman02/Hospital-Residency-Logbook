@@ -24,6 +24,11 @@ export {
   PROCEDURE_CATEGORIES,
   PROCEDURE_CATEGORY_LABELS,
   CPR_PROCEDURE_CATEGORIES,
+  procedureEnumToSlug,
+  procedureSlugToEnum,
+  getProcedureBySlug,
+  isCprCategory,
+  getSkillLevelOptions,
   type ProcedureCategoryConfig,
 } from "./procedure-categories";
 

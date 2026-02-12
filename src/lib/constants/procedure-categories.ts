@@ -73,3 +73,48 @@ export const PROCEDURE_CATEGORY_LABELS: Record<string, string> = Object.fromEntr
 export const CPR_PROCEDURE_CATEGORIES = PROCEDURE_CATEGORIES
   .filter((cat) => cat.isCpr)
   .map((cat) => cat.enumValue);
+
+// ─── Slug Helpers ──────────────────────────────────────────
+
+/** Convert enum value to URL-safe slug (lowercase, hyphens) */
+export function procedureEnumToSlug(enumValue: string): string {
+  return enumValue.toLowerCase().replace(/_/g, "-");
+}
+
+/** Convert URL slug back to enum value (uppercase, underscores) */
+export function procedureSlugToEnum(slug: string): string | undefined {
+  const enumValue = slug.toUpperCase().replace(/-/g, "_");
+  const exists = PROCEDURE_CATEGORIES.find((c) => c.enumValue === enumValue);
+  return exists ? enumValue : undefined;
+}
+
+/** Find a procedure category config by slug */
+export function getProcedureBySlug(slug: string): ProcedureCategoryConfig | undefined {
+  const enumValue = procedureSlugToEnum(slug);
+  if (!enumValue) return undefined;
+  return PROCEDURE_CATEGORIES.find((c) => c.enumValue === enumValue);
+}
+
+/** Check if a procedure category uses CPR skill levels (S/TM/TL) */
+export function isCprCategory(enumValue: string): boolean {
+  const cat = PROCEDURE_CATEGORIES.find((c) => c.enumValue === enumValue);
+  return cat?.isCpr ?? false;
+}
+
+/** Get skill level options for a specific procedure category */
+export function getSkillLevelOptions(enumValue: string): { value: string; label: string }[] {
+  if (isCprCategory(enumValue)) {
+    return [
+      { value: "S", label: "S — Simulation" },
+      { value: "TM", label: "TM — Team Member" },
+      { value: "TL", label: "TL — Team Leader" },
+    ];
+  }
+  return [
+    { value: "S", label: "S — Simulation" },
+    { value: "O", label: "O — Observed" },
+    { value: "A", label: "A — Assisted" },
+    { value: "PS", label: "PS — Performed under Supervision" },
+    { value: "PI", label: "PI — Performed Independently" },
+  ];
+}

@@ -107,6 +107,15 @@ export default async function FacultyReviewsPage() {
 		orderBy: { createdAt: "desc" },
 	});
 
+	// Get pending procedure log entries
+	const pendingProcedureLogs = await prisma.procedureLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -134,6 +143,9 @@ export default async function FacultyReviewsPage() {
 				)}
 				pendingCaseManagement={JSON.parse(
 					JSON.stringify(pendingCaseManagement),
+				)}
+				pendingProcedureLogs={JSON.parse(
+					JSON.stringify(pendingProcedureLogs),
 				)}
 				isHod={authResult.role === "hod"}
 			/>
