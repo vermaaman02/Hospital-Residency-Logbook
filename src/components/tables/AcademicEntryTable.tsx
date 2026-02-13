@@ -21,7 +21,13 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+} from "@/components/ui/card";
 import { format } from "date-fns";
 import { Edit, Trash2, Send, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -119,12 +125,11 @@ export function AcademicEntryTable({
 				</div>
 			</CardHeader>
 			<CardContent>
-				{entries.length === 0 ? (
+				{entries.length === 0 ?
 					<div className="text-center py-8 text-muted-foreground">
 						No entries yet. Add your first entry.
 					</div>
-				) : (
-					<div className="overflow-x-auto">
+				:	<div className="overflow-x-auto">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -155,15 +160,15 @@ export function AcademicEntryTable({
 												{entry.slNo}
 											</TableCell>
 											<TableCell>
-												{entry.date
-													? format(new Date(entry.date), "dd/MM/yyyy")
-													: "—"}
+												{entry.date ?
+													format(new Date(entry.date), "dd/MM/yyyy")
+												:	"—"}
 											</TableCell>
 											{columns.map((col) => (
 												<TableCell key={col.key}>
-													{col.render
-														? col.render(entry)
-														: (entry[col.key] as string) ?? "—"}
+													{col.render ?
+														col.render(entry)
+													:	((entry[col.key] as string) ?? "—")}
 												</TableCell>
 											))}
 											<TableCell>
@@ -179,7 +184,7 @@ export function AcademicEntryTable({
 													{entry.status}
 												</Badge>
 											</TableCell>
-											<TableCell className="max-w-[150px] truncate">
+											<TableCell className="max-w-37.5 truncate">
 												{entry.facultyRemark ?? "—"}
 											</TableCell>
 											<TableCell>
@@ -205,11 +210,9 @@ export function AcademicEntryTable({
 																disabled={isLoading}
 																title="Submit for review"
 															>
-																{isLoading ? (
+																{isLoading ?
 																	<Loader2 className="h-4 w-4 animate-spin" />
-																) : (
-																	<Send className="h-4 w-4" />
-																)}
+																:	<Send className="h-4 w-4" />}
 															</Button>
 														</>
 													)}
@@ -232,7 +235,7 @@ export function AcademicEntryTable({
 							</TableBody>
 						</Table>
 					</div>
-				)}
+				}
 			</CardContent>
 		</Card>
 	);

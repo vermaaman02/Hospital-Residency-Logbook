@@ -29,9 +29,7 @@ async function ProcedureCards() {
 				const total = summary.totalByCategory[cat.enumValue] ?? 0;
 				const signed = summary.signedByCategory[cat.enumValue] ?? 0;
 				const progress =
-					cat.maxEntries > 0
-						? Math.round((total / cat.maxEntries) * 100)
-						: 0;
+					cat.maxEntries > 0 ? Math.round((total / cat.maxEntries) * 100) : 0;
 
 				return (
 					<Link
@@ -44,7 +42,7 @@ async function ProcedureCards() {
 									<CardTitle className="text-sm font-medium leading-tight">
 										{cat.label}
 									</CardTitle>
-									<ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+									<ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
 								</div>
 							</CardHeader>
 							<CardContent>
@@ -68,9 +66,9 @@ async function ProcedureCards() {
 								<div className="w-full bg-muted rounded-full h-1.5 mt-2">
 									<div
 										className={`rounded-full h-1.5 transition-all ${
-											progress >= 100
-												? "bg-hospital-success"
-												: "bg-hospital-primary"
+											progress >= 100 ?
+												"bg-hospital-success"
+											:	"bg-hospital-primary"
 										}`}
 										style={{
 											width: `${Math.min(progress, 100)}%`,

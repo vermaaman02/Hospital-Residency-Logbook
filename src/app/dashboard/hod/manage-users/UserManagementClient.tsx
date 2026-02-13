@@ -340,7 +340,7 @@ export function UserManagementClient({ users }: UserManagementClientProps) {
 												onValueChange={(val) => handleRoleChange(user.id, val)}
 												disabled={isPending}
 											>
-												<SelectTrigger className="w-[140px]">
+												<SelectTrigger className="w-35">
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>

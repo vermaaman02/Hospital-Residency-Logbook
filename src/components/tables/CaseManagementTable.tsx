@@ -65,7 +65,9 @@ export function CaseManagementTable({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [loadingId, setLoadingId] = useState<string | null>(null);
-	const [actionType, setActionType] = useState<"submit" | "delete" | null>(null);
+	const [actionType, setActionType] = useState<"submit" | "delete" | null>(
+		null,
+	);
 
 	function handleSubmit(id: string) {
 		setLoadingId(id);
@@ -127,13 +129,12 @@ export function CaseManagementTable({
 				</div>
 			</CardHeader>
 			<CardContent>
-				{entries.length === 0 ? (
+				{entries.length === 0 ?
 					<div className="text-center py-8 text-muted-foreground">
 						No case entries yet. Click &ldquo;New Entry&rdquo; to log your first
 						case.
 					</div>
-				) : (
-					<div className="overflow-x-auto">
+				:	<div className="overflow-x-auto">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -156,31 +157,27 @@ export function CaseManagementTable({
 									const isLoading = isPending && loadingId === entry.id;
 									return (
 										<TableRow key={entry.id}>
-											<TableCell className="font-mono">
-												{entry.slNo}
-											</TableCell>
-											<TableCell className="font-medium max-w-[180px] truncate">
+											<TableCell className="font-mono">{entry.slNo}</TableCell>
+											<TableCell className="font-medium max-w-45 truncate">
 												{entry.caseSubCategory}
 											</TableCell>
 											<TableCell>
-												{entry.date
-													? format(new Date(entry.date), "dd/MM/yyyy")
-													: "—"}
+												{entry.date ?
+													format(new Date(entry.date), "dd/MM/yyyy")
+												:	"—"}
 											</TableCell>
-											<TableCell className="max-w-[150px] truncate">
+											<TableCell className="max-w-37.5 truncate">
 												{entry.patientInfo || "—"}
 											</TableCell>
-											<TableCell className="max-w-[180px] truncate">
+											<TableCell className="max-w-45 truncate">
 												{entry.completeDiagnosis || "—"}
 											</TableCell>
 											<TableCell>
-												{entry.competencyLevel ? (
+												{entry.competencyLevel ?
 													<Badge variant="outline" className="text-xs">
 														{competencyLabel(entry.competencyLevel)}
 													</Badge>
-												) : (
-													"—"
-												)}
+												:	"—"}
 											</TableCell>
 											<TableCell className="text-center font-mono">
 												{entry.totalCaseTally}
@@ -215,11 +212,9 @@ export function CaseManagementTable({
 																onClick={() => handleSubmit(entry.id)}
 																disabled={isLoading}
 															>
-																{isLoading && actionType === "submit" ? (
+																{isLoading && actionType === "submit" ?
 																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Send className="h-3.5 w-3.5" />
-																)}
+																:	<Send className="h-3.5 w-3.5" />}
 															</Button>
 															<Button
 																variant="ghost"
@@ -228,11 +223,9 @@ export function CaseManagementTable({
 																onClick={() => handleDelete(entry.id)}
 																disabled={isLoading}
 															>
-																{isLoading && actionType === "delete" ? (
+																{isLoading && actionType === "delete" ?
 																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Trash2 className="h-3.5 w-3.5" />
-																)}
+																:	<Trash2 className="h-3.5 w-3.5" />}
 															</Button>
 														</>
 													)}
@@ -244,7 +237,7 @@ export function CaseManagementTable({
 							</TableBody>
 						</Table>
 					</div>
-				)}
+				}
 			</CardContent>
 		</Card>
 	);

@@ -173,13 +173,13 @@ export function ProcedureLogTable({
 													? format(new Date(entry.date), "dd/MM/yyyy")
 													: "—"}
 											</TableCell>
-											<TableCell className="max-w-[150px] truncate">
+											<TableCell className="max-w-37.5 truncate">
 												{entry.patientInfo || "—"}
 											</TableCell>
-											<TableCell className="max-w-[150px] truncate">
+											<TableCell className="max-w-37.5 truncate">
 												{entry.completeDiagnosis || "—"}
 											</TableCell>
-											<TableCell className="max-w-[150px] truncate">
+											<TableCell className="max-w-37.5 truncate">
 												{entry.procedureDescription || "—"}
 											</TableCell>
 											<TableCell>

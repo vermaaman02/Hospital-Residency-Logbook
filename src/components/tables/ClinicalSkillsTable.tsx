@@ -48,7 +48,10 @@ interface ClinicalSkillsTableProps {
 	entries: ClinicalSkillEntry[];
 	type: "adult" | "pediatric";
 	onInitialize: () => Promise<{ initialized: boolean }>;
-	onSubmit: (type: "adult" | "pediatric", id: string) => Promise<{ success: boolean }>;
+	onSubmit: (
+		type: "adult" | "pediatric",
+		id: string,
+	) => Promise<{ success: boolean }>;
 }
 
 export function ClinicalSkillsTable({
@@ -122,14 +125,13 @@ export function ClinicalSkillsTable({
 				</div>
 			</CardHeader>
 			<CardContent>
-				{entries.length === 0 ? (
+				{entries.length === 0 ?
 					<div className="text-center py-8 text-muted-foreground">
-						{isPending
-							? "Initializing skills..."
-							: "No skills found. Refresh to initialize."}
+						{isPending ?
+							"Initializing skills..."
+						:	"No skills found. Refresh to initialize."}
 					</div>
-				) : (
-					<div className="overflow-x-auto">
+				:	<div className="overflow-x-auto">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -145,16 +147,15 @@ export function ClinicalSkillsTable({
 							<TableBody>
 								{entries.map((entry) => {
 									const statusColor =
-										ENTRY_STATUS_COLORS[entry.status] ?? "bg-gray-100 text-gray-700";
+										ENTRY_STATUS_COLORS[entry.status] ??
+										"bg-gray-100 text-gray-700";
 									return (
 										<TableRow key={entry.id}>
-											<TableCell className="font-mono">
-												{entry.slNo}
-											</TableCell>
+											<TableCell className="font-mono">{entry.slNo}</TableCell>
 											<TableCell className="font-medium">
 												{entry.skillName}
 											</TableCell>
-											<TableCell className="max-w-[200px] truncate">
+											<TableCell className="max-w-50 truncate">
 												{entry.representativeDiagnosis || (
 													<span className="text-muted-foreground italic">
 														Not filled
@@ -162,13 +163,11 @@ export function ClinicalSkillsTable({
 												)}
 											</TableCell>
 											<TableCell>
-												{entry.confidenceLevel ? (
+												{entry.confidenceLevel ?
 													<Badge variant="outline" className="text-xs">
 														{confidenceLabel(entry.confidenceLevel)}
 													</Badge>
-												) : (
-													<span className="text-muted-foreground">—</span>
-												)}
+												:	<span className="text-muted-foreground">—</span>}
 											</TableCell>
 											<TableCell className="text-center font-mono">
 												{entry.totalTimesPerformed}
@@ -203,11 +202,9 @@ export function ClinicalSkillsTable({
 																onClick={() => handleSubmit(entry.id)}
 																disabled={isPending && loadingId === entry.id}
 															>
-																{isPending && loadingId === entry.id ? (
+																{isPending && loadingId === entry.id ?
 																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Send className="h-3.5 w-3.5" />
-																)}
+																:	<Send className="h-3.5 w-3.5" />}
 															</Button>
 														)}
 												</div>
@@ -218,7 +215,7 @@ export function ClinicalSkillsTable({
 							</TableBody>
 						</Table>
 					</div>
-				)}
+				}
 			</CardContent>
 		</Card>
 	);

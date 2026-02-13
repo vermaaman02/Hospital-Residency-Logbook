@@ -93,14 +93,14 @@ export function RotationPostingsTable({
 			<Table>
 				<TableHeader>
 					<TableRow>
-						<TableHead className="w-[70px]">Sl. No.</TableHead>
+						<TableHead className="w-17.5">Sl. No.</TableHead>
 						<TableHead>Rotation Posting</TableHead>
-						<TableHead className="w-[80px]">Type</TableHead>
+						<TableHead className="w-20">Type</TableHead>
 						<TableHead>Date</TableHead>
 						<TableHead>Total Duration</TableHead>
 						<TableHead>Status</TableHead>
 						<TableHead>Faculty Remark</TableHead>
-						<TableHead className="w-[140px]">Actions</TableHead>
+						<TableHead className="w-35">Actions</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>

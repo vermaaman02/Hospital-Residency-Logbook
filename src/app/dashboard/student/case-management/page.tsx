@@ -10,7 +10,10 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { getMyCaseManagementSummary } from "@/actions/case-management";
-import { CASE_CATEGORIES, categoryEnumToSlug } from "@/lib/constants/case-categories";
+import {
+	CASE_CATEGORIES,
+	categoryEnumToSlug,
+} from "@/lib/constants/case-categories";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, FileText, ArrowRight } from "lucide-react";
@@ -38,16 +41,14 @@ async function CaseManagementCards() {
 									<CardTitle className="text-sm font-medium leading-tight">
 										{cat.label}
 									</CardTitle>
-									<ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+									<ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
 								</div>
 							</CardHeader>
 							<CardContent>
 								<div className="flex items-center gap-2 mb-2">
 									<FileText className="h-4 w-4 text-muted-foreground" />
 									<span className="text-2xl font-bold">{total}</span>
-									<span className="text-sm text-muted-foreground">
-										entries
-									</span>
+									<span className="text-sm text-muted-foreground">entries</span>
 								</div>
 								<div className="flex items-center justify-between text-xs text-muted-foreground">
 									<span>{subCount} case types</span>

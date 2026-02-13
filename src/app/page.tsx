@@ -61,7 +61,7 @@ export default function LandingPage() {
 			<header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
 					<div className="flex items-center gap-3">
-						<div className="h-9 w-9 rounded-lg bg-[var(--color-hospital-blue)] flex items-center justify-center">
+						<div className="h-9 w-9 rounded-lg bg-(--color-hospital-blue) flex items-center justify-center">
 							<Stethoscope className="h-5 w-5 text-white" />
 						</div>
 						<span className="font-bold text-lg hidden sm:block">
@@ -87,7 +87,7 @@ export default function LandingPage() {
 					</div>
 					<h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">
 						PG Residency{" "}
-						<span className="text-[var(--color-hospital-blue)]">
+						<span className="text-(--color-hospital-blue)">
 							Digital Logbook
 						</span>
 					</h1>
@@ -122,8 +122,8 @@ export default function LandingPage() {
 								key={feature.title}
 								className="bg-background rounded-xl border p-6 space-y-3 hover:shadow-md transition-shadow"
 							>
-								<div className="h-10 w-10 rounded-lg bg-[var(--color-hospital-blue)]/10 flex items-center justify-center">
-									<feature.icon className="h-5 w-5 text-[var(--color-hospital-blue)]" />
+								<div className="h-10 w-10 rounded-lg bg-(--color-hospital-blue)/10 flex items-center justify-center">
+									<feature.icon className="h-5 w-5 text-(--color-hospital-blue)" />
 								</div>
 								<h3 className="font-semibold text-lg">{feature.title}</h3>
 								<p className="text-sm text-muted-foreground leading-relaxed">
