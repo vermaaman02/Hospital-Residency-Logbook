@@ -20,9 +20,8 @@ import { type ThesisForReview } from "../../faculty/thesis-review/ThesisReviewCl
 import { ReviewTabsClient } from "../../faculty/rotation-postings/ReviewTabsClient";
 
 export default async function HodRotationPostingsPage() {
-	let authResult: { userId: string; role: string };
 	try {
-		authResult = await requireRole(["hod"]);
+		await requireRole(["hod"]);
 	} catch {
 		redirect("/dashboard/student");
 	}

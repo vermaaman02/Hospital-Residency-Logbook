@@ -115,7 +115,10 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ======================== COMPONENT ========================
 
-export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
+export function ThesisReviewClient({
+	theses,
+	role: _role,
+}: ThesisReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [search, setSearch] = useState("");
