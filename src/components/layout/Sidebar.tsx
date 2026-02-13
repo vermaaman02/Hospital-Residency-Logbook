@@ -46,6 +46,7 @@ import {
 	ChevronRight,
 	UserCircle,
 	HeartHandshake,
+	BarChart3,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -306,6 +307,12 @@ const hodNavSections: NavSection[] = [
 				title: "Evaluations",
 				href: "/dashboard/hod/evaluations",
 				icon: <Star className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Analytics",
+				href: "/dashboard/hod/analytics",
+				icon: <BarChart3 className="h-4 w-4" />,
 				roles: ["hod"],
 			},
 		],
