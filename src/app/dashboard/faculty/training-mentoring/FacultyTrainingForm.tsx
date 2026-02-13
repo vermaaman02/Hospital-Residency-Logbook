@@ -359,7 +359,9 @@ export function FacultyTrainingForm({
 											(r) =>
 												r.userId === s.id &&
 												DOMAINS.some(
-													(d) => (r as Record<string, unknown>)[d.key] !== null,
+													(d) =>
+														(r as unknown as Record<string, unknown>)[d.key] !==
+														null,
 												),
 										).length;
 										const isSelected = selectedStudent === s.id;
