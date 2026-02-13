@@ -12,9 +12,10 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
-import { APP_SHORT_NAME, INSTITUTION_NAME } from "@/lib/constants";
+import { INSTITUTION_NAME } from "@/lib/constants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Tooltip,
@@ -372,17 +373,24 @@ export function Sidebar({ className }: SidebarProps) {
 				)}
 			>
 				{/* Header */}
-				<div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-					{!isCollapsed && (
-						<div className="flex flex-col">
-							<span className="text-sm font-bold text-sidebar-primary-foreground">
-								{APP_SHORT_NAME}
-							</span>
-							<span className="text-[10px] text-sidebar-foreground/60">
-								AIIMS Patna
-							</span>
-						</div>
-					)}
+				<div className="flex h-16 items-center justify-between border-b border-sidebar-border px-3">
+					{isCollapsed ?
+						<Image
+							src="/AIIMS%20patna%20icon.jpeg"
+							alt="AIIMS Patna"
+							width={32}
+							height={32}
+							className="h-8 w-8 rounded-md object-contain"
+						/>
+					:	<Image
+							src="/AIIMS%20patana%20logo.png"
+							alt="AIIMS Patna - PG Logbook"
+							width={180}
+							height={40}
+							className="h-9 w-auto object-contain"
+							priority
+						/>
+					}
 					<button
 						onClick={() => setIsCollapsed(!isCollapsed)}
 						className="rounded-md p-1.5 hover:bg-sidebar-accent transition-colors"
