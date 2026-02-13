@@ -1,15 +1,15 @@
 /**
  * @module ThesisTopicTab
- * @description Thesis topic management: topic name, chief guide, and semester-wise
- * committee records (SR/JR Member, SR Member, Faculty Member).
- * Faculty dropdown for the Faculty Member field.
+ * @description Thesis topic management with inline cell editing.
+ * Topic/guide section toggles between edit and read-only.
+ * Semester records use inline editing directly in the table — click a row to edit.
  *
  * @see PG Logbook .md — "THESIS" section
  */
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import {
 	Card,
 	CardContent,
@@ -35,16 +35,17 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import { Loader2, Save, Pencil, BookOpen, GraduationCap } from "lucide-react";
+	Loader2,
+	Save,
+	Pencil,
+	BookOpen,
+	GraduationCap,
+	Check,
+	X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { updateThesis, upsertThesisSemesterRecord } from "@/actions/thesis";
 import type {
 	ThesisData,
@@ -68,27 +69,26 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 	const [chiefGuide, setChiefGuide] = useState(thesis.chiefGuide ?? "");
 	const [isTopicEditing, setIsTopicEditing] = useState(!thesis.topic);
 
-	// Semester record dialog
-	const [semesterDialogOpen, setSemesterDialogOpen] = useState(false);
-	const [editingSemester, setEditingSemester] = useState<number>(1);
+	// Inline editing for semester records
+	const [editingSemester, setEditingSemester] = useState<number | null>(null);
 	const [semesterForm, setSemesterForm] = useState({
 		srJrMember: "",
 		srMember: "",
 		facultyMember: "",
 	});
 
-	function getSemesterRecord(
-		sem: number,
-	): ThesisSemesterRecordData | undefined {
-		return thesis.semesterRecords.find((r) => r.semester === sem);
-	}
+	const getSemesterRecord = useCallback(
+		(sem: number): ThesisSemesterRecordData | undefined => {
+			return thesis.semesterRecords.find((r) => r.semester === sem);
+		},
+		[thesis.semesterRecords],
+	);
 
 	function handleSaveTopic() {
 		if (!topic.trim()) {
 			toast.error("Thesis topic is required");
 			return;
 		}
-
 		startTransition(async () => {
 			try {
 				await updateThesis({ topic, chiefGuide: chiefGuide || undefined });
@@ -103,7 +103,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 		});
 	}
 
-	function openSemesterDialog(semester: number) {
+	function startEditingSemester(semester: number) {
 		const record = getSemesterRecord(semester);
 		setEditingSemester(semester);
 		setSemesterForm({
@@ -111,10 +111,14 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 			srMember: record?.srMember ?? "",
 			facultyMember: record?.facultyMember ?? "",
 		});
-		setSemesterDialogOpen(true);
+	}
+
+	function cancelEditingSemester() {
+		setEditingSemester(null);
 	}
 
 	function handleSaveSemester() {
+		if (editingSemester === null) return;
 		startTransition(async () => {
 			try {
 				await upsertThesisSemesterRecord(thesis.id, {
@@ -124,7 +128,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 					facultyMember: semesterForm.facultyMember || undefined,
 				});
 				toast.success(`Semester ${editingSemester} record saved`);
-				setSemesterDialogOpen(false);
+				setEditingSemester(null);
 				router.refresh();
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Failed to save");
@@ -133,8 +137,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 	}
 
 	function getFacultyName(name: string | null) {
-		if (!name) return "—";
-		// Check if it matches a faculty ID (from dropdown selection)
+		if (!name) return null;
 		const faculty = facultyList.find((f) => f.id === name);
 		if (faculty) return `${faculty.firstName} ${faculty.lastName}`;
 		return name;
@@ -253,7 +256,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 				</CardContent>
 			</Card>
 
-			{/* Semester-wise Committee Records */}
+			{/* Semester-wise Committee Records — Inline Editing */}
 			<Card>
 				<CardHeader className="pb-3">
 					<div className="flex items-center gap-2">
@@ -263,7 +266,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 						</CardTitle>
 					</div>
 					<CardDescription>
-						Record SR/JR member, SR member, and faculty member for each semester
+						Click on any semester row to edit committee members inline
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
@@ -277,7 +280,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 									<TableHead className="font-bold">SR/JR Member</TableHead>
 									<TableHead className="font-bold">SR Member</TableHead>
 									<TableHead className="font-bold">Faculty Member</TableHead>
-									<TableHead className="w-20 text-center font-bold">
+									<TableHead className="w-28 text-center font-bold">
 										Action
 									</TableHead>
 								</TableRow>
@@ -285,37 +288,137 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 							<TableBody>
 								{SEMESTERS.map((sem) => {
 									const record = getSemesterRecord(sem);
+									const isEditing = editingSemester === sem;
 									const hasData =
 										record?.srJrMember ||
 										record?.srMember ||
 										record?.facultyMember;
+
+									if (isEditing) {
+										return (
+											<TableRow key={sem} className="bg-blue-50/60">
+												<TableCell className="text-center font-bold text-hospital-primary">
+													{sem}
+												</TableCell>
+												<TableCell>
+													<Input
+														className="h-8 text-sm"
+														placeholder="SR/JR member name"
+														value={semesterForm.srJrMember}
+														onChange={(e) =>
+															setSemesterForm((prev) => ({
+																...prev,
+																srJrMember: e.target.value,
+															}))
+														}
+														maxLength={200}
+													/>
+												</TableCell>
+												<TableCell>
+													<Input
+														className="h-8 text-sm"
+														placeholder="SR member name"
+														value={semesterForm.srMember}
+														onChange={(e) =>
+															setSemesterForm((prev) => ({
+																...prev,
+																srMember: e.target.value,
+															}))
+														}
+														maxLength={200}
+													/>
+												</TableCell>
+												<TableCell>
+													<Select
+														value={semesterForm.facultyMember || "none"}
+														onValueChange={(v) =>
+															setSemesterForm((prev) => ({
+																...prev,
+																facultyMember: v === "none" ? "" : v,
+															}))
+														}
+													>
+														<SelectTrigger className="h-8 text-sm">
+															<SelectValue placeholder="Select" />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="none">None</SelectItem>
+															{facultyList.map((f) => (
+																<SelectItem
+																	key={f.id}
+																	value={`${f.firstName} ${f.lastName}`}
+																>
+																	{f.firstName} {f.lastName}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</TableCell>
+												<TableCell>
+													<div className="flex items-center justify-center gap-1">
+														<Button
+															variant="ghost"
+															size="icon"
+															className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+															onClick={handleSaveSemester}
+															disabled={isPending}
+														>
+															{isPending ?
+																<Loader2 className="h-3.5 w-3.5 animate-spin" />
+															:	<Check className="h-3.5 w-3.5" />}
+														</Button>
+														<Button
+															variant="ghost"
+															size="icon"
+															className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+															onClick={cancelEditingSemester}
+															disabled={isPending}
+														>
+															<X className="h-3.5 w-3.5" />
+														</Button>
+													</div>
+												</TableCell>
+											</TableRow>
+										);
+									}
+
 									return (
 										<TableRow
 											key={sem}
-											className={hasData ? "" : "text-muted-foreground/60"}
+											className={cn(
+												"cursor-pointer transition-colors hover:bg-muted/40",
+												hasData ? "" : "text-muted-foreground/60",
+											)}
+											onClick={() => startEditingSemester(sem)}
 										>
 											<TableCell className="text-center font-medium">
 												{sem}
 											</TableCell>
 											<TableCell className="text-sm">
-												{record?.srJrMember || "—"}
+												{record?.srJrMember || (
+													<span className="text-muted-foreground/40 italic text-xs">
+														Click to fill
+													</span>
+												)}
 											</TableCell>
 											<TableCell className="text-sm">
-												{record?.srMember || "—"}
+												{record?.srMember || (
+													<span className="text-muted-foreground/40 italic text-xs">
+														Click to fill
+													</span>
+												)}
 											</TableCell>
 											<TableCell className="text-sm">
-												{getFacultyName(record?.facultyMember ?? null)}
+												{getFacultyName(record?.facultyMember ?? null) || (
+													<span className="text-muted-foreground/40 italic text-xs">
+														Click to fill
+													</span>
+												)}
 											</TableCell>
 											<TableCell className="text-center">
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-7 w-7"
-													title={`Edit semester ${sem}`}
-													onClick={() => openSemesterDialog(sem)}
-												>
-													<Pencil className="h-3.5 w-3.5" />
-												</Button>
+												<span className="text-xs text-muted-foreground/40">
+													<Pencil className="h-3 w-3 inline" />
+												</span>
 											</TableCell>
 										</TableRow>
 									);
@@ -333,94 +436,6 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 					</div>
 				</CardContent>
 			</Card>
-
-			{/* Semester Record Dialog */}
-			<Dialog open={semesterDialogOpen} onOpenChange={setSemesterDialogOpen}>
-				<DialogContent className="sm:max-w-md">
-					<DialogHeader>
-						<DialogTitle>
-							Semester {editingSemester} — Committee Record
-						</DialogTitle>
-						<DialogDescription>
-							Enter the thesis committee members for semester {editingSemester}
-						</DialogDescription>
-					</DialogHeader>
-
-					<div className="space-y-4">
-						<div>
-							<label className="text-sm font-medium">SR/JR Member</label>
-							<Input
-								className="mt-1.5"
-								placeholder="Enter name of SR/JR member"
-								value={semesterForm.srJrMember}
-								onChange={(e) =>
-									setSemesterForm((prev) => ({
-										...prev,
-										srJrMember: e.target.value,
-									}))
-								}
-								maxLength={200}
-							/>
-						</div>
-						<div>
-							<label className="text-sm font-medium">SR Member</label>
-							<Input
-								className="mt-1.5"
-								placeholder="Enter name of SR member"
-								value={semesterForm.srMember}
-								onChange={(e) =>
-									setSemesterForm((prev) => ({
-										...prev,
-										srMember: e.target.value,
-									}))
-								}
-								maxLength={200}
-							/>
-						</div>
-						<div>
-							<label className="text-sm font-medium">Faculty Member</label>
-							<Select
-								value={semesterForm.facultyMember || "none"}
-								onValueChange={(v) =>
-									setSemesterForm((prev) => ({
-										...prev,
-										facultyMember: v === "none" ? "" : v,
-									}))
-								}
-							>
-								<SelectTrigger className="mt-1.5">
-									<SelectValue placeholder="Select faculty member" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="none">None</SelectItem>
-									{facultyList.map((f) => (
-										<SelectItem
-											key={f.id}
-											value={`${f.firstName} ${f.lastName}`}
-										>
-											{f.firstName} {f.lastName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
-
-					<DialogFooter>
-						<Button
-							variant="outline"
-							onClick={() => setSemesterDialogOpen(false)}
-							disabled={isPending}
-						>
-							Cancel
-						</Button>
-						<Button onClick={handleSaveSemester} disabled={isPending}>
-							{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-							Save Record
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }

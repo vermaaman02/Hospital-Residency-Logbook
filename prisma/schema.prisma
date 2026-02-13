@@ -147,6 +147,17 @@ model DigitalSignature {
   @@index([signedById])
 }
 
+// ======================== HOD AUTO-REVIEW SETTINGS ========================
+
+model HodAutoReviewSetting {
+  id          String   @id @default(cuid())
+  category    String   @unique // "rotationPostings", "thesis", "trainingMentoring"
+  enabled     Boolean  @default(false)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // ======================== MODULE 1: ROTATION POSTINGS ========================
 
 model RotationPosting {
@@ -179,6 +190,8 @@ model Thesis {
   user            User                  @relation(fields: [userId], references: [id])
   topic           String?
   chiefGuide      String?
+  status          EntryStatus           @default(DRAFT)
+  facultyRemark   String?
   semesterRecords ThesisSemesterRecord[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt

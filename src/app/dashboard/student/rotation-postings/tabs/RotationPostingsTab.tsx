@@ -1,15 +1,16 @@
 /**
  * @module RotationPostingsTab
- * @description Rotation postings form + notebook-style display.
- * Features: Searchable department dropdown, date pickers, faculty assignment,
- * auto-duration calculation, core/elective separator, notebook-style table view.
+ * @description Rotation postings with inline cell editing.
+ * Click directly on any row to edit — no separate dialog needed.
+ * Features: inline date pickers, auto-duration, faculty dropdown,
+ * core/elective separator, notebook-style table.
  *
  * @see PG Logbook .md — "LOG OF ROTATION POSTINGS DURING PG IN EM"
  */
 
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useCallback } from "react";
 import {
 	Card,
 	CardContent,
@@ -27,14 +28,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import {
 	Table,
 	TableBody,
 	TableCell,
@@ -50,13 +43,11 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
-	Plus,
 	CalendarIcon,
 	Loader2,
-	Pencil,
 	Trash2,
 	Send,
-	Search,
+	Check,
 	X,
 	BookOpen,
 } from "lucide-react";
@@ -85,13 +76,31 @@ interface RotationPostingsTabProps {
 	facultyList: FacultyOption[];
 }
 
-const EMPTY_FORM = {
-	rotationName: "",
-	startDate: undefined as Date | undefined,
-	endDate: undefined as Date | undefined,
-	totalDuration: "",
-	facultyId: "",
-};
+interface InlineForm {
+	startDate: Date | undefined;
+	endDate: Date | undefined;
+	totalDuration: string;
+	facultyId: string;
+}
+
+function calcDuration(start: Date | undefined, end: Date | undefined): string {
+	if (!start || !end) return "";
+	const days = differenceInDays(end, start);
+	if (days < 0) return "Invalid";
+	if (days < 7) return `${days} day${days !== 1 ? "s" : ""}`;
+	if (days < 30) {
+		const weeks = Math.floor(days / 7);
+		const rem = days % 7;
+		return rem > 0 ?
+				`${weeks}w ${rem}d`
+			:	`${weeks} week${weeks !== 1 ? "s" : ""}`;
+	}
+	const months = Math.floor(days / 30);
+	const rem = days % 30;
+	return rem > 0 ?
+			`${months}m ${rem}d`
+		:	`${months} month${months !== 1 ? "s" : ""}`;
+}
 
 export function RotationPostingsTab({
 	postings,
@@ -99,86 +108,76 @@ export function RotationPostingsTab({
 }: RotationPostingsTabProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
-	const [dialogOpen, setDialogOpen] = useState(false);
-	const [editingId, setEditingId] = useState<string | null>(null);
-	// Form state
-	const [form, setForm] = useState(EMPTY_FORM);
 
-	// Rotation search filter
-	const [rotationSearch, setRotationSearch] = useState("");
-	const filteredRotations = useMemo(() => {
-		if (!rotationSearch) return ROTATION_POSTINGS;
-		const q = rotationSearch.toLowerCase();
-		return ROTATION_POSTINGS.filter((r) => r.name.toLowerCase().includes(q));
-	}, [rotationSearch]);
+	// Which rotation row (by slNo) is in edit mode
+	const [editingSlNo, setEditingSlNo] = useState<number | null>(null);
+	const [form, setForm] = useState<InlineForm>({
+		startDate: undefined,
+		endDate: undefined,
+		totalDuration: "",
+		facultyId: "",
+	});
 
-	// Auto-calculate duration
-	const calculatedDuration = useMemo(() => {
-		if (!form.startDate || !form.endDate) return "";
-		const days = differenceInDays(form.endDate, form.startDate);
-		if (days < 0) return "Invalid";
-		if (days < 7) return `${days} day${days !== 1 ? "s" : ""}`;
-		if (days < 30) {
-			const weeks = Math.floor(days / 7);
-			const remainDays = days % 7;
-			return remainDays > 0 ?
-					`${weeks} week${weeks !== 1 ? "s" : ""} ${remainDays} day${remainDays !== 1 ? "s" : ""}`
-				:	`${weeks} week${weeks !== 1 ? "s" : ""}`;
-		}
-		const months = Math.floor(days / 30);
-		const remainDays = days % 30;
-		return remainDays > 0 ?
-				`${months} month${months !== 1 ? "s" : ""} ${remainDays} day${remainDays !== 1 ? "s" : ""}`
-			:	`${months} month${months !== 1 ? "s" : ""}`;
-	}, [form.startDate, form.endDate]);
+	const corePostings = postings.filter((p) => !p.isElective);
+	const electivePostings = postings.filter((p) => p.isElective);
 
-	function openAddDialog() {
-		setEditingId(null);
-		setForm(EMPTY_FORM);
-		setRotationSearch("");
-		setDialogOpen(true);
-	}
+	const autoDuration = useMemo(
+		() => calcDuration(form.startDate, form.endDate),
+		[form.startDate, form.endDate],
+	);
 
-	function openEditDialog(posting: RotationPostingData) {
-		setEditingId(posting.id);
-		setForm({
-			rotationName: posting.rotationName,
-			startDate: posting.startDate ? new Date(posting.startDate) : undefined,
-			endDate: posting.endDate ? new Date(posting.endDate) : undefined,
-			totalDuration: posting.totalDuration ?? "",
-			facultyId: posting.facultyId ?? "",
-		});
-		setRotationSearch("");
-		setDialogOpen(true);
-	}
+	const getFacultyName = useCallback(
+		(facultyId: string | null) => {
+			if (!facultyId) return "—";
+			const f = facultyList.find((fl) => fl.id === facultyId);
+			return f ? `${f.firstName} ${f.lastName}` : "—";
+		},
+		[facultyList],
+	);
 
-	function handleSave() {
-		if (!form.rotationName) {
-			toast.error("Please select a rotation posting");
+	function startEditing(
+		config: RotationPostingConfig,
+		posting?: RotationPostingData,
+	) {
+		if (
+			posting &&
+			(posting.status === "SUBMITTED" || posting.status === "SIGNED")
+		) {
 			return;
 		}
+		setEditingSlNo(config.slNo);
+		setForm({
+			startDate: posting?.startDate ? new Date(posting.startDate) : undefined,
+			endDate: posting?.endDate ? new Date(posting.endDate) : undefined,
+			totalDuration: posting?.totalDuration ?? "",
+			facultyId: posting?.facultyId ?? "",
+		});
+	}
 
+	function cancelEditing() {
+		setEditingSlNo(null);
+	}
+
+	function handleSave(config: RotationPostingConfig, existingId?: string) {
 		const data = {
-			rotationName: form.rotationName,
-			isElective:
-				ROTATION_POSTINGS.find((r) => r.name === form.rotationName)
-					?.isElective ?? false,
+			rotationName: config.name,
+			isElective: config.isElective,
 			startDate: form.startDate,
 			endDate: form.endDate,
-			totalDuration: form.totalDuration || calculatedDuration || undefined,
+			totalDuration: form.totalDuration || autoDuration || undefined,
 			facultyId: form.facultyId || undefined,
 		};
 
 		startTransition(async () => {
 			try {
-				if (editingId) {
-					await updateRotationPosting(editingId, data);
-					toast.success("Rotation posting updated");
+				if (existingId) {
+					await updateRotationPosting(existingId, data);
+					toast.success("Updated");
 				} else {
 					await createRotationPosting(data);
-					toast.success("Rotation posting added");
+					toast.success("Saved");
 				}
-				setDialogOpen(false);
+				setEditingSlNo(null);
 				router.refresh();
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Failed to save");
@@ -190,7 +189,7 @@ export function RotationPostingsTab({
 		startTransition(async () => {
 			try {
 				await submitRotationPosting(id);
-				toast.success("Submitted for faculty review");
+				toast.success("Submitted for review");
 				router.refresh();
 			} catch (error) {
 				toast.error(
@@ -204,7 +203,8 @@ export function RotationPostingsTab({
 		startTransition(async () => {
 			try {
 				await deleteRotationPosting(id);
-				toast.success("Entry deleted");
+				toast.success("Deleted");
+				setEditingSlNo(null);
 				router.refresh();
 			} catch {
 				toast.error("Failed to delete");
@@ -212,27 +212,63 @@ export function RotationPostingsTab({
 		});
 	}
 
-	// Separate core and elective postings
-	const corePostings = postings.filter((p) => !p.isElective);
-	const electivePostings = postings.filter((p) => p.isElective);
+	function renderRows(
+		configs: RotationPostingConfig[],
+		postingsList: RotationPostingData[],
+	) {
+		return configs.map((config) => {
+			const posting = postingsList.find((p) => p.rotationName === config.name);
+			const isEditing = editingSlNo === config.slNo;
+			const canEdit =
+				!posting ||
+				posting.status === "DRAFT" ||
+				posting.status === "NEEDS_REVISION";
 
-	function getFacultyName(facultyId: string | null) {
-		if (!facultyId) return "—";
-		const f = facultyList.find((fl) => fl.id === facultyId);
-		return f ? `${f.firstName} ${f.lastName}` : "—";
+			if (isEditing) {
+				return (
+					<InlineEditRow
+						key={config.slNo}
+						config={config}
+						form={form}
+						setForm={setForm}
+						autoDuration={autoDuration}
+						facultyList={facultyList}
+						isPending={isPending}
+						onSave={() => handleSave(config, posting?.id)}
+						onCancel={cancelEditing}
+						onDelete={
+							posting?.status === "DRAFT" ?
+								() => handleDelete(posting.id)
+							:	undefined
+						}
+					/>
+				);
+			}
+
+			return (
+				<ReadOnlyRow
+					key={config.slNo}
+					config={config}
+					posting={posting}
+					getFacultyName={getFacultyName}
+					canEdit={canEdit}
+					isPending={isPending}
+					onClick={() => canEdit && startEditing(config, posting)}
+					onSubmit={
+						posting && canEdit ? () => handleSubmit(posting.id) : undefined
+					}
+					onDelete={
+						posting?.status === "DRAFT" ?
+							() => handleDelete(posting.id)
+						:	undefined
+					}
+				/>
+			);
+		});
 	}
 
 	return (
 		<div className="space-y-6">
-			{/* Add Button */}
-			<div className="flex justify-end">
-				<Button onClick={openAddDialog}>
-					<Plus className="h-4 w-4 mr-2" />
-					Add Rotation
-				</Button>
-			</div>
-
-			{/* Notebook-style Logbook Display */}
 			<Card>
 				<CardHeader className="pb-3">
 					<div className="flex items-center gap-2">
@@ -242,58 +278,44 @@ export function RotationPostingsTab({
 						</CardTitle>
 					</div>
 					<CardDescription>
-						7 core postings + 13 elective departments as per NMC guidelines
+						Click on any row to fill in details. 7 core + 13 elective as per NMC
+						guidelines.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-175">
+					<div className="border rounded-lg min-w-200">
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">
-									<TableHead className="w-16 text-center font-bold">
+									<TableHead className="w-14 text-center font-bold">
 										Sl. No.
 									</TableHead>
-									<TableHead className="font-bold">Rotation Posting</TableHead>
-									<TableHead className="w-32 text-center font-bold">
+									<TableHead className="font-bold min-w-44">
+										Rotation Posting
+									</TableHead>
+									<TableHead className="w-44 text-center font-bold">
 										Date
 									</TableHead>
-									<TableHead className="w-32 text-center font-bold">
-										Total Duration
+									<TableHead className="w-28 text-center font-bold">
+										Duration
 									</TableHead>
-									<TableHead className="w-36 text-center font-bold">
+									<TableHead className="w-40 text-center font-bold">
 										Faculty Signature
 									</TableHead>
 									<TableHead className="w-24 text-center font-bold">
 										Status
 									</TableHead>
-									<TableHead className="w-28 text-center font-bold">
+									<TableHead className="w-32 text-center font-bold">
 										Actions
 									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{/* Core Postings */}
-								{ROTATION_POSTINGS.filter((r) => !r.isElective).map(
-									(config) => {
-										const posting = corePostings.find(
-											(p) => p.rotationName === config.name,
-										);
-										return (
-											<PostingRow
-												key={config.slNo}
-												config={config}
-												posting={posting}
-												getFacultyName={getFacultyName}
-												isPending={isPending}
-												onEdit={openEditDialog}
-												onSubmit={handleSubmit}
-												onDelete={handleDelete}
-											/>
-										);
-									},
+								{renderRows(
+									ROTATION_POSTINGS.filter((r) => !r.isElective),
+									corePostings,
 								)}
 
-								{/* Elective Separator */}
 								<TableRow className="bg-muted/80 hover:bg-muted/80">
 									<TableCell
 										colSpan={7}
@@ -303,24 +325,10 @@ export function RotationPostingsTab({
 									</TableCell>
 								</TableRow>
 
-								{/* Elective Postings */}
-								{ROTATION_POSTINGS.filter((r) => r.isElective).map((config) => {
-									const posting = electivePostings.find(
-										(p) => p.rotationName === config.name,
-									);
-									return (
-										<PostingRow
-											key={config.slNo}
-											config={config}
-											posting={posting}
-											getFacultyName={getFacultyName}
-											isPending={isPending}
-											onEdit={openEditDialog}
-											onSubmit={handleSubmit}
-											onDelete={handleDelete}
-										/>
-									);
-								})}
+								{renderRows(
+									ROTATION_POSTINGS.filter((r) => r.isElective),
+									electivePostings,
+								)}
 							</TableBody>
 						</Table>
 					</div>
@@ -354,263 +362,216 @@ export function RotationPostingsTab({
 					</div>
 				</CardContent>
 			</Card>
-
-			{/* Add/Edit Dialog */}
-			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-					<DialogHeader>
-						<DialogTitle>
-							{editingId ? "Edit Rotation Posting" : "Add Rotation Posting"}
-						</DialogTitle>
-						<DialogDescription>
-							Fill in the rotation posting details as per your physical logbook
-						</DialogDescription>
-					</DialogHeader>
-
-					<div className="space-y-4">
-						{/* Rotation Posting (searchable dropdown) */}
-						<div>
-							<label className="text-sm font-medium">
-								Rotation Posting <span className="text-destructive">*</span>
-							</label>
-							<div className="mt-1.5 relative">
-								<div className="relative mb-2">
-									<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-									<Input
-										placeholder="Search departments..."
-										value={rotationSearch}
-										onChange={(e) => setRotationSearch(e.target.value)}
-										className="pl-9"
-									/>
-									{rotationSearch && (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-											onClick={() => setRotationSearch("")}
-										>
-											<X className="h-3 w-3" />
-										</Button>
-									)}
-								</div>
-								<div className="border rounded-md max-h-48 overflow-y-auto">
-									{filteredRotations.length === 0 ?
-										<div className="p-3 text-sm text-muted-foreground text-center">
-											No departments found
-										</div>
-									:	filteredRotations.map((rotation) => (
-											<button
-												key={rotation.slNo}
-												type="button"
-												className={cn(
-													"w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center justify-between",
-													form.rotationName === rotation.name &&
-														"bg-hospital-primary/10 text-hospital-primary font-medium",
-												)}
-												onClick={() =>
-													setForm((prev) => ({
-														...prev,
-														rotationName: rotation.name,
-													}))
-												}
-											>
-												<span>
-													<span className="text-muted-foreground mr-2">
-														{rotation.slNo}.
-													</span>
-													{rotation.name}
-												</span>
-												<span
-													className={cn(
-														"text-xs px-1.5 py-0.5 rounded",
-														rotation.isElective ?
-															"bg-blue-100 text-blue-700"
-														:	"bg-green-100 text-green-700",
-													)}
-												>
-													{rotation.isElective ? "Elective" : "Core"}
-												</span>
-											</button>
-										))
-									}
-								</div>
-								{form.rotationName && (
-									<div className="mt-2 text-sm text-muted-foreground">
-										Selected:{" "}
-										<span className="font-medium text-foreground">
-											{form.rotationName}
-										</span>
-									</div>
-								)}
-							</div>
-						</div>
-
-						{/* Dates */}
-						<div className="grid grid-cols-2 gap-3">
-							<div>
-								<label className="text-sm font-medium">Start Date</label>
-								<Popover>
-									<PopoverTrigger asChild>
-										<Button
-											variant="outline"
-											className={cn(
-												"w-full mt-1.5 justify-start text-left font-normal",
-												!form.startDate && "text-muted-foreground",
-											)}
-										>
-											<CalendarIcon className="mr-2 h-4 w-4" />
-											{form.startDate ?
-												format(form.startDate, "dd MMM yyyy")
-											:	"Pick date"}
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="w-auto p-0" align="start">
-										<Calendar
-											mode="single"
-											selected={form.startDate}
-											onSelect={(date) =>
-												setForm((prev) => ({ ...prev, startDate: date }))
-											}
-											initialFocus
-										/>
-									</PopoverContent>
-								</Popover>
-							</div>
-							<div>
-								<label className="text-sm font-medium">End Date</label>
-								<Popover>
-									<PopoverTrigger asChild>
-										<Button
-											variant="outline"
-											className={cn(
-												"w-full mt-1.5 justify-start text-left font-normal",
-												!form.endDate && "text-muted-foreground",
-											)}
-										>
-											<CalendarIcon className="mr-2 h-4 w-4" />
-											{form.endDate ?
-												format(form.endDate, "dd MMM yyyy")
-											:	"Pick date"}
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="w-auto p-0" align="start">
-										<Calendar
-											mode="single"
-											selected={form.endDate}
-											onSelect={(date) =>
-												setForm((prev) => ({ ...prev, endDate: date }))
-											}
-											initialFocus
-										/>
-									</PopoverContent>
-								</Popover>
-							</div>
-						</div>
-
-						{/* Duration */}
-						<div>
-							<label className="text-sm font-medium">Total Duration</label>
-							<Input
-								className="mt-1.5"
-								placeholder={
-									calculatedDuration ?
-										`Auto: ${calculatedDuration}`
-									:	"e.g., 3 months, 6 weeks"
-								}
-								value={form.totalDuration}
-								onChange={(e) =>
-									setForm((prev) => ({
-										...prev,
-										totalDuration: e.target.value,
-									}))
-								}
-								maxLength={100}
-							/>
-							{calculatedDuration && !form.totalDuration && (
-								<p className="text-xs text-muted-foreground mt-1">
-									Auto-calculated: {calculatedDuration}
-								</p>
-							)}
-						</div>
-
-						{/* Faculty Selection */}
-						<div>
-							<label className="text-sm font-medium">
-								Faculty Signature (Assign Faculty)
-							</label>
-							<Select
-								value={form.facultyId || "none"}
-								onValueChange={(v) =>
-									setForm((prev) => ({
-										...prev,
-										facultyId: v === "none" ? "" : v,
-									}))
-								}
-							>
-								<SelectTrigger className="mt-1.5">
-									<SelectValue placeholder="Select faculty for signature" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="none">No faculty assigned</SelectItem>
-									{facultyList.map((f) => (
-										<SelectItem key={f.id} value={f.id}>
-											{f.firstName} {f.lastName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							<p className="text-xs text-muted-foreground mt-1">
-								Selected faculty will see this entry for approval
-							</p>
-						</div>
-					</div>
-
-					<DialogFooter>
-						<Button
-							variant="outline"
-							onClick={() => setDialogOpen(false)}
-							disabled={isPending}
-						>
-							Cancel
-						</Button>
-						<Button onClick={handleSave} disabled={isPending}>
-							{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-							{editingId ? "Update" : "Add Entry"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }
 
-// ======================== SUB-COMPONENT: PostingRow ========================
+// ==================== INLINE EDIT ROW ====================
 
-interface PostingRowProps {
+interface InlineEditRowProps {
+	config: RotationPostingConfig;
+	form: InlineForm;
+	setForm: React.Dispatch<React.SetStateAction<InlineForm>>;
+	autoDuration: string;
+	facultyList: FacultyOption[];
+	isPending: boolean;
+	onSave: () => void;
+	onCancel: () => void;
+	onDelete?: () => void;
+}
+
+function InlineEditRow({
+	config,
+	form,
+	setForm,
+	autoDuration,
+	facultyList,
+	isPending,
+	onSave,
+	onCancel,
+	onDelete,
+}: InlineEditRowProps) {
+	return (
+		<TableRow className="bg-blue-50/60 dark:bg-blue-950/20 ring-1 ring-blue-200 dark:ring-blue-800">
+			<TableCell className="text-center font-medium">{config.slNo}.</TableCell>
+			<TableCell className="font-medium text-hospital-primary">
+				{config.name}
+			</TableCell>
+
+			{/* Date pickers */}
+			<TableCell className="text-center">
+				<div className="flex items-center gap-1 justify-center">
+					<Popover>
+						<PopoverTrigger asChild>
+							<Button
+								variant="outline"
+								size="sm"
+								className={cn(
+									"h-8 text-xs px-2 w-24",
+									!form.startDate && "text-muted-foreground",
+								)}
+							>
+								<CalendarIcon className="mr-1 h-3 w-3" />
+								{form.startDate ? format(form.startDate, "dd/MM/yy") : "Start"}
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent className="w-auto p-0" align="start">
+							<Calendar
+								mode="single"
+								selected={form.startDate}
+								onSelect={(d) => setForm((p) => ({ ...p, startDate: d }))}
+								initialFocus
+							/>
+						</PopoverContent>
+					</Popover>
+					<span className="text-muted-foreground text-xs">–</span>
+					<Popover>
+						<PopoverTrigger asChild>
+							<Button
+								variant="outline"
+								size="sm"
+								className={cn(
+									"h-8 text-xs px-2 w-24",
+									!form.endDate && "text-muted-foreground",
+								)}
+							>
+								<CalendarIcon className="mr-1 h-3 w-3" />
+								{form.endDate ? format(form.endDate, "dd/MM/yy") : "End"}
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent className="w-auto p-0" align="start">
+							<Calendar
+								mode="single"
+								selected={form.endDate}
+								onSelect={(d) => setForm((p) => ({ ...p, endDate: d }))}
+								initialFocus
+							/>
+						</PopoverContent>
+					</Popover>
+				</div>
+			</TableCell>
+
+			{/* Duration */}
+			<TableCell className="text-center">
+				<Input
+					className="h-8 text-xs text-center w-24 mx-auto"
+					placeholder={autoDuration || "Duration"}
+					value={form.totalDuration}
+					onChange={(e) =>
+						setForm((p) => ({ ...p, totalDuration: e.target.value }))
+					}
+				/>
+				{autoDuration && !form.totalDuration && (
+					<p className="text-[10px] text-muted-foreground mt-0.5">
+						{autoDuration}
+					</p>
+				)}
+			</TableCell>
+
+			{/* Faculty dropdown */}
+			<TableCell className="text-center">
+				<Select
+					value={form.facultyId || "none"}
+					onValueChange={(v) =>
+						setForm((p) => ({ ...p, facultyId: v === "none" ? "" : v }))
+					}
+				>
+					<SelectTrigger className="h-8 text-xs w-36 mx-auto">
+						<SelectValue placeholder="Faculty" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="none">None</SelectItem>
+						{facultyList.map((f) => (
+							<SelectItem key={f.id} value={f.id}>
+								{f.firstName} {f.lastName}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</TableCell>
+
+			{/* Status (editing indicator) */}
+			<TableCell className="text-center">
+				<span className="text-xs text-blue-600 font-medium">Editing</span>
+			</TableCell>
+
+			{/* Actions: Save / Cancel / Delete */}
+			<TableCell className="text-center">
+				<div className="flex items-center justify-center gap-0.5">
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+						title="Save"
+						onClick={onSave}
+						disabled={isPending}
+					>
+						{isPending ?
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						:	<Check className="h-3.5 w-3.5" />}
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7"
+						title="Cancel"
+						onClick={onCancel}
+						disabled={isPending}
+					>
+						<X className="h-3.5 w-3.5" />
+					</Button>
+					{onDelete && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-destructive hover:text-destructive"
+							title="Delete"
+							onClick={onDelete}
+							disabled={isPending}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					)}
+				</div>
+			</TableCell>
+		</TableRow>
+	);
+}
+
+// ==================== READ-ONLY ROW ====================
+
+interface ReadOnlyRowProps {
 	config: RotationPostingConfig;
 	posting: RotationPostingData | undefined;
 	getFacultyName: (id: string | null) => string;
+	canEdit: boolean;
 	isPending: boolean;
-	onEdit: (posting: RotationPostingData) => void;
-	onSubmit: (id: string) => void;
-	onDelete: (id: string) => void;
+	onClick: () => void;
+	onSubmit?: () => void;
+	onDelete?: () => void;
 }
 
-function PostingRow({
+function ReadOnlyRow({
 	config,
 	posting,
 	getFacultyName,
+	canEdit,
 	isPending,
-	onEdit,
+	onClick,
 	onSubmit,
 	onDelete,
-}: PostingRowProps) {
+}: ReadOnlyRowProps) {
+	const isClickable = canEdit && !isPending;
+
 	return (
 		<TableRow
 			className={cn(
+				"transition-colors",
 				posting ? "" : "text-muted-foreground/60",
 				posting?.status === "SIGNED" && "bg-green-50/50",
+				isClickable && "cursor-pointer hover:bg-blue-50/40",
 			)}
+			onClick={isClickable ? onClick : undefined}
 		>
 			<TableCell className="text-center font-medium">{config.slNo}.</TableCell>
 			<TableCell className="font-medium">{config.name}</TableCell>
@@ -633,48 +594,40 @@ function PostingRow({
 					<StatusBadge status={posting.status as EntryStatus} size="sm" />
 				:	<span className="text-xs text-muted-foreground">—</span>}
 			</TableCell>
-			<TableCell className="text-center">
+			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				{posting ?
 					<div className="flex items-center justify-center gap-0.5">
 						{(posting.status === "DRAFT" ||
-							posting.status === "NEEDS_REVISION") && (
-							<>
+							posting.status === "NEEDS_REVISION") &&
+							onSubmit && (
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-7 w-7"
-									title="Edit"
-									onClick={() => onEdit(posting)}
-									disabled={isPending}
-								>
-									<Pencil className="h-3.5 w-3.5" />
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-7 w-7"
-									title="Submit"
-									onClick={() => onSubmit(posting.id)}
+									className="h-7 w-7 text-hospital-primary hover:text-hospital-primary"
+									title="Submit for review"
+									onClick={onSubmit}
 									disabled={isPending}
 								>
 									<Send className="h-3.5 w-3.5" />
 								</Button>
-							</>
-						)}
-						{posting.status === "DRAFT" && (
+							)}
+						{posting.status === "DRAFT" && onDelete && (
 							<Button
 								variant="ghost"
 								size="icon"
 								className="h-7 w-7 text-destructive hover:text-destructive"
 								title="Delete"
-								onClick={() => onDelete(posting.id)}
+								onClick={onDelete}
 								disabled={isPending}
 							>
 								<Trash2 className="h-3.5 w-3.5" />
 							</Button>
 						)}
 					</div>
-				:	<span className="text-xs">—</span>}
+				:	<span className="text-xs text-muted-foreground italic">
+						Click to fill
+					</span>
+				}
 			</TableCell>
 		</TableRow>
 	);

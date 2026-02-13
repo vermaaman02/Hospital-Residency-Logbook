@@ -129,3 +129,140 @@ export async function getStudentThesis(studentId: string) {
 		},
 	});
 }
+
+/**
+ * Faculty/HOD: Get all students' theses for review.
+ * Faculty sees only batch-assigned students; HOD sees all.
+ */
+export async function getThesesForReview() {
+	const { userId, role } = await requireRole(["faculty", "hod"]);
+
+	const facultyUser = await prisma.user.findUnique({
+		where: { clerkId: userId },
+	});
+	if (!facultyUser) throw new Error("User not found");
+
+	let studentIds: string[] | undefined;
+
+	if (role === "faculty") {
+		// Use batch-level assignments (same pattern as rotation postings)
+		const batchAssignments = await prisma.facultyBatchAssignment.findMany({
+			where: { facultyId: facultyUser.id },
+			select: { batchId: true },
+		});
+		const batchIds = batchAssignments.map((b) => b.batchId);
+		if (batchIds.length === 0) return [];
+
+		const students = await prisma.user.findMany({
+			where: { batchId: { in: batchIds }, role: "STUDENT" as never },
+			select: { id: true },
+		});
+		studentIds = students.map((s) => s.id);
+		if (studentIds.length === 0) return [];
+	}
+
+	const theses = await prisma.thesis.findMany({
+		where: studentIds ? { userId: { in: studentIds } } : {},
+		include: {
+			semesterRecords: { orderBy: { semester: "asc" } },
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					email: true,
+					batchRelation: { select: { name: true } },
+					currentSemester: true,
+				},
+			},
+		},
+		orderBy: { updatedAt: "desc" },
+	});
+
+	return theses;
+}
+
+/**
+ * Faculty/HOD: Sign (approve) a thesis record.
+ */
+export async function signThesis(thesisId: string, remark?: string) {
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	const thesis = await prisma.thesis.findUnique({ where: { id: thesisId } });
+	if (!thesis) throw new Error("Thesis not found");
+
+	await prisma.thesis.update({
+		where: { id: thesisId },
+		data: {
+			status: "SIGNED",
+			facultyRemark: remark || null,
+		},
+	});
+
+	await prisma.digitalSignature.create({
+		data: {
+			signedById: user.id,
+			entityType: "Thesis",
+			entityId: thesisId,
+			remark: remark || null,
+		},
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Faculty/HOD: Reject a thesis record with remark.
+ */
+export async function rejectThesis(thesisId: string, remark: string) {
+	await requireRole(["faculty", "hod"]);
+
+	const thesis = await prisma.thesis.findUnique({ where: { id: thesisId } });
+	if (!thesis) throw new Error("Thesis not found");
+
+	await prisma.thesis.update({
+		where: { id: thesisId },
+		data: {
+			status: "NEEDS_REVISION",
+			facultyRemark: remark,
+		},
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Faculty/HOD: Bulk sign multiple thesis records.
+ */
+export async function bulkSignTheses(thesisIds: string[]) {
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	await prisma.thesis.updateMany({
+		where: { id: { in: thesisIds } },
+		data: { status: "SIGNED" },
+	});
+
+	// Create digital signatures for each
+	await prisma.digitalSignature.createMany({
+		data: thesisIds.map((id) => ({
+			signedById: user.id,
+			entityType: "Thesis",
+			entityId: id,
+		})),
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true, count: thesisIds.length };
+}

@@ -10,7 +10,7 @@
 
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -50,13 +50,19 @@ import {
 	BarChart3,
 	HelpCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
+import {
+	getPendingReviewCounts,
+	type PendingCounts,
+} from "@/actions/review-counts";
 
 interface NavItem {
 	title: string;
 	href: string;
 	icon: React.ReactNode;
 	roles: ("student" | "faculty" | "hod")[];
+	badgeKey?: keyof PendingCounts;
 }
 
 interface NavSection {
@@ -236,14 +242,118 @@ const facultyNavSections: NavSection[] = [
 		],
 	},
 	{
-		title: "Review",
+		title: "Administrative",
 		items: [
 			{
-				title: "Reviews & Sign-off",
-				href: "/dashboard/faculty/reviews",
+				title: "Rotation Postings",
+				href: "/dashboard/faculty/rotation-postings",
+				icon: <RotateCcw className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "rotationPostings",
+			},
+		],
+	},
+	{
+		title: "Academic",
+		items: [
+			{
+				title: "Case Presentations",
+				href: "/dashboard/faculty/reviews?category=academic&tab=casePresentations",
+				icon: <BookOpen className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Seminars",
+				href: "/dashboard/faculty/reviews?category=academic&tab=seminars",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Journal Clubs",
+				href: "/dashboard/faculty/reviews?category=academic&tab=journalClubs",
+				icon: <FlaskConical className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+		],
+	},
+	{
+		title: "Clinical",
+		items: [
+			{
+				title: "Clinical Skills",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=clinicalSkills",
+				icon: <Stethoscope className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Case Management",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=caseManagement",
 				icon: <ClipboardList className="h-4 w-4" />,
 				roles: ["faculty"],
 			},
+			{
+				title: "Procedures",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=procedureLogs",
+				icon: <Syringe className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Diagnostics",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=diagnosticSkills",
+				icon: <Activity className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Imaging",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=imagingLogs",
+				icon: <Scan className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+		],
+	},
+	{
+		title: "Other Logs",
+		items: [
+			{
+				title: "Transport",
+				href: "/dashboard/faculty/reviews?category=other&tab=transportLogs",
+				icon: <Truck className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Consent & Bad News",
+				href: "/dashboard/faculty/reviews?category=other&tab=consentLogs",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+		],
+	},
+	{
+		title: "Professional",
+		items: [
+			{
+				title: "Courses & Conferences",
+				href: "/dashboard/faculty/reviews?category=professional&tab=courses",
+				icon: <Award className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Research",
+				href: "/dashboard/faculty/reviews?category=professional&tab=research",
+				icon: <Globe className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+			{
+				title: "Disaster & QI",
+				href: "/dashboard/faculty/reviews?category=other&tab=disasterDrills",
+				icon: <ShieldAlert className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+		],
+	},
+	{
+		title: "Evaluate",
+		items: [
 			{
 				title: "Training & Mentoring",
 				href: "/dashboard/faculty/training-mentoring",
@@ -300,18 +410,6 @@ const hodNavSections: NavSection[] = [
 				roles: ["hod"],
 			},
 			{
-				title: "Attendance",
-				href: "/dashboard/hod/attendance",
-				icon: <CalendarDays className="h-4 w-4" />,
-				roles: ["hod"],
-			},
-			{
-				title: "Evaluations",
-				href: "/dashboard/hod/evaluations",
-				icon: <Star className="h-4 w-4" />,
-				roles: ["hod"],
-			},
-			{
 				title: "Analytics",
 				href: "/dashboard/hod/analytics",
 				icon: <BarChart3 className="h-4 w-4" />,
@@ -320,18 +418,134 @@ const hodNavSections: NavSection[] = [
 		],
 	},
 	{
-		title: "Review & Evaluate",
+		title: "Administrative",
 		items: [
 			{
-				title: "Reviews & Sign-off",
-				href: "/dashboard/faculty/reviews",
+				title: "Rotation Postings",
+				href: "/dashboard/hod/rotation-postings",
+				icon: <RotateCcw className="h-4 w-4" />,
+				roles: ["hod"],
+				badgeKey: "rotationPostings",
+			},
+			{
+				title: "Attendance",
+				href: "/dashboard/faculty/reviews?category=administrative&tab=attendance",
+				icon: <CalendarDays className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Academic",
+		items: [
+			{
+				title: "Case Presentations",
+				href: "/dashboard/faculty/reviews?category=academic&tab=casePresentations",
+				icon: <BookOpen className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Seminars",
+				href: "/dashboard/faculty/reviews?category=academic&tab=seminars",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Journal Clubs",
+				href: "/dashboard/faculty/reviews?category=academic&tab=journalClubs",
+				icon: <FlaskConical className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Clinical",
+		items: [
+			{
+				title: "Clinical Skills",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=clinicalSkills",
+				icon: <Stethoscope className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Case Management",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=caseManagement",
 				icon: <ClipboardList className="h-4 w-4" />,
 				roles: ["hod"],
 			},
 			{
+				title: "Procedures",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=procedureLogs",
+				icon: <Syringe className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Diagnostics",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=diagnosticSkills",
+				icon: <Activity className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Imaging",
+				href: "/dashboard/faculty/reviews?category=clinical&tab=imagingLogs",
+				icon: <Scan className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Other Logs",
+		items: [
+			{
+				title: "Transport",
+				href: "/dashboard/faculty/reviews?category=other&tab=transportLogs",
+				icon: <Truck className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Consent & Bad News",
+				href: "/dashboard/faculty/reviews?category=other&tab=consentLogs",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Professional",
+		items: [
+			{
+				title: "Courses & Conferences",
+				href: "/dashboard/faculty/reviews?category=professional&tab=courses",
+				icon: <Award className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Research",
+				href: "/dashboard/faculty/reviews?category=professional&tab=research",
+				icon: <Globe className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Disaster & QI",
+				href: "/dashboard/faculty/reviews?category=other&tab=disasterDrills",
+				icon: <ShieldAlert className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Evaluate",
+		items: [
+			{
 				title: "Training & Mentoring",
 				href: "/dashboard/faculty/training-mentoring",
 				icon: <HeartHandshake className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
+				title: "Evaluations",
+				href: "/dashboard/hod/evaluations",
+				icon: <Star className="h-4 w-4" />,
 				roles: ["hod"],
 			},
 		],
@@ -355,13 +569,57 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
 	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const { role } = useRole();
 	const [isCollapsed, setIsCollapsed] = useState(false);
+	const [pendingCounts, setPendingCounts] = useState<PendingCounts | null>(
+		null,
+	);
+
+	// Fetch pending counts for faculty/hod
+	useEffect(() => {
+		if (role === "faculty" || role === "hod") {
+			getPendingReviewCounts()
+				.then(setPendingCounts)
+				.catch(() => {
+					/* silently ignore */
+				});
+		}
+	}, [role]);
 
 	const navSections =
 		role === "hod" ? hodNavSections
 		: role === "faculty" ? facultyNavSections
 		: studentNavSections;
+
+	/** Determine if a sidebar link is currently active */
+	function isLinkActive(href: string): boolean {
+		const qIdx = href.indexOf("?");
+		const hrefPath = qIdx >= 0 ? href.slice(0, qIdx) : href;
+		const hrefQuery = qIdx >= 0 ? href.slice(qIdx + 1) : "";
+
+		const dashboardRoots = [
+			"/dashboard/student",
+			"/dashboard/faculty",
+			"/dashboard/hod",
+		];
+		if (dashboardRoots.includes(hrefPath)) {
+			return pathname === hrefPath;
+		}
+
+		const pathMatch =
+			pathname === hrefPath || pathname.startsWith(hrefPath + "/");
+		if (!pathMatch) return false;
+
+		if (!hrefQuery) return true;
+
+		// Check query params match
+		const params = new URLSearchParams(hrefQuery);
+		for (const [key, value] of params.entries()) {
+			if (searchParams.get(key) !== value) return false;
+		}
+		return true;
+	}
 
 	return (
 		<TooltipProvider delayDuration={0}>
@@ -413,12 +671,12 @@ export function Sidebar({ className }: SidebarProps) {
 								)}
 								<div className="space-y-0.5">
 									{section.items.map((item) => {
-										const isActive =
-											pathname === item.href ||
-											(item.href !== "/dashboard/student" &&
-												item.href !== "/dashboard/faculty" &&
-												item.href !== "/dashboard/hod" &&
-												pathname.startsWith(item.href));
+										const isActive = isLinkActive(item.href);
+
+										const badgeCount =
+											item.badgeKey && pendingCounts ?
+												pendingCounts[item.badgeKey]
+											:	0;
 
 										const linkContent = (
 											<Link
@@ -432,8 +690,30 @@ export function Sidebar({ className }: SidebarProps) {
 													isCollapsed && "justify-center px-0",
 												)}
 											>
-												{item.icon}
-												{!isCollapsed && <span>{item.title}</span>}
+												<span className="relative">
+													{item.icon}
+													{isCollapsed &&
+														typeof badgeCount === "number" &&
+														badgeCount > 0 && (
+															<span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+																{badgeCount > 9 ? "9+" : badgeCount}
+															</span>
+														)}
+												</span>
+												{!isCollapsed && (
+													<>
+														<span className="flex-1">{item.title}</span>
+														{typeof badgeCount === "number" &&
+															badgeCount > 0 && (
+																<Badge
+																	variant="destructive"
+																	className="h-5 min-w-5 px-1 text-[10px] font-bold"
+																>
+																	{badgeCount}
+																</Badge>
+															)}
+													</>
+												)}
 											</Link>
 										);
 

@@ -1,14 +1,15 @@
 /**
  * @module FacultyTrainingForm
- * @description Faculty evaluates assigned students using 5-domain scoring (1-5 each):
- * Knowledge, Clinical Skills, Procedural Skills, Soft Skills, Research.
+ * @description Faculty evaluates assigned students using inline table editing.
+ * Select a student → see 6 semesters as rows → click a row → edit 5-domain scores inline.
+ * Consistent with inline cell editing used across all tabs.
  *
  * @see PG Logbook .md — "RESIDENT TRAINING & MENTORING RECORD"
  */
 
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useCallback } from "react";
 import {
 	Card,
 	CardContent,
@@ -26,21 +27,43 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Save, Star, Target } from "lucide-react";
+import {
+	Loader2,
+	Check,
+	X,
+	Star,
+	Target,
+	Pencil,
+	Search,
+	ChevronLeft,
+	ChevronRight,
+	Users,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { upsertTrainingRecord } from "@/actions/training-mentoring";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-interface Student {
+export interface Student {
 	id: string;
 	clerkId: string;
 	firstName: string | null;
 	lastName: string | null;
 	email: string | null;
+	batchRelation?: { name: string } | null;
+	currentSemester?: number | null;
 }
 
-interface ExistingRecord {
+export interface ExistingRecord {
 	id: string;
 	userId: string;
 	semester: number;
@@ -60,22 +83,49 @@ interface FacultyTrainingFormProps {
 }
 
 const DOMAINS = [
-	{ key: "knowledgeScore", label: "Knowledge", color: "#0066CC" },
-	{ key: "clinicalSkillScore", label: "Clinical Skills", color: "#00897B" },
-	{ key: "proceduralSkillScore", label: "Procedural Skills", color: "#D32F2F" },
-	{ key: "softSkillScore", label: "Soft Skills", color: "#F59E0B" },
-	{ key: "researchScore", label: "Research", color: "#7C3AED" },
+	{
+		key: "knowledgeScore",
+		label: "Knowledge",
+		shortLabel: "Know.",
+		color: "#0066CC",
+	},
+	{
+		key: "clinicalSkillScore",
+		label: "Clinical Skills",
+		shortLabel: "Clinical",
+		color: "#00897B",
+	},
+	{
+		key: "proceduralSkillScore",
+		label: "Procedural Skills",
+		shortLabel: "Proc.",
+		color: "#D32F2F",
+	},
+	{
+		key: "softSkillScore",
+		label: "Soft Skills",
+		shortLabel: "Soft",
+		color: "#F59E0B",
+	},
+	{
+		key: "researchScore",
+		label: "Research",
+		shortLabel: "Research",
+		color: "#7C3AED",
+	},
 ] as const;
 
 const SCORE_OPTIONS = [
 	{ value: "5", label: "5 — Exceptional" },
-	{ value: "4", label: "4 — Exceeds expected standards" },
-	{ value: "3", label: "3 — Meets expected standards" },
-	{ value: "2", label: "2 — Inconsistent Performance" },
-	{ value: "1", label: "1 — Requires remedial training" },
+	{ value: "4", label: "4 — Exceeds" },
+	{ value: "3", label: "3 — Meets" },
+	{ value: "2", label: "2 — Inconsistent" },
+	{ value: "1", label: "1 — Remedial" },
 ];
 
 const SEMESTERS = [1, 2, 3, 4, 5, 6];
+
+const STUDENTS_PER_PAGE = 10;
 
 export function FacultyTrainingForm({
 	students,
@@ -84,10 +134,14 @@ export function FacultyTrainingForm({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [selectedStudent, setSelectedStudent] = useState<string>("");
-	const [selectedSemester, setSelectedSemester] = useState<string>("");
-	const [remarks, setRemarks] = useState("");
 
-	// 5-domain scores
+	// Search & filter state
+	const [search, setSearch] = useState("");
+	const [batchFilter, setBatchFilter] = useState("ALL");
+	const [page, setPage] = useState(1);
+
+	// Inline editing state
+	const [editingSemester, setEditingSemester] = useState<number | null>(null);
 	const [scores, setScores] = useState<Record<string, string>>({
 		knowledgeScore: "",
 		clinicalSkillScore: "",
@@ -95,45 +149,63 @@ export function FacultyTrainingForm({
 		softSkillScore: "",
 		researchScore: "",
 	});
+	const [remarks, setRemarks] = useState("");
 
-	// Pre-fill if editing existing record
-	function handleStudentChange(studentId: string) {
-		setSelectedStudent(studentId);
-		setSelectedSemester("");
-		resetScores();
-	}
-
-	function resetScores() {
-		setScores({
-			knowledgeScore: "",
-			clinicalSkillScore: "",
-			proceduralSkillScore: "",
-			softSkillScore: "",
-			researchScore: "",
+	// Batch list for filter
+	const batches = useMemo(() => {
+		const set = new Set<string>();
+		students.forEach((s) => {
+			if (s.batchRelation?.name) set.add(s.batchRelation.name);
 		});
-		setRemarks("");
-	}
+		return Array.from(set).sort();
+	}, [students]);
 
-	function handleSemesterChange(sem: string) {
-		setSelectedSemester(sem);
-		const existing = existingRecords.find(
-			(r) => r.userId === selectedStudent && r.semester === parseInt(sem),
-		);
-		if (existing) {
-			setScores({
-				knowledgeScore: existing.knowledgeScore?.toString() ?? "",
-				clinicalSkillScore: existing.clinicalSkillScore?.toString() ?? "",
-				proceduralSkillScore: existing.proceduralSkillScore?.toString() ?? "",
-				softSkillScore: existing.softSkillScore?.toString() ?? "",
-				researchScore: existing.researchScore?.toString() ?? "",
-			});
-			setRemarks(existing.remarks ?? "");
-		} else {
-			resetScores();
-		}
-	}
+	// Filtered & paginated student list
+	const filteredStudents = useMemo(() => {
+		return students.filter((s) => {
+			const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
+			const q = search.toLowerCase();
+			const matchesSearch =
+				!q || name.includes(q) || (s.email ?? "").toLowerCase().includes(q);
+			const matchesBatch =
+				batchFilter === "ALL" || s.batchRelation?.name === batchFilter;
+			return matchesSearch && matchesBatch;
+		});
+	}, [students, search, batchFilter]);
 
-	// Calculate live overall
+	const totalPages = Math.max(
+		1,
+		Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE),
+	);
+	const paginatedStudents = filteredStudents.slice(
+		(page - 1) * STUDENTS_PER_PAGE,
+		page * STUDENTS_PER_PAGE,
+	);
+
+	const handleSearch = useCallback((val: string) => {
+		setSearch(val);
+		setPage(1);
+	}, []);
+	const handleBatchFilter = useCallback((val: string) => {
+		setBatchFilter(val);
+		setPage(1);
+	}, []);
+
+	const studentRecords = useMemo(
+		() =>
+			existingRecords
+				.filter((r) => r.userId === selectedStudent)
+				.sort((a, b) => a.semester - b.semester),
+		[existingRecords, selectedStudent],
+	);
+
+	const getRecord = useCallback(
+		(sem: number): ExistingRecord | undefined => {
+			return studentRecords.find((r) => r.semester === sem);
+		},
+		[studentRecords],
+	);
+
 	const overallScore = useMemo(() => {
 		const vals = Object.values(scores)
 			.map((v) => parseInt(v))
@@ -144,20 +216,38 @@ export function FacultyTrainingForm({
 		);
 	}, [scores]);
 
-	const hasAnyScore = Object.values(scores).some((v) => v !== "");
+	function handleStudentChange(studentId: string) {
+		setSelectedStudent(studentId);
+		setEditingSemester(null);
+	}
+
+	function startEditing(sem: number) {
+		const record = getRecord(sem);
+		setEditingSemester(sem);
+		setScores({
+			knowledgeScore: record?.knowledgeScore?.toString() ?? "",
+			clinicalSkillScore: record?.clinicalSkillScore?.toString() ?? "",
+			proceduralSkillScore: record?.proceduralSkillScore?.toString() ?? "",
+			softSkillScore: record?.softSkillScore?.toString() ?? "",
+			researchScore: record?.researchScore?.toString() ?? "",
+		});
+		setRemarks(record?.remarks ?? "");
+	}
+
+	function cancelEditing() {
+		setEditingSemester(null);
+	}
 
 	function handleSave() {
-		if (!selectedStudent || !selectedSemester) {
-			toast.error("Please select a student and semester");
-			return;
-		}
+		if (!selectedStudent || editingSemester === null) return;
+		const hasAnyScore = Object.values(scores).some((v) => v !== "");
 		if (!hasAnyScore) {
 			toast.error("Please assign at least one domain score");
 			return;
 		}
 
 		const payload: Record<string, number | string | undefined> = {
-			semester: parseInt(selectedSemester),
+			semester: editingSemester,
 			remarks: remarks || undefined,
 		};
 		for (const domain of DOMAINS) {
@@ -171,7 +261,8 @@ export function FacultyTrainingForm({
 					selectedStudent,
 					payload as Parameters<typeof upsertTrainingRecord>[1],
 				);
-				toast.success("Training evaluation saved");
+				toast.success(`Semester ${editingSemester} evaluation saved`);
+				setEditingSemester(null);
 				router.refresh();
 			} catch {
 				toast.error("Failed to save evaluation");
@@ -193,169 +284,167 @@ export function FacultyTrainingForm({
 
 	return (
 		<div className="space-y-6">
-			{/* Student & Semester Selection */}
+			{/* Student Selection with Search & Filter */}
 			<Card>
-				<CardHeader>
+				<CardHeader className="pb-3">
 					<div className="flex items-center gap-2">
 						<Target className="h-5 w-5 text-hospital-primary" />
 						<CardTitle>5-Domain Evaluation</CardTitle>
 					</div>
 					<CardDescription>
-						Select a student and semester, then score each domain (1-5)
+						Search and select a student, then click a semester row to evaluate
+						inline
 					</CardDescription>
 				</CardHeader>
-				<CardContent className="space-y-6">
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div className="space-y-2">
-							<label className="text-sm font-medium">Student</label>
-							<Select
-								value={selectedStudent}
-								onValueChange={handleStudentChange}
-							>
-								<SelectTrigger>
-									<SelectValue placeholder="Select student..." />
+				<CardContent className="space-y-4">
+					{/* Search & Filter Bar */}
+					<div className="flex flex-col sm:flex-row gap-3">
+						<div className="relative flex-1">
+							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+							<Input
+								className="pl-9"
+								placeholder="Search by student name or email..."
+								value={search}
+								onChange={(e) => handleSearch(e.target.value)}
+							/>
+						</div>
+						{batches.length > 1 && (
+							<Select value={batchFilter} onValueChange={handleBatchFilter}>
+								<SelectTrigger className="w-40">
+									<SelectValue placeholder="Batch" />
 								</SelectTrigger>
 								<SelectContent>
-									{students.map((s) => (
-										<SelectItem key={s.id} value={s.id}>
-											{s.firstName} {s.lastName}
+									<SelectItem value="ALL">All Batches</SelectItem>
+									{batches.map((b) => (
+										<SelectItem key={b} value={b}>
+											{b}
 										</SelectItem>
 									))}
 								</SelectContent>
 							</Select>
-						</div>
-
-						<div className="space-y-2">
-							<label className="text-sm font-medium">Semester</label>
-							<Select
-								value={selectedSemester}
-								onValueChange={handleSemesterChange}
-								disabled={!selectedStudent}
-							>
-								<SelectTrigger>
-									<SelectValue placeholder="Select semester..." />
-								</SelectTrigger>
-								<SelectContent>
-									{SEMESTERS.map((sem) => {
-										const existing = existingRecords.find(
-											(r) => r.userId === selectedStudent && r.semester === sem,
-										);
-										return (
-											<SelectItem key={sem} value={sem.toString()}>
-												Semester {sem}
-												{existing ?
-													` (Overall: ${existing.overallScore?.toFixed(1) ?? "—"})`
-												:	""}
-											</SelectItem>
-										);
-									})}
-								</SelectContent>
-							</Select>
-						</div>
+						)}
 					</div>
 
-					{/* 5-Domain Score Grid */}
-					{selectedSemester && (
-						<div className="space-y-4">
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-								{DOMAINS.map((domain) => (
-									<div
-										key={domain.key}
-										className="space-y-2 p-3 border rounded-lg"
-										style={{
-											borderColor:
-												scores[domain.key] ? `${domain.color}40` : undefined,
-										}}
-									>
-										<label className="text-xs font-medium flex items-center gap-1.5">
-											<span
-												className="h-2 w-2 rounded-full"
-												style={{ backgroundColor: domain.color }}
-											/>
-											{domain.label}
-										</label>
-										<Select
-											value={scores[domain.key] || "none"}
-											onValueChange={(v) =>
-												setScores((prev) => ({
-													...prev,
-													[domain.key]: v === "none" ? "" : v,
-												}))
-											}
+					{/* Student List */}
+					<div className="border rounded-lg overflow-x-auto">
+						<Table>
+							<TableHeader>
+								<TableRow className="bg-muted/50">
+									<TableHead className="font-bold">Student</TableHead>
+									<TableHead className="font-bold hidden sm:table-cell">
+										Batch
+									</TableHead>
+									<TableHead className="font-bold hidden sm:table-cell text-center">
+										Semesters Evaluated
+									</TableHead>
+									<TableHead className="w-24 text-center font-bold">
+										Select
+									</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{paginatedStudents.length === 0 ?
+									<TableRow>
+										<TableCell
+											colSpan={4}
+											className="text-center py-6 text-muted-foreground"
 										>
-											<SelectTrigger className="h-9 text-sm">
-												<SelectValue placeholder="Score" />
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="none">—</SelectItem>
-												{SCORE_OPTIONS.map((opt) => (
-													<SelectItem key={opt.value} value={opt.value}>
-														{opt.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										{scores[domain.key] && (
-											<div className="flex gap-0.5">
-												{[1, 2, 3, 4, 5].map((i) => (
-													<div
-														key={i}
-														className={cn("h-1.5 flex-1 rounded-full")}
-														style={{
-															backgroundColor:
-																i <= parseInt(scores[domain.key]) ?
-																	domain.color
-																:	"#E5E7EB",
-														}}
-													/>
-												))}
-											</div>
-										)}
-									</div>
-								))}
-							</div>
+											{search || batchFilter !== "ALL" ?
+												"No matching students"
+											:	"No students available"}
+										</TableCell>
+									</TableRow>
+								:	paginatedStudents.map((s) => {
+										const recordCount = existingRecords.filter(
+											(r) =>
+												r.userId === s.id &&
+												DOMAINS.some(
+													(d) => (r as Record<string, unknown>)[d.key] !== null,
+												),
+										).length;
+										const isSelected = selectedStudent === s.id;
+										return (
+											<TableRow
+												key={s.id}
+												className={cn(
+													"cursor-pointer transition-colors",
+													isSelected ?
+														"bg-hospital-primary/10 border-l-2 border-hospital-primary"
+													:	"hover:bg-muted/40",
+												)}
+												onClick={() => handleStudentChange(s.id)}
+											>
+												<TableCell className="font-medium">
+													<div>
+														{s.firstName} {s.lastName}
+														<span className="block text-xs text-muted-foreground">
+															{s.email}
+														</span>
+													</div>
+												</TableCell>
+												<TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
+													{s.batchRelation?.name ?? "—"}
+												</TableCell>
+												<TableCell className="text-center hidden sm:table-cell">
+													<Badge
+														variant={recordCount > 0 ? "default" : "outline"}
+														className={cn(
+															"text-xs",
+															recordCount > 0 &&
+																"bg-green-100 text-green-700 hover:bg-green-100",
+														)}
+													>
+														{recordCount}/6
+													</Badge>
+												</TableCell>
+												<TableCell className="text-center">
+													{isSelected ?
+														<Badge className="bg-hospital-primary text-white text-xs">
+															Selected
+														</Badge>
+													:	<Button
+															variant="ghost"
+															size="sm"
+															className="text-xs h-7"
+														>
+															<Users className="h-3.5 w-3.5 mr-1" /> Evaluate
+														</Button>
+													}
+												</TableCell>
+											</TableRow>
+										);
+									})
+								}
+							</TableBody>
+						</Table>
+					</div>
 
-							{/* Overall Score */}
-							{overallScore !== null && (
-								<div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-									<span className="text-sm font-medium">Overall Score:</span>
-									<Badge
-										variant="default"
-										className="bg-hospital-primary text-white"
-									>
-										{overallScore.toFixed(1)} / 5
-									</Badge>
-									<span className="text-xs text-muted-foreground">
-										(average of filled domains)
-									</span>
-								</div>
-							)}
-
-							{/* Remarks */}
-							<div className="space-y-2">
-								<label className="text-sm font-medium">
-									Remarks (Optional)
-								</label>
-								<Textarea
-									placeholder="Add remarks about the student's performance across domains..."
-									value={remarks}
-									onChange={(e) => setRemarks(e.target.value)}
-									rows={3}
-									maxLength={1000}
-								/>
-							</div>
-
-							{/* Save Button */}
-							<div className="flex justify-end">
+					{/* Pagination */}
+					{totalPages > 1 && (
+						<div className="flex items-center justify-between pt-1">
+							<p className="text-sm text-muted-foreground">
+								{filteredStudents.length} student
+								{filteredStudents.length !== 1 ? "s" : ""}
+							</p>
+							<div className="flex items-center gap-2">
 								<Button
-									onClick={handleSave}
-									disabled={isPending || !hasAnyScore}
+									variant="outline"
+									size="sm"
+									disabled={page <= 1}
+									onClick={() => setPage((p) => p - 1)}
 								>
-									{isPending && (
-										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									)}
-									<Save className="h-4 w-4 mr-2" />
-									Save Evaluation
+									<ChevronLeft className="h-4 w-4" />
+								</Button>
+								<span className="text-sm font-medium">
+									{page} / {totalPages}
+								</span>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={page >= totalPages}
+									onClick={() => setPage((p) => p + 1)}
+								>
+									<ChevronRight className="h-4 w-4" />
 								</Button>
 							</div>
 						</div>
@@ -363,80 +452,296 @@ export function FacultyTrainingForm({
 				</CardContent>
 			</Card>
 
-			{/* Existing Records Summary */}
+			{/* Inline Scoring Table */}
 			{selectedStudent && (
 				<Card>
 					<CardHeader className="pb-3">
-						<CardTitle className="text-base">Evaluation History</CardTitle>
+						<CardTitle className="text-lg">
+							Semester-wise Evaluation —{" "}
+							{students.find((s) => s.id === selectedStudent)?.firstName}{" "}
+							{students.find((s) => s.id === selectedStudent)?.lastName}
+						</CardTitle>
 						<CardDescription>
-							Previous evaluations for this student
+							Click on any semester row to edit scores inline (1-5 per domain)
 						</CardDescription>
 					</CardHeader>
-					<CardContent>
-						{(
-							existingRecords.filter((r) => r.userId === selectedStudent)
-								.length > 0
-						) ?
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-								{existingRecords
-									.filter((r) => r.userId === selectedStudent)
-									.sort((a, b) => a.semester - b.semester)
-									.map((record) => (
-										<div
-											key={record.id}
-											className="border rounded-lg p-3 text-sm space-y-2"
-										>
-											<div className="flex items-center justify-between">
-												<span className="font-medium">
-													Semester {record.semester}
-												</span>
-												<Badge
-													variant={
-														record.status === "SIGNED" ? "default" : "outline"
-													}
-													className={
-														record.status === "SIGNED" ?
-															"bg-green-100 text-green-700 hover:bg-green-100"
-														:	""
-													}
-												>
-													{record.status}
-												</Badge>
-											</div>
-											{DOMAINS.map((d) => {
-												const score = record[d.key as keyof ExistingRecord] as
-													| number
-													| null;
-												return (
-													<div
-														key={d.key}
-														className="flex items-center justify-between text-xs"
-													>
-														<span className="text-muted-foreground">
-															{d.label}
-														</span>
-														<span className="font-medium">{score ?? "—"}</span>
-													</div>
-												);
-											})}
-											{record.overallScore && (
-												<div className="pt-1 border-t flex items-center justify-between text-xs">
-													<span className="font-medium">Overall</span>
-													<span className="font-bold">
-														{record.overallScore.toFixed(1)}
-													</span>
+					<CardContent className="p-0 sm:p-6 overflow-x-auto">
+						<div className="border rounded-lg min-w-180">
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-muted/50">
+										<TableHead className="w-20 text-center font-bold">
+											Sem
+										</TableHead>
+										{DOMAINS.map((d) => (
+											<TableHead key={d.key} className="font-bold text-center">
+												<div className="flex items-center justify-center gap-1">
+													<span
+														className="h-2 w-2 rounded-full shrink-0"
+														style={{ backgroundColor: d.color }}
+													/>
+													<span className="hidden lg:inline">{d.label}</span>
+													<span className="lg:hidden">{d.shortLabel}</span>
 												</div>
-											)}
-										</div>
-									))}
-							</div>
-						:	<p className="text-sm text-muted-foreground text-center py-4">
-								No evaluations recorded yet for this student
-							</p>
-						}
+											</TableHead>
+										))}
+										<TableHead className="w-20 text-center font-bold">
+											Overall
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Status
+										</TableHead>
+										<TableHead className="w-28 text-center font-bold">
+											Action
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{SEMESTERS.map((sem) => {
+										const record = getRecord(sem);
+										const isEditing = editingSemester === sem;
+
+										if (isEditing) {
+											return (
+												<InlineEditRow
+													key={sem}
+													semester={sem}
+													scores={scores}
+													remarks={remarks}
+													overallScore={overallScore}
+													isPending={isPending}
+													onScoreChange={(key, val) =>
+														setScores((prev) => ({
+															...prev,
+															[key]: val === "none" ? "" : val,
+														}))
+													}
+													onRemarksChange={setRemarks}
+													onSave={handleSave}
+													onCancel={cancelEditing}
+												/>
+											);
+										}
+
+										return (
+											<ReadOnlyRow
+												key={sem}
+												semester={sem}
+												record={record}
+												onClick={() => startEditing(sem)}
+											/>
+										);
+									})}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Score Legend */}
+						<div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground px-2 sm:px-0">
+							<span className="font-medium">Scale:</span>
+							<span>1 = Remedial</span>
+							<span>2 = Inconsistent</span>
+							<span>3 = Meets</span>
+							<span>4 = Exceeds</span>
+							<span>5 = Exceptional</span>
+						</div>
 					</CardContent>
 				</Card>
 			)}
 		</div>
+	);
+}
+
+// ======================== INLINE EDIT ROW ========================
+
+interface InlineEditRowProps {
+	semester: number;
+	scores: Record<string, string>;
+	remarks: string;
+	overallScore: number | null;
+	isPending: boolean;
+	onScoreChange: (key: string, value: string) => void;
+	onRemarksChange: (value: string) => void;
+	onSave: () => void;
+	onCancel: () => void;
+}
+
+function InlineEditRow({
+	semester,
+	scores,
+	remarks,
+	overallScore,
+	isPending,
+	onScoreChange,
+	onRemarksChange,
+	onSave,
+	onCancel,
+}: InlineEditRowProps) {
+	return (
+		<>
+			<TableRow className="bg-blue-50/60">
+				<TableCell className="text-center font-bold text-hospital-primary">
+					{semester}
+				</TableCell>
+				{DOMAINS.map((domain) => (
+					<TableCell key={domain.key} className="text-center">
+						<Select
+							value={scores[domain.key] || "none"}
+							onValueChange={(v) => onScoreChange(domain.key, v)}
+						>
+							<SelectTrigger className="h-8 text-sm w-full min-w-20">
+								<SelectValue placeholder="—" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="none">—</SelectItem>
+								{SCORE_OPTIONS.map((opt) => (
+									<SelectItem key={opt.value} value={opt.value}>
+										{opt.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</TableCell>
+				))}
+				<TableCell className="text-center font-bold">
+					{overallScore !== null ?
+						<Badge variant="default" className="bg-hospital-primary text-white">
+							{overallScore.toFixed(1)}
+						</Badge>
+					:	"—"}
+				</TableCell>
+				<TableCell className="text-center">
+					<Badge variant="outline" className="text-amber-600 border-amber-300">
+						Editing
+					</Badge>
+				</TableCell>
+				<TableCell>
+					<div className="flex items-center justify-center gap-1">
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+							onClick={onSave}
+							disabled={isPending}
+						>
+							{isPending ?
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							:	<Check className="h-3.5 w-3.5" />}
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+							onClick={onCancel}
+							disabled={isPending}
+						>
+							<X className="h-3.5 w-3.5" />
+						</Button>
+					</div>
+				</TableCell>
+			</TableRow>
+			{/* Remarks row (part of editing) */}
+			<TableRow className="bg-blue-50/40 border-b-2 border-blue-200">
+				<TableCell className="text-right text-xs text-muted-foreground">
+					Remarks:
+				</TableCell>
+				<TableCell colSpan={7}>
+					<Textarea
+						className="h-9 min-h-9 text-sm resize-none"
+						placeholder="Optional remarks about performance..."
+						value={remarks}
+						onChange={(e) => onRemarksChange(e.target.value)}
+						rows={1}
+						maxLength={1000}
+					/>
+				</TableCell>
+			</TableRow>
+		</>
+	);
+}
+
+// ======================== READ-ONLY ROW ========================
+
+interface ReadOnlyRowProps {
+	semester: number;
+	record: ExistingRecord | undefined;
+	onClick: () => void;
+}
+
+function ReadOnlyRow({ semester, record, onClick }: ReadOnlyRowProps) {
+	const hasData =
+		record &&
+		DOMAINS.some(
+			(d) => (record[d.key as keyof ExistingRecord] as number | null) !== null,
+		);
+
+	return (
+		<TableRow
+			className={cn(
+				"cursor-pointer transition-colors hover:bg-muted/40",
+				hasData ? "" : "text-muted-foreground/60",
+			)}
+			onClick={onClick}
+		>
+			<TableCell className="text-center font-medium">{semester}</TableCell>
+			{DOMAINS.map((domain) => {
+				const score = record?.[domain.key as keyof ExistingRecord] as
+					| number
+					| null;
+				return (
+					<TableCell key={domain.key} className="text-center">
+						{score ?
+							<div className="flex items-center justify-center gap-1">
+								<div className="flex gap-0.5">
+									{[1, 2, 3, 4, 5].map((i) => (
+										<div
+											key={i}
+											className="h-1.5 w-3 rounded-full"
+											style={{
+												backgroundColor: i <= score ? domain.color : "#E5E7EB",
+											}}
+										/>
+									))}
+								</div>
+								<span className="text-xs font-medium">{score}</span>
+							</div>
+						:	<span className="text-muted-foreground/40 italic text-xs">
+								Click to score
+							</span>
+						}
+					</TableCell>
+				);
+			})}
+			<TableCell className="text-center font-medium">
+				{record?.overallScore ?
+					<span className="font-bold">{record.overallScore.toFixed(1)}</span>
+				:	"—"}
+			</TableCell>
+			<TableCell className="text-center">
+				{record ?
+					<Badge
+						variant={record.status === "SIGNED" ? "default" : "outline"}
+						className={cn(
+							"text-xs",
+							record.status === "SIGNED" &&
+								"bg-green-100 text-green-700 hover:bg-green-100",
+							record.status === "SUBMITTED" &&
+								"text-amber-600 border-amber-300",
+						)}
+					>
+						{record.status === "SIGNED" ?
+							"Approved"
+						: record.status === "SUBMITTED" ?
+							"Pending"
+						:	record.status}
+					</Badge>
+				:	<span className="text-xs text-muted-foreground/40">—</span>}
+			</TableCell>
+			<TableCell className="text-center">
+				<span className="text-xs text-muted-foreground/40">
+					<Pencil className="h-3 w-3 inline" />
+				</span>
+			</TableCell>
+		</TableRow>
 	);
 }

@@ -12,7 +12,12 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FacultyReviewsClient } from "./FacultyReviewsClient";
 
-export default async function FacultyReviewsPage() {
+export default async function FacultyReviewsPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ category?: string; tab?: string }>;
+}) {
+	const params = await searchParams;
 	let authResult: { userId: string; role: string };
 	try {
 		authResult = await requireRole(["faculty", "hod"]);
@@ -244,6 +249,8 @@ export default async function FacultyReviewsPage() {
 				pendingConsentLogs={JSON.parse(JSON.stringify(pendingConsentLogs))}
 				pendingBadNewsLogs={JSON.parse(JSON.stringify(pendingBadNewsLogs))}
 				isHod={authResult.role === "hod"}
+				defaultCategory={params.category}
+				defaultTab={params.tab}
 			/>
 		</div>
 	);

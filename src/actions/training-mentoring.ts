@@ -25,7 +25,7 @@ export async function upsertTrainingRecord(
 	studentId: string,
 	data: TrainingMentoringInput,
 ) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const validated = trainingMentoringSchema.parse(data);
 
 	const facultyUser = await prisma.user.findUnique({
@@ -47,6 +47,9 @@ export async function upsertTrainingRecord(
 			Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
 		:	null;
 
+	// HOD evaluations are auto-signed; faculty evaluations need HOD sign-off
+	const entryStatus = role === "hod" ? "SIGNED" : "SUBMITTED";
+
 	// Upsert by userId + semester (unique constraint)
 	const existing = await prisma.trainingMentoringRecord.findFirst({
 		where: { userId: studentId, semester: validated.semester },
@@ -65,7 +68,7 @@ export async function upsertTrainingRecord(
 				overallScore,
 				evaluatedById: facultyUser.id,
 				remarks: validated.remarks,
-				status: "SUBMITTED",
+				status: entryStatus,
 			},
 		});
 	} else {
@@ -81,9 +84,29 @@ export async function upsertTrainingRecord(
 				overallScore,
 				evaluatedById: facultyUser.id,
 				remarks: validated.remarks,
-				status: "SUBMITTED",
+				status: entryStatus,
 			},
 		});
+	}
+
+	// Auto-sign for HOD
+	if (role === "hod") {
+		const existingSig = await prisma.digitalSignature.findFirst({
+			where: {
+				signedById: facultyUser.id,
+				entityType: "TrainingMentoringRecord",
+				entityId: record.id,
+			},
+		});
+		if (!existingSig) {
+			await prisma.digitalSignature.create({
+				data: {
+					signedById: facultyUser.id,
+					entityType: "TrainingMentoringRecord",
+					entityId: record.id,
+				},
+			});
+		}
 	}
 
 	revalidatePath("/dashboard/student/rotation-postings");

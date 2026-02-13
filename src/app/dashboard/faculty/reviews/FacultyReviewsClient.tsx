@@ -183,6 +183,8 @@ interface FacultyReviewsClientProps {
 	pendingConsentLogs: OtherLogReviewEntry[];
 	pendingBadNewsLogs: OtherLogReviewEntry[];
 	isHod: boolean;
+	defaultCategory?: string;
+	defaultTab?: string;
 }
 
 interface ClinicalSkillReviewEntry {
@@ -320,6 +322,8 @@ export function FacultyReviewsClient({
 	pendingConsentLogs,
 	pendingBadNewsLogs,
 	isHod,
+	defaultCategory,
+	defaultTab,
 }: FacultyReviewsClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -661,8 +665,10 @@ export function FacultyReviewsClient({
 		},
 	];
 
-	const [activeCategory, setActiveCategory] = useState("administrative");
-	const [activeTab, setActiveTab] = useState("rotations");
+	const [activeCategory, setActiveCategory] = useState(
+		defaultCategory || "administrative",
+	);
+	const [activeTab, setActiveTab] = useState(defaultTab || "rotations");
 
 	const currentGroup =
 		categoryGroups.find((g) => g.id === activeCategory) ?? categoryGroups[0];
