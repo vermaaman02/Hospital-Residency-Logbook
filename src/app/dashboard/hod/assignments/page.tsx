@@ -20,72 +20,103 @@ export default async function HODAssignmentsPage() {
 		redirect("/dashboard/student");
 	}
 
-	// Get all assignments with faculty and student details
-	const assignments = await prisma.facultyStudentAssignment.findMany({
-		include: {
-			faculty: {
-				select: { id: true, firstName: true, lastName: true, email: true },
-			},
-			student: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					email: true,
-					batch: true,
-					currentSemester: true,
+	let serializedAssignments: {
+		id: string;
+		semester: number;
+		createdAt: string;
+		faculty: { id: string; name: string; email: string };
+		student: {
+			id: string;
+			name: string;
+			email: string;
+			batch: string | null;
+			currentSemester: number | null;
+		};
+	}[] = [];
+	let facultyOptions: { id: string; name: string }[] = [];
+	let studentOptions: {
+		id: string;
+		name: string;
+		currentSemester: number | null;
+	}[] = [];
+	let fetchError = false;
+
+	try {
+		// Get all assignments with faculty and student details
+		const assignments = await prisma.facultyStudentAssignment.findMany({
+			include: {
+				faculty: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						email: true,
+					},
+				},
+				student: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						email: true,
+						batch: true,
+						currentSemester: true,
+					},
 				},
 			},
-		},
-		orderBy: { createdAt: "desc" },
-	});
+			orderBy: { createdAt: "desc" },
+		});
 
-	// Get all faculty and students for the create form
-	const facultyList = await prisma.user.findMany({
-		where: { role: "FACULTY" as never },
-		select: { id: true, firstName: true, lastName: true },
-		orderBy: { firstName: "asc" },
-	});
+		// Get all faculty and students for the create form
+		const facultyList = await prisma.user.findMany({
+			where: { role: "FACULTY" as never },
+			select: { id: true, firstName: true, lastName: true },
+			orderBy: { firstName: "asc" },
+		});
 
-	const studentList = await prisma.user.findMany({
-		where: { role: "STUDENT" as never },
-		select: {
-			id: true,
-			firstName: true,
-			lastName: true,
-			currentSemester: true,
-		},
-		orderBy: { firstName: "asc" },
-	});
+		const studentList = await prisma.user.findMany({
+			where: { role: "STUDENT" as never },
+			select: {
+				id: true,
+				firstName: true,
+				lastName: true,
+				currentSemester: true,
+			},
+			orderBy: { firstName: "asc" },
+		});
 
-	const serializedAssignments = assignments.map((a) => ({
-		id: a.id,
-		semester: a.semester,
-		createdAt: a.createdAt.toISOString(),
-		faculty: {
-			id: a.faculty.id,
-			name: `${a.faculty.firstName} ${a.faculty.lastName}`,
-			email: a.faculty.email,
-		},
-		student: {
-			id: a.student.id,
-			name: `${a.student.firstName} ${a.student.lastName}`,
-			email: a.student.email,
-			batch: a.student.batch,
-			currentSemester: a.student.currentSemester,
-		},
-	}));
+		serializedAssignments = assignments.map((a) => ({
+			id: a.id,
+			semester: a.semester,
+			createdAt: a.createdAt.toISOString(),
+			faculty: {
+				id: a.faculty.id,
+				name: `${a.faculty.firstName} ${a.faculty.lastName}`,
+				email: a.faculty.email,
+			},
+			student: {
+				id: a.student.id,
+				name: `${a.student.firstName} ${a.student.lastName}`,
+				email: a.student.email,
+				batch: a.student.batch,
+				currentSemester: a.student.currentSemester,
+			},
+		}));
 
-	const facultyOptions = facultyList.map((f) => ({
-		id: f.id,
-		name: `${f.firstName} ${f.lastName}`,
-	}));
+		facultyOptions = facultyList.map((f) => ({
+			id: f.id,
+			name: `${f.firstName} ${f.lastName}`,
+		}));
 
-	const studentOptions = studentList.map((s) => ({
-		id: s.id,
-		name: `${s.firstName} ${s.lastName}`,
-		currentSemester: s.currentSemester,
-	}));
+		studentOptions = studentList.map((s) => ({
+			id: s.id,
+			name: `${s.firstName} ${s.lastName}`,
+			currentSemester: s.currentSemester,
+		}));
+	} catch (error) {
+		console.error("[ASSIGNMENTS_FETCH]", error);
+		fetchError = true;
+	}
 
 	return (
 		<div className="space-y-6">
@@ -97,11 +128,18 @@ export default async function HODAssignmentsPage() {
 					{ label: "Assignments" },
 				]}
 			/>
-			<HodAssignmentsClient
-				assignments={serializedAssignments}
-				facultyOptions={facultyOptions}
-				studentOptions={studentOptions}
-			/>
+			{fetchError ?
+				<div className="border rounded-lg p-8 text-center space-y-2">
+					<p className="text-muted-foreground">
+						Failed to load assignments. Please try again.
+					</p>
+				</div>
+			:	<HodAssignmentsClient
+					assignments={serializedAssignments}
+					facultyOptions={facultyOptions}
+					studentOptions={studentOptions}
+				/>
+			}
 		</div>
 	);
 }

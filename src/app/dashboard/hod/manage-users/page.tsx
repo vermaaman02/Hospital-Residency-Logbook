@@ -24,8 +24,16 @@ export default async function ManageUsersPage({
 		redirect("/dashboard/student");
 	}
 
-	const params = await searchParams;
-	const users = await getAllUsers(params.search);
+	let users: Awaited<ReturnType<typeof getAllUsers>> = [];
+	let fetchError = false;
+
+	try {
+		const params = await searchParams;
+		users = await getAllUsers(params.search);
+	} catch (error) {
+		console.error("[MANAGE_USERS_FETCH]", error);
+		fetchError = true;
+	}
 
 	return (
 		<div className="space-y-6">
@@ -37,7 +45,16 @@ export default async function ManageUsersPage({
 					{ label: "Manage Users" },
 				]}
 			/>
-			<UserManagementClient users={users} />
+			{fetchError ?
+				<div className="border rounded-lg p-8 text-center space-y-2">
+					<p className="text-muted-foreground">
+						Failed to load users from Clerk. Please try again.
+					</p>
+					<p className="text-xs text-muted-foreground/70">
+						If this persists, check the CLERK_SECRET_KEY in your environment.
+					</p>
+				</div>
+			:	<UserManagementClient users={users} />}
 		</div>
 	);
 }

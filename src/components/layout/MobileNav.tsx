@@ -72,7 +72,7 @@ export function MobileNav() {
 				},
 				{
 					title: "Reviews",
-					href: `${basePath}/pending-reviews`,
+					href: "/dashboard/faculty/reviews",
 					icon: <ClipboardList className="h-5 w-5" />,
 				},
 				{

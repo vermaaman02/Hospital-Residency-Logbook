@@ -513,6 +513,160 @@ export function FacultyReviewsClient({
 		pendingConsentLogs.length +
 		pendingBadNewsLogs.length;
 
+	// Define category groups for organized tab display
+	const categoryGroups = [
+		{
+			id: "administrative",
+			label: "Administrative",
+			tabs: [
+				{
+					value: "rotations",
+					label: "Rotations",
+					icon: FileText,
+					count: pendingRotations.length,
+				},
+				...(isHod ?
+					[
+						{
+							value: "attendance",
+							label: "Attendance",
+							icon: Calendar,
+							count: pendingAttendance.length,
+						},
+					]
+				:	[]),
+			],
+		},
+		{
+			id: "academic",
+			label: "Academic",
+			tabs: [
+				{
+					value: "casePresentations",
+					label: "Presentations",
+					icon: Presentation,
+					count: pendingCasePresentations.length,
+				},
+				{
+					value: "seminars",
+					label: "Seminars",
+					icon: BookOpen,
+					count: pendingSeminars.length,
+				},
+				{
+					value: "journalClubs",
+					label: "Journals",
+					icon: Newspaper,
+					count: pendingJournalClubs.length,
+				},
+			],
+		},
+		{
+			id: "clinical",
+			label: "Clinical",
+			tabs: [
+				{
+					value: "clinicalSkills",
+					label: "Skills",
+					icon: Stethoscope,
+					count:
+						pendingClinicalSkillsAdult.length +
+						pendingClinicalSkillsPediatric.length,
+				},
+				{
+					value: "caseManagement",
+					label: "Cases",
+					icon: ClipboardList,
+					count: pendingCaseManagement.length,
+				},
+				{
+					value: "procedureLogs",
+					label: "Procedures",
+					icon: Syringe,
+					count: pendingProcedureLogs.length,
+				},
+				{
+					value: "diagnosticSkills",
+					label: "Diagnostics",
+					icon: Activity,
+					count: pendingDiagnosticSkills.length,
+				},
+				{
+					value: "imagingLogs",
+					label: "Imaging",
+					icon: Scan,
+					count: pendingImagingLogs.length,
+				},
+			],
+		},
+		{
+			id: "professional",
+			label: "Professional",
+			tabs: [
+				{
+					value: "courses",
+					label: "Courses",
+					icon: GraduationCap,
+					count: pendingCourses.length,
+				},
+				{
+					value: "conferences",
+					label: "Conferences",
+					icon: BookOpenAlt,
+					count: pendingConferences.length,
+				},
+				{
+					value: "research",
+					label: "Research",
+					icon: BookOpenAlt,
+					count: pendingResearch.length,
+				},
+			],
+		},
+		{
+			id: "other",
+			label: "Other Logs",
+			tabs: [
+				{
+					value: "disasterDrills",
+					label: "Disaster",
+					icon: Shield,
+					count: pendingDisasterDrills.length,
+				},
+				{
+					value: "qi",
+					label: "QI",
+					icon: Shield,
+					count: pendingQi.length,
+				},
+				{
+					value: "transportLogs",
+					label: "Transport",
+					icon: Ambulance,
+					count: pendingTransportLogs.length,
+				},
+				{
+					value: "consentLogs",
+					label: "Consent",
+					icon: HeartHandshake,
+					count: pendingConsentLogs.length,
+				},
+				{
+					value: "badNewsLogs",
+					label: "Bad News",
+					icon: HeartHandshake,
+					count: pendingBadNewsLogs.length,
+				},
+			],
+		},
+	];
+
+	const [activeCategory, setActiveCategory] = useState("administrative");
+	const [activeTab, setActiveTab] = useState("rotations");
+
+	const currentGroup =
+		categoryGroups.find((g) => g.id === activeCategory) ?? categoryGroups[0];
+
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center gap-3">
@@ -521,86 +675,50 @@ export function FacultyReviewsClient({
 				</Badge>
 			</div>
 
-			<Tabs defaultValue="rotations">
-				<TabsList className="flex-wrap h-auto">
-					<TabsTrigger value="rotations">
-						<FileText className="h-4 w-4 mr-1" />
-						Rotations ({pendingRotations.length})
-					</TabsTrigger>
-					{isHod && (
-						<TabsTrigger value="attendance">
-							<Calendar className="h-4 w-4 mr-1" />
-							Attendance ({pendingAttendance.length})
-						</TabsTrigger>
-					)}
-					<TabsTrigger value="casePresentations">
-						<Presentation className="h-4 w-4 mr-1" />
-						Case Presentations ({pendingCasePresentations.length})
-					</TabsTrigger>
-					<TabsTrigger value="seminars">
-						<BookOpen className="h-4 w-4 mr-1" />
-						Seminars ({pendingSeminars.length})
-					</TabsTrigger>
-					<TabsTrigger value="journalClubs">
-						<Newspaper className="h-4 w-4 mr-1" />
-						Journal Clubs ({pendingJournalClubs.length})
-					</TabsTrigger>
-					<TabsTrigger value="clinicalSkills">
-						<Stethoscope className="h-4 w-4 mr-1" />
-						Clinical Skills (
-						{pendingClinicalSkillsAdult.length +
-							pendingClinicalSkillsPediatric.length}
-						)
-					</TabsTrigger>
-					<TabsTrigger value="caseManagement">
-						<ClipboardList className="h-4 w-4 mr-1" />
-						Case Mgmt ({pendingCaseManagement.length})
-					</TabsTrigger>
-					<TabsTrigger value="procedureLogs">
-						<Syringe className="h-4 w-4 mr-1" />
-						Procedures ({pendingProcedureLogs.length})
-					</TabsTrigger>
-					<TabsTrigger value="diagnosticSkills">
-						<Activity className="h-4 w-4 mr-1" />
-						Diagnostics ({pendingDiagnosticSkills.length})
-					</TabsTrigger>
-					<TabsTrigger value="imagingLogs">
-						<Scan className="h-4 w-4 mr-1" />
-						Imaging ({pendingImagingLogs.length})
-					</TabsTrigger>
-					<TabsTrigger value="courses">
-						<GraduationCap className="h-4 w-4 mr-1" />
-						Courses ({pendingCourses.length})
-					</TabsTrigger>
-					<TabsTrigger value="conferences">
-						<BookOpenAlt className="h-4 w-4 mr-1" />
-						Conferences ({pendingConferences.length})
-					</TabsTrigger>
-					<TabsTrigger value="research">
-						<BookOpenAlt className="h-4 w-4 mr-1" />
-						Research ({pendingResearch.length})
-					</TabsTrigger>
-					<TabsTrigger value="disasterDrills">
-						<Shield className="h-4 w-4 mr-1" />
-						Disaster ({pendingDisasterDrills.length})
-					</TabsTrigger>
-					<TabsTrigger value="qi">
-						<Shield className="h-4 w-4 mr-1" />
-						QI ({pendingQi.length})
-					</TabsTrigger>
-					<TabsTrigger value="transportLogs">
-						<Ambulance className="h-4 w-4 mr-1" />
-						Transport ({pendingTransportLogs.length})
-					</TabsTrigger>
-					<TabsTrigger value="consentLogs">
-						<HeartHandshake className="h-4 w-4 mr-1" />
-						Consent ({pendingConsentLogs.length})
-					</TabsTrigger>
-					<TabsTrigger value="badNewsLogs">
-						<HeartHandshake className="h-4 w-4 mr-1" />
-						Bad News ({pendingBadNewsLogs.length})
-					</TabsTrigger>
-				</TabsList>
+			<Tabs value={activeTab} onValueChange={setActiveTab}>
+				<div className="space-y-3">
+					{/* Category Group Selector */}
+					<div className="flex gap-2 flex-wrap">
+						{categoryGroups.map((group) => {
+							const groupTotal = group.tabs.reduce(
+								(sum, t) => sum + t.count,
+								0,
+							);
+							return (
+								<Button
+									key={group.id}
+									variant={activeCategory === group.id ? "default" : "outline"}
+									size="sm"
+									className="text-xs"
+									onClick={() => {
+										setActiveCategory(group.id);
+										setActiveTab(group.tabs[0].value);
+									}}
+								>
+									{group.label}
+									{groupTotal > 0 && (
+										<Badge
+											variant="secondary"
+											className="ml-1.5 h-5 min-w-5 px-1 text-[10px]"
+										>
+											{groupTotal}
+										</Badge>
+									)}
+								</Button>
+							);
+						})}
+					</div>
+
+					{/* Sub-tabs within selected category */}
+					<TabsList>
+						{currentGroup.tabs.map((tab) => (
+							<TabsTrigger key={tab.value} value={tab.value}>
+								<tab.icon className="h-4 w-4 mr-1" />
+								{tab.label} ({tab.count})
+							</TabsTrigger>
+						))}
+					</TabsList>
+				</div>
 
 				{/* Rotations Tab */}
 				<TabsContent value="rotations" className="mt-4 space-y-4">
