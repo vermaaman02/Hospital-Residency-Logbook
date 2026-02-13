@@ -21,17 +21,17 @@ export default async function DashboardLayout({
 	await ensureUserInDb();
 
 	return (
-		<div className="min-h-screen flex bg-background">
+		<div className="h-screen flex overflow-hidden bg-background">
 			{/* Sidebar — hidden on mobile, visible on lg+ */}
-			<aside className="hidden lg:block">
+			<aside className="hidden lg:block h-screen">
 				<Sidebar />
 			</aside>
 
-			{/* Main Content Area */}
-			<div className="flex-1 flex flex-col min-h-screen">
+			{/* Main Content Area — scrolls independently */}
+			<div className="flex-1 flex flex-col min-h-0">
 				<TopBar />
 
-				<main className="flex-1 p-4 md:p-6 lg:p-8 pb-20 lg:pb-8">
+				<main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-20 lg:pb-8">
 					{children}
 				</main>
 

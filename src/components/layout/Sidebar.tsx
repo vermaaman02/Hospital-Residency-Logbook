@@ -366,7 +366,7 @@ export function Sidebar({ className }: SidebarProps) {
 		<TooltipProvider delayDuration={0}>
 			<aside
 				className={cn(
-					"hidden lg:flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
+					"hidden lg:flex flex-col h-full min-h-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
 					isCollapsed ? "w-16" : "w-64",
 					className,
 				)}
@@ -394,7 +394,7 @@ export function Sidebar({ className }: SidebarProps) {
 				</div>
 
 				{/* Navigation */}
-				<ScrollArea className="flex-1 py-2">
+				<ScrollArea className="flex-1 min-h-0 py-2">
 					<nav className="space-y-4 px-2">
 						{navSections.map((section) => (
 							<div key={section.title}>
