@@ -1,9 +1,9 @@
 /**
- * @module DiagnosticSkillTable
- * @description Reusable table for diagnostic skill entries within a single category.
- * Shows skillName, representativeDiagnosis, confidenceLevel, totalTimesPerformed, status.
+ * @module OtherLogTable
+ * @description Reusable table for H6 (Transport), H7 (Consent), H8 (Bad News) entries.
+ * Patient-based entries with skill level (S/O/A/PS/PI).
  *
- * @see PG Logbook .md — "ARTERIAL/ VENOUS BLOOD GAS ANALYSIS", "ELECTROCARDIOGRAPH (ECG) ANALYSIS", "OTHER DIAGNOSTIC ANALYSIS"
+ * @see PG Logbook .md — Transport, Informed Consent, Breaking Bad News
  */
 
 "use client";
@@ -31,43 +31,43 @@ import { Edit, Send, Trash2, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ENTRY_STATUS_COLORS } from "@/lib/constants/entry-status";
-import { CONFIDENCE_LEVEL_LABELS } from "@/lib/constants/diagnostic-types";
+import { SKILL_LEVEL_LABELS_SOAPI } from "@/lib/constants/other-logs-fields";
+import { format } from "date-fns";
 
-interface DiagnosticSkillEntry {
+interface OtherLogEntry {
 	id: string;
 	slNo: number;
-	skillName: string;
-	representativeDiagnosis: string | null;
-	confidenceLevel: string | null;
-	totalTimesPerformed: number;
+	date: string | Date | null;
+	patientInfo: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
 	status: string;
 	[key: string]: unknown;
 }
 
-interface DiagnosticSkillTableProps {
-	entries: DiagnosticSkillEntry[];
+interface OtherLogTableProps {
+	entries: OtherLogEntry[];
 	categoryLabel: string;
-	categorySlug: string;
-	totalSkills: number;
+	categoryCode: string;
+	maxEntries: number;
+	newEntryHref: string;
+	editHrefPrefix: string;
 	onSubmit: (id: string) => Promise<{ success: boolean }>;
 	onDelete: (id: string) => Promise<{ success: boolean }>;
 }
 
-const CONFIDENCE_COLORS: Record<string, string> = {
-	VC: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-	FC: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-	SC: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-	NC: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-};
-
-export function DiagnosticSkillTable({
+export function OtherLogTable({
 	entries,
 	categoryLabel,
-	categorySlug,
-	totalSkills,
+	categoryCode,
+	maxEntries,
+	newEntryHref,
+	editHrefPrefix,
 	onSubmit,
 	onDelete,
-}: DiagnosticSkillTableProps) {
+}: OtherLogTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [actionId, setActionId] = useState<string | null>(null);
@@ -107,8 +107,8 @@ export function DiagnosticSkillTable({
 	}
 
 	const progressPercent =
-		totalSkills > 0 ?
-			Math.min(100, Math.round((entries.length / totalSkills) * 100))
+		maxEntries > 0 ?
+			Math.min(100, Math.round((entries.length / maxEntries) * 100))
 		:	0;
 
 	return (
@@ -116,20 +116,23 @@ export function DiagnosticSkillTable({
 			<CardHeader>
 				<div className="flex items-start justify-between">
 					<div className="space-y-1">
-						<CardTitle className="text-lg">{categoryLabel}</CardTitle>
+						<CardTitle className="flex items-center gap-2 text-lg">
+							<Badge variant="outline" className="text-xs">
+								{categoryCode}
+							</Badge>
+							{categoryLabel}
+						</CardTitle>
 						<CardDescription>
-							{entries.length} of {totalSkills} skills logged ({progressPercent}
-							%)
+							{entries.length} of {maxEntries} entries ({progressPercent}%)
 						</CardDescription>
 					</div>
-					<Link href={`/dashboard/student/diagnostics/${categorySlug}/new`}>
+					<Link href={newEntryHref}>
 						<Button size="sm">
 							<Plus className="h-4 w-4 mr-1" />
 							New Entry
 						</Button>
 					</Link>
 				</div>
-				{/* Progress bar */}
 				<div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
 					<div
 						className="bg-hospital-primary h-2 rounded-full transition-all duration-500"
@@ -140,17 +143,17 @@ export function DiagnosticSkillTable({
 			<CardContent>
 				{entries.length === 0 ?
 					<div className="text-center py-8 text-muted-foreground">
-						No diagnostic skills logged yet. Add your first entry.
+						No entries logged yet. Add your first entry.
 					</div>
 				:	<div className="overflow-x-auto">
 						<Table>
 							<TableHeader>
 								<TableRow>
 									<TableHead className="w-16">Sl. No.</TableHead>
-									<TableHead>Skill / Investigation</TableHead>
-									<TableHead>Representative Diagnosis</TableHead>
-									<TableHead className="w-32">Confidence</TableHead>
-									<TableHead className="w-20">Tally</TableHead>
+									<TableHead className="w-24">Date</TableHead>
+									<TableHead>Patient Info</TableHead>
+									<TableHead>Diagnosis</TableHead>
+									<TableHead className="w-28">Skill Level</TableHead>
 									<TableHead className="w-24">Status</TableHead>
 									<TableHead className="w-32">Actions</TableHead>
 								</TableRow>
@@ -159,27 +162,24 @@ export function DiagnosticSkillTable({
 								{entries.map((entry) => (
 									<TableRow key={entry.id}>
 										<TableCell className="font-medium">{entry.slNo}</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.skillName}
-										</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.representativeDiagnosis || "—"}
-										</TableCell>
 										<TableCell>
-											{entry.confidenceLevel ?
-												<Badge
-													variant="outline"
-													className={
-														CONFIDENCE_COLORS[entry.confidenceLevel] ?? ""
-													}
-												>
-													{CONFIDENCE_LEVEL_LABELS[entry.confidenceLevel] ??
-														entry.confidenceLevel}
-												</Badge>
+											{entry.date ?
+												format(new Date(entry.date as string), "dd MMM yyyy")
 											:	"—"}
 										</TableCell>
-										<TableCell className="text-center font-medium">
-											{entry.totalTimesPerformed}
+										<TableCell className="max-w-50 truncate">
+											{entry.patientInfo || "—"}
+										</TableCell>
+										<TableCell className="max-w-50 truncate">
+											{entry.completeDiagnosis || "—"}
+										</TableCell>
+										<TableCell>
+											{entry.skillLevel ?
+												<Badge variant="outline">
+													{SKILL_LEVEL_LABELS_SOAPI[entry.skillLevel] ??
+														entry.skillLevel}
+												</Badge>
+											:	"—"}
 										</TableCell>
 										<TableCell>
 											<Badge
@@ -195,11 +195,10 @@ export function DiagnosticSkillTable({
 										</TableCell>
 										<TableCell>
 											<div className="flex items-center gap-1">
-												{entry.status === "DRAFT" && (
+												{(entry.status === "DRAFT" ||
+													entry.status === "NEEDS_REVISION") && (
 													<>
-														<Link
-															href={`/dashboard/student/diagnostics/${categorySlug}/${entry.id}/edit`}
-														>
+														<Link href={`${editHrefPrefix}/${entry.id}/edit`}>
 															<Button
 																variant="ghost"
 																size="icon"
@@ -229,19 +228,6 @@ export function DiagnosticSkillTable({
 															<Trash2 className="h-4 w-4" />
 														</Button>
 													</>
-												)}
-												{entry.status === "NEEDS_REVISION" && (
-													<Link
-														href={`/dashboard/student/diagnostics/${categorySlug}/${entry.id}/edit`}
-													>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8"
-														>
-															<Edit className="h-4 w-4" />
-														</Button>
-													</Link>
 												)}
 											</div>
 										</TableCell>

@@ -134,6 +134,72 @@ export default async function FacultyReviewsPage() {
 		orderBy: { createdAt: "desc" },
 	});
 
+	// Phase 7: Professional Development & Other Logs
+
+	const pendingCourses = await prisma.courseAttended.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingConferences = await prisma.conferenceParticipation.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingResearch = await prisma.researchActivity.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingDisasterDrills = await prisma.disasterDrill.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingQi = await prisma.qualityImprovement.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingTransportLogs = await prisma.transportLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingConsentLogs = await prisma.consentLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const pendingBadNewsLogs = await prisma.badNewsLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -167,6 +233,16 @@ export default async function FacultyReviewsPage() {
 					JSON.stringify(pendingDiagnosticSkills),
 				)}
 				pendingImagingLogs={JSON.parse(JSON.stringify(pendingImagingLogs))}
+				pendingCourses={JSON.parse(JSON.stringify(pendingCourses))}
+				pendingConferences={JSON.parse(JSON.stringify(pendingConferences))}
+				pendingResearch={JSON.parse(JSON.stringify(pendingResearch))}
+				pendingDisasterDrills={JSON.parse(
+					JSON.stringify(pendingDisasterDrills),
+				)}
+				pendingQi={JSON.parse(JSON.stringify(pendingQi))}
+				pendingTransportLogs={JSON.parse(JSON.stringify(pendingTransportLogs))}
+				pendingConsentLogs={JSON.parse(JSON.stringify(pendingConsentLogs))}
+				pendingBadNewsLogs={JSON.parse(JSON.stringify(pendingBadNewsLogs))}
 				isHod={authResult.role === "hod"}
 			/>
 		</div>

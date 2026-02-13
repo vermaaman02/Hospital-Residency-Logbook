@@ -159,10 +159,10 @@ export function ImagingLogTable({
 												format(new Date(entry.date), "dd MMM yyyy")
 											:	"—"}
 										</TableCell>
-										<TableCell className="max-w-[200px] truncate">
+										<TableCell className="max-w-50 truncate">
 											{entry.patientInfo || "—"}
 										</TableCell>
-										<TableCell className="max-w-[200px] truncate">
+										<TableCell className="max-w-50 truncate">
 											{entry.completeDiagnosis || "—"}
 										</TableCell>
 										<TableCell>

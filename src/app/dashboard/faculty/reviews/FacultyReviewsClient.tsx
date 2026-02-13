@@ -57,6 +57,28 @@ import {
 	signImagingLogEntry,
 	rejectImagingLogEntry,
 } from "@/actions/imaging-logs";
+import {
+	signCourseAttended,
+	rejectCourseAttended,
+	signConferenceParticipation,
+	rejectConferenceParticipation,
+	signResearchActivity,
+	rejectResearchActivity,
+} from "@/actions/courses-conferences";
+import {
+	signDisasterDrill,
+	rejectDisasterDrill,
+	signQualityImprovement,
+	rejectQualityImprovement,
+} from "@/actions/disaster-qi";
+import {
+	signTransportLog,
+	rejectTransportLog,
+	signConsentLog,
+	rejectConsentLog,
+	signBadNewsLog,
+	rejectBadNewsLog,
+} from "@/actions/other-logs";
 import { CONFIDENCE_LEVELS } from "@/lib/constants/clinical-skills";
 import { CASE_CATEGORY_LABELS } from "@/lib/constants/case-categories";
 import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
@@ -68,6 +90,7 @@ import {
 } from "@/lib/constants/diagnostic-types";
 import { IMAGING_CATEGORY_LABELS } from "@/lib/constants/imaging-categories";
 import { IMAGING_SKILL_LEVEL_LABELS } from "@/lib/constants/imaging-log-fields";
+import { SKILL_LEVEL_LABELS_SOAPI } from "@/lib/constants/other-logs-fields";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -85,6 +108,11 @@ import {
 	Syringe,
 	Activity,
 	Scan,
+	GraduationCap,
+	BookOpen as BookOpenAlt,
+	Shield,
+	Ambulance,
+	HeartHandshake,
 } from "lucide-react";
 
 interface UserInfo {
@@ -146,6 +174,14 @@ interface FacultyReviewsClientProps {
 	pendingProcedureLogs: ProcedureLogReviewEntry[];
 	pendingDiagnosticSkills: DiagnosticSkillReviewEntry[];
 	pendingImagingLogs: ImagingLogReviewEntry[];
+	pendingCourses: ProfessionalReviewEntry[];
+	pendingConferences: ProfessionalReviewEntry[];
+	pendingResearch: ProfessionalReviewEntry[];
+	pendingDisasterDrills: ProfessionalReviewEntry[];
+	pendingQi: ProfessionalReviewEntry[];
+	pendingTransportLogs: OtherLogReviewEntry[];
+	pendingConsentLogs: OtherLogReviewEntry[];
+	pendingBadNewsLogs: OtherLogReviewEntry[];
 	isHod: boolean;
 }
 
@@ -220,6 +256,29 @@ interface ImagingLogReviewEntry {
 	[key: string]: unknown;
 }
 
+interface ProfessionalReviewEntry {
+	id: string;
+	slNo: number;
+	date: Date | string | null;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
+}
+
+interface OtherLogReviewEntry {
+	id: string;
+	slNo: number;
+	date: Date | string | null;
+	patientInfo: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
+}
+
 type RejectType =
 	| "rotation"
 	| "casePresentation"
@@ -230,7 +289,15 @@ type RejectType =
 	| "caseManagement"
 	| "procedureLog"
 	| "diagnosticSkill"
-	| "imagingLog";
+	| "imagingLog"
+	| "courseAttended"
+	| "conferenceParticipation"
+	| "researchActivity"
+	| "disasterDrill"
+	| "qualityImprovement"
+	| "transportLog"
+	| "consentLog"
+	| "badNewsLog";
 
 export function FacultyReviewsClient({
 	pendingRotations,
@@ -244,6 +311,14 @@ export function FacultyReviewsClient({
 	pendingProcedureLogs,
 	pendingDiagnosticSkills,
 	pendingImagingLogs,
+	pendingCourses,
+	pendingConferences,
+	pendingResearch,
+	pendingDisasterDrills,
+	pendingQi,
+	pendingTransportLogs,
+	pendingConsentLogs,
+	pendingBadNewsLogs,
 	isHod,
 }: FacultyReviewsClientProps) {
 	const router = useRouter();
@@ -288,6 +363,30 @@ export function FacultyReviewsClient({
 						break;
 					case "imagingLog":
 						await signImagingLogEntry(id);
+						break;
+					case "courseAttended":
+						await signCourseAttended(id);
+						break;
+					case "conferenceParticipation":
+						await signConferenceParticipation(id);
+						break;
+					case "researchActivity":
+						await signResearchActivity(id);
+						break;
+					case "disasterDrill":
+						await signDisasterDrill(id);
+						break;
+					case "qualityImprovement":
+						await signQualityImprovement(id);
+						break;
+					case "transportLog":
+						await signTransportLog(id);
+						break;
+					case "consentLog":
+						await signConsentLog(id);
+						break;
+					case "badNewsLog":
+						await signBadNewsLog(id);
 						break;
 				}
 				toast.success("Entry signed successfully");
@@ -340,6 +439,30 @@ export function FacultyReviewsClient({
 					case "imagingLog":
 						await rejectImagingLogEntry(rejectTarget.id, rejectRemark);
 						break;
+					case "courseAttended":
+						await rejectCourseAttended(rejectTarget.id, rejectRemark);
+						break;
+					case "conferenceParticipation":
+						await rejectConferenceParticipation(rejectTarget.id, rejectRemark);
+						break;
+					case "researchActivity":
+						await rejectResearchActivity(rejectTarget.id, rejectRemark);
+						break;
+					case "disasterDrill":
+						await rejectDisasterDrill(rejectTarget.id, rejectRemark);
+						break;
+					case "qualityImprovement":
+						await rejectQualityImprovement(rejectTarget.id, rejectRemark);
+						break;
+					case "transportLog":
+						await rejectTransportLog(rejectTarget.id, rejectRemark);
+						break;
+					case "consentLog":
+						await rejectConsentLog(rejectTarget.id, rejectRemark);
+						break;
+					case "badNewsLog":
+						await rejectBadNewsLog(rejectTarget.id, rejectRemark);
+						break;
 				}
 				toast.success("Revision requested");
 				setRejectDialogOpen(false);
@@ -380,7 +503,15 @@ export function FacultyReviewsClient({
 		pendingCaseManagement.length +
 		pendingProcedureLogs.length +
 		pendingDiagnosticSkills.length +
-		pendingImagingLogs.length;
+		pendingImagingLogs.length +
+		pendingCourses.length +
+		pendingConferences.length +
+		pendingResearch.length +
+		pendingDisasterDrills.length +
+		pendingQi.length +
+		pendingTransportLogs.length +
+		pendingConsentLogs.length +
+		pendingBadNewsLogs.length;
 
 	return (
 		<div className="space-y-6">
@@ -436,6 +567,38 @@ export function FacultyReviewsClient({
 					<TabsTrigger value="imagingLogs">
 						<Scan className="h-4 w-4 mr-1" />
 						Imaging ({pendingImagingLogs.length})
+					</TabsTrigger>
+					<TabsTrigger value="courses">
+						<GraduationCap className="h-4 w-4 mr-1" />
+						Courses ({pendingCourses.length})
+					</TabsTrigger>
+					<TabsTrigger value="conferences">
+						<BookOpenAlt className="h-4 w-4 mr-1" />
+						Conferences ({pendingConferences.length})
+					</TabsTrigger>
+					<TabsTrigger value="research">
+						<BookOpenAlt className="h-4 w-4 mr-1" />
+						Research ({pendingResearch.length})
+					</TabsTrigger>
+					<TabsTrigger value="disasterDrills">
+						<Shield className="h-4 w-4 mr-1" />
+						Disaster ({pendingDisasterDrills.length})
+					</TabsTrigger>
+					<TabsTrigger value="qi">
+						<Shield className="h-4 w-4 mr-1" />
+						QI ({pendingQi.length})
+					</TabsTrigger>
+					<TabsTrigger value="transportLogs">
+						<Ambulance className="h-4 w-4 mr-1" />
+						Transport ({pendingTransportLogs.length})
+					</TabsTrigger>
+					<TabsTrigger value="consentLogs">
+						<HeartHandshake className="h-4 w-4 mr-1" />
+						Consent ({pendingConsentLogs.length})
+					</TabsTrigger>
+					<TabsTrigger value="badNewsLogs">
+						<HeartHandshake className="h-4 w-4 mr-1" />
+						Bad News ({pendingBadNewsLogs.length})
 					</TabsTrigger>
 				</TabsList>
 
@@ -1117,6 +1280,253 @@ export function FacultyReviewsClient({
 						})
 					}
 				</TabsContent>
+
+				{/* Courses Tab (H1) */}
+				<TabsContent value="courses" className="mt-4 space-y-4">
+					{pendingCourses.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending course entries to review
+						</div>
+					:	pendingCourses.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="courseAttended"
+								title={`Course: ${(entry as Record<string, unknown>).courseName ?? "—"}`}
+								details={[
+									{
+										label: "Conducted@",
+										value: (entry as Record<string, unknown>)
+											.conductedAt as string,
+									},
+									{
+										label: "Confidence",
+										value: (entry as Record<string, unknown>)
+											.confidenceLevel as string,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "courseAttended")}
+								onReject={() => openRejectDialog(entry.id, "courseAttended")}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Conferences Tab (H2) */}
+				<TabsContent value="conferences" className="mt-4 space-y-4">
+					{pendingConferences.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending conference entries to review
+						</div>
+					:	pendingConferences.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="conferenceParticipation"
+								title={`Conference: ${(entry as Record<string, unknown>).conferenceName ?? "—"}`}
+								details={[
+									{
+										label: "Conducted@",
+										value: (entry as Record<string, unknown>)
+											.conductedAt as string,
+									},
+									{
+										label: "Role",
+										value: (entry as Record<string, unknown>)
+											.participationRole as string,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "conferenceParticipation")}
+								onReject={() =>
+									openRejectDialog(entry.id, "conferenceParticipation")
+								}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Research Tab (H3) */}
+				<TabsContent value="research" className="mt-4 space-y-4">
+					{pendingResearch.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending research entries to review
+						</div>
+					:	pendingResearch.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="researchActivity"
+								title={`Research: ${(entry as Record<string, unknown>).activity ?? "—"}`}
+								details={[
+									{
+										label: "Conducted@",
+										value: (entry as Record<string, unknown>)
+											.conductedAt as string,
+									},
+									{
+										label: "Role",
+										value: (entry as Record<string, unknown>)
+											.participationRole as string,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "researchActivity")}
+								onReject={() => openRejectDialog(entry.id, "researchActivity")}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Disaster Drills Tab (H4) */}
+				<TabsContent value="disasterDrills" className="mt-4 space-y-4">
+					{pendingDisasterDrills.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending disaster drill entries to review
+						</div>
+					:	pendingDisasterDrills.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="disasterDrill"
+								title={`Disaster Drill: ${(entry as Record<string, unknown>).description ?? "—"}`}
+								details={[
+									{
+										label: "Role",
+										value: (entry as Record<string, unknown>)
+											.roleInActivity as string,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "disasterDrill")}
+								onReject={() => openRejectDialog(entry.id, "disasterDrill")}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* QI Tab (H5) */}
+				<TabsContent value="qi" className="mt-4 space-y-4">
+					{pendingQi.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending QI entries to review
+						</div>
+					:	pendingQi.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="qualityImprovement"
+								title={`QI: ${(entry as Record<string, unknown>).description ?? "—"}`}
+								details={[
+									{
+										label: "Role",
+										value: (entry as Record<string, unknown>)
+											.roleInActivity as string,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "qualityImprovement")}
+								onReject={() =>
+									openRejectDialog(entry.id, "qualityImprovement")
+								}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Transport Tab (H6) */}
+				<TabsContent value="transportLogs" className="mt-4 space-y-4">
+					{pendingTransportLogs.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending transport log entries to review
+						</div>
+					:	pendingTransportLogs.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="transportLog"
+								title={`Transport: ${entry.patientInfo ?? "—"}`}
+								details={[
+									{ label: "Diagnosis", value: entry.completeDiagnosis },
+									{
+										label: "Skill",
+										value:
+											entry.skillLevel ?
+												(SKILL_LEVEL_LABELS_SOAPI[entry.skillLevel] ??
+												entry.skillLevel)
+											:	null,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "transportLog")}
+								onReject={() => openRejectDialog(entry.id, "transportLog")}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Consent Tab (H7) */}
+				<TabsContent value="consentLogs" className="mt-4 space-y-4">
+					{pendingConsentLogs.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending consent log entries to review
+						</div>
+					:	pendingConsentLogs.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="consentLog"
+								title={`Consent: ${entry.patientInfo ?? "—"}`}
+								details={[
+									{ label: "Diagnosis", value: entry.completeDiagnosis },
+									{
+										label: "Skill",
+										value:
+											entry.skillLevel ?
+												(SKILL_LEVEL_LABELS_SOAPI[entry.skillLevel] ??
+												entry.skillLevel)
+											:	null,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "consentLog")}
+								onReject={() => openRejectDialog(entry.id, "consentLog")}
+							/>
+						))
+					}
+				</TabsContent>
+
+				{/* Bad News Tab (H8) */}
+				<TabsContent value="badNewsLogs" className="mt-4 space-y-4">
+					{pendingBadNewsLogs.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending bad news log entries to review
+						</div>
+					:	pendingBadNewsLogs.map((entry) => (
+							<GenericReviewCard
+								key={entry.id}
+								entry={entry}
+								rejectType="badNewsLog"
+								title={`Bad News: ${entry.patientInfo ?? "—"}`}
+								details={[
+									{ label: "Diagnosis", value: entry.completeDiagnosis },
+									{
+										label: "Skill",
+										value:
+											entry.skillLevel ?
+												(SKILL_LEVEL_LABELS_SOAPI[entry.skillLevel] ??
+												entry.skillLevel)
+											:	null,
+									},
+								]}
+								isPending={isPending}
+								onSign={() => handleSign(entry.id, "badNewsLog")}
+								onReject={() => openRejectDialog(entry.id, "badNewsLog")}
+							/>
+						))
+					}
+				</TabsContent>
 			</Tabs>
 
 			{/* Reject Dialog */}
@@ -1203,6 +1613,90 @@ function AcademicReviewCard({
 				<div className="text-sm text-muted-foreground mb-4 space-y-1">
 					<p className="font-medium text-foreground">{subtitle}</p>
 					{detail && <p>{detail}</p>}
+				</div>
+				<div className="flex items-center gap-2">
+					<Button size="sm" onClick={onSign} disabled={isPending}>
+						{isPending ?
+							<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+						:	<Check className="h-3.5 w-3.5 mr-1" />}
+						Sign Off
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={onReject}
+						disabled={isPending}
+					>
+						<X className="h-3.5 w-3.5 mr-1" />
+						Request Revision
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+	);
+}
+
+/* ─── Generic Review Card (Professional & Other Logs) ─── */
+
+interface GenericReviewCardDetail {
+	label: string;
+	value: string | null | undefined;
+}
+
+interface GenericReviewCardProps {
+	entry: {
+		id: string;
+		slNo: number;
+		date: Date | string | null;
+		user: { firstName: string | null; lastName: string | null };
+	};
+	rejectType: RejectType;
+	title: string;
+	details: GenericReviewCardDetail[];
+	isPending: boolean;
+	onSign: () => void;
+	onReject: () => void;
+}
+
+function GenericReviewCard({
+	entry,
+	rejectType: _rejectType,
+	title,
+	details,
+	isPending,
+	onSign,
+	onReject,
+}: GenericReviewCardProps) {
+	return (
+		<Card>
+			<CardHeader className="pb-3">
+				<div className="flex items-start justify-between">
+					<div>
+						<CardTitle className="text-base">{title}</CardTitle>
+						<CardDescription>
+							{entry.user.firstName} {entry.user.lastName}
+							{entry.date &&
+								` — ${format(new Date(entry.date as string), "dd MMM yyyy")}`}
+						</CardDescription>
+					</div>
+					<Badge
+						variant="outline"
+						className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+					>
+						Submitted
+					</Badge>
+				</div>
+			</CardHeader>
+			<CardContent>
+				<div className="text-sm text-muted-foreground mb-4 space-y-1">
+					{details.map((d) =>
+						d.value ?
+							<p key={d.label}>
+								<span className="font-medium text-foreground">{d.label}:</span>{" "}
+								{d.value}
+							</p>
+						:	null,
+					)}
 				</div>
 				<div className="flex items-center gap-2">
 					<Button size="sm" onClick={onSign} disabled={isPending}>
