@@ -87,7 +87,7 @@ const studentNavSections: NavSection[] = [
 			},
 			{
 				title: "Thesis",
-				href: "/dashboard/student/thesis",
+				href: "/dashboard/student/rotation-postings?tab=thesis",
 				icon: <GraduationCap className="h-4 w-4" />,
 				roles: ["student"],
 			},
@@ -99,7 +99,7 @@ const studentNavSections: NavSection[] = [
 			},
 			{
 				title: "Training & Mentoring",
-				href: "/dashboard/student/training-mentoring",
+				href: "/dashboard/student/rotation-postings?tab=training",
 				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["student"],
 			},

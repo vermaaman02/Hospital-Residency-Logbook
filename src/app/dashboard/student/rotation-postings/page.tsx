@@ -1,33 +1,48 @@
 /**
  * @module RotationPostingsPage
- * @description List all rotation postings for the current student.
- * Shows a table matching the physical logbook's "LOG OF ROTATION POSTINGS DURING PG IN EM".
+ * @description Unified 3-tab page for Rotation Postings, Thesis, and Training & Mentoring.
+ * Matches the physical logbook's LOG OF ROTATION POSTINGS section.
  *
- * @see PG Logbook .md — Section: "LOG OF ROTATION POSTINGS DURING PG IN EM"
- * @see roadmap.md — Phase 2, A1: Rotation Postings
+ * @see PG Logbook .md — "LOG OF ROTATION POSTINGS DURING POST GRADUATION IN EM"
+ * @see PG Logbook .md — Thesis section
+ * @see PG Logbook .md — "RESIDENT TRAINING & MENTORING RECORD"
  */
 
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import Link from "next/link";
-import { RotationPostingsTable } from "./RotationPostingsTable";
+import {
+	getMyRotationPostings,
+	getAllFacultyForDropdown,
+} from "@/actions/rotation-postings";
+import { getMyThesis } from "@/actions/thesis";
+import { getStudentTrainingRecords } from "@/actions/training-mentoring";
+import { RotationPostingsClient } from "./RotationPostingsClient";
 
-export default async function RotationPostingsPage() {
-	let userId: string;
+export default async function RotationPostingsPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ tab?: string }>;
+}) {
+	const { tab } = await searchParams;
+	let clerkId: string;
 	try {
-		userId = await requireAuth();
+		clerkId = await requireAuth();
 	} catch {
 		redirect("/sign-in");
 	}
 
-	const postings = await prisma.rotationPosting.findMany({
-		where: { userId },
-		orderBy: { slNo: "asc" },
-	});
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) redirect("/sign-in");
+
+	// Fetch all data in parallel
+	const [postings, thesis, trainingRecords, facultyList] = await Promise.all([
+		getMyRotationPostings(),
+		getMyThesis(),
+		getStudentTrainingRecords(),
+		getAllFacultyForDropdown(),
+	]);
 
 	return (
 		<div className="space-y-6">
@@ -38,17 +53,15 @@ export default async function RotationPostingsPage() {
 					{ label: "Dashboard", href: "/dashboard/student" },
 					{ label: "Rotation Postings" },
 				]}
-				actions={
-					<Link href="/dashboard/student/rotation-postings/new">
-						<Button>
-							<Plus className="h-4 w-4 mr-2" />
-							Add Rotation
-						</Button>
-					</Link>
-				}
 			/>
 
-			<RotationPostingsTable postings={postings} />
+			<RotationPostingsClient
+				postings={JSON.parse(JSON.stringify(postings))}
+				thesis={JSON.parse(JSON.stringify(thesis))}
+				trainingRecords={JSON.parse(JSON.stringify(trainingRecords))}
+				facultyList={JSON.parse(JSON.stringify(facultyList))}
+				defaultTab={tab}
+			/>
 		</div>
 	);
 }

@@ -1,19 +1,23 @@
 /**
  * @module AdministrativeValidator
- * @description Zod schemas for rotation postings, attendance, thesis.
+ * @description Zod schemas for rotation postings, attendance, thesis, training & mentoring.
  *
- * @see PG Logbook .md — Sections: Rotation Posting, Attendance, Thesis
- * @see prisma/schema.prisma — RotationPosting, AttendanceSheet, Thesis models
+ * @see PG Logbook .md — Sections: Rotation Posting, Attendance, Thesis, Training & Mentoring
+ * @see prisma/schema.prisma — RotationPosting, AttendanceSheet, Thesis, TrainingMentoringRecord models
  */
 
 import { z } from "zod";
 
 export const rotationPostingSchema = z.object({
-	rotationName: z.string().min(1, "Rotation name is required"),
+	rotationName: z
+		.string()
+		.min(1, "Rotation name is required")
+		.max(200, "Too long"),
 	isElective: z.boolean().default(false),
 	startDate: z.coerce.date().optional(),
 	endDate: z.coerce.date().optional(),
-	totalDuration: z.string().optional(),
+	totalDuration: z.string().max(100, "Duration text too long").optional(),
+	facultyId: z.string().optional(),
 });
 
 export type RotationPostingInput = z.infer<typeof rotationPostingSchema>;
@@ -64,3 +68,26 @@ export const thesisSemesterRecordSchema = z.object({
 export type ThesisSemesterRecordInput = z.infer<
 	typeof thesisSemesterRecordSchema
 >;
+
+// ======================== TRAINING & MENTORING ========================
+
+export const trainingMentoringSchema = z.object({
+	semester: z
+		.number()
+		.int()
+		.min(1, "Semester must be 1-6")
+		.max(6, "Semester must be 1-6"),
+	knowledgeScore: z
+		.number()
+		.int()
+		.min(1, "Score must be 1-5")
+		.max(5, "Score must be 1-5")
+		.optional(),
+	clinicalSkillScore: z.number().int().min(1).max(5).optional(),
+	proceduralSkillScore: z.number().int().min(1).max(5).optional(),
+	softSkillScore: z.number().int().min(1).max(5).optional(),
+	researchScore: z.number().int().min(1).max(5).optional(),
+	remarks: z.string().max(1000, "Remarks too long").optional(),
+});
+
+export type TrainingMentoringInput = z.infer<typeof trainingMentoringSchema>;

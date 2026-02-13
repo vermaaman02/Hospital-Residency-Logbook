@@ -1,38 +1,13 @@
 /**
  * @module ThesisTrackingPage
- * @description Thesis topic, chief guide, and semester-wise committee records.
- * Matches the physical logbook's thesis tracking section exactly.
+ * @description Redirects to the unified rotation-postings page (Thesis tab).
+ * The thesis section is now part of the 3-tab rotation-postings page.
  *
- * @see PG Logbook .md — Thesis section
- * @see roadmap.md — Phase 2, A2: Thesis Tracking
+ * @see src/app/dashboard/student/rotation-postings/page.tsx
  */
 
-import { requireAuth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { getMyThesis } from "@/actions/thesis";
-import { ThesisForm } from "./ThesisForm";
 
-export default async function ThesisTrackingPage() {
-	try {
-		await requireAuth();
-	} catch {
-		redirect("/sign-in");
-	}
-
-	const thesis = await getMyThesis();
-
-	return (
-		<div className="space-y-6">
-			<PageHeader
-				title="Thesis Tracking"
-				description="Track your thesis topic, chief guide, and semester-wise committee members"
-				breadcrumbs={[
-					{ label: "Dashboard", href: "/dashboard/student" },
-					{ label: "Thesis Tracking" },
-				]}
-			/>
-			<ThesisForm thesis={thesis} />
-		</div>
-	);
+export default function ThesisTrackingPage() {
+	redirect("/dashboard/student/rotation-postings?tab=thesis");
 }

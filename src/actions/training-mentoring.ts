@@ -1,7 +1,8 @@
 /**
  * @module Training & Mentoring Actions
  * @description Server actions for Resident Training & Mentoring Records.
- * 5-point scale evaluation per semester.
+ * 5-domain evaluation (Knowledge, Clinical Skills, Procedural Skills, Soft Skills, Research).
+ * Faculty evaluates, students view, HOD oversees.
  *
  * @see PG Logbook .md — "RESIDENT TRAINING & MENTORING RECORD"
  * @see prisma/schema.prisma — TrainingMentoringRecord model
@@ -11,33 +12,44 @@
 
 import { requireAuth, requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+	trainingMentoringSchema,
+	type TrainingMentoringInput,
+} from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
-
-export const trainingRecordSchema = z.object({
-	semester: z.number().int().min(1).max(6),
-	score: z.number().int().min(1).max(5),
-	remarks: z.string().optional(),
-});
-
-export type TrainingRecordInput = z.infer<typeof trainingRecordSchema>;
 
 /**
- * Create or update a training record for a semester.
- * Faculty sets this for their assigned students.
+ * Faculty/HOD: Create or update a 5-domain training record for a student's semester.
  */
 export async function upsertTrainingRecord(
 	studentId: string,
-	data: TrainingRecordInput,
+	data: TrainingMentoringInput,
 ) {
-	await requireRole(["faculty", "hod"]);
-	const validated = trainingRecordSchema.parse(data);
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const validated = trainingMentoringSchema.parse(data);
 
+	const facultyUser = await prisma.user.findUnique({
+		where: { clerkId: userId },
+	});
+	if (!facultyUser) throw new Error("Faculty not found");
+
+	// Calculate overall average
+	const scores = [
+		validated.knowledgeScore,
+		validated.clinicalSkillScore,
+		validated.proceduralSkillScore,
+		validated.softSkillScore,
+		validated.researchScore,
+	].filter((s): s is number => s !== undefined && s !== null);
+
+	const overallScore =
+		scores.length > 0 ?
+			Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+		:	null;
+
+	// Upsert by userId + semester (unique constraint)
 	const existing = await prisma.trainingMentoringRecord.findFirst({
-		where: {
-			userId: studentId,
-			semester: validated.semester,
-		},
+		where: { userId: studentId, semester: validated.semester },
 	});
 
 	let record;
@@ -45,7 +57,13 @@ export async function upsertTrainingRecord(
 		record = await prisma.trainingMentoringRecord.update({
 			where: { id: existing.id },
 			data: {
-				score: validated.score,
+				knowledgeScore: validated.knowledgeScore,
+				clinicalSkillScore: validated.clinicalSkillScore,
+				proceduralSkillScore: validated.proceduralSkillScore,
+				softSkillScore: validated.softSkillScore,
+				researchScore: validated.researchScore,
+				overallScore,
+				evaluatedById: facultyUser.id,
 				remarks: validated.remarks,
 				status: "SUBMITTED",
 			},
@@ -55,15 +73,22 @@ export async function upsertTrainingRecord(
 			data: {
 				userId: studentId,
 				semester: validated.semester,
-				score: validated.score,
+				knowledgeScore: validated.knowledgeScore,
+				clinicalSkillScore: validated.clinicalSkillScore,
+				proceduralSkillScore: validated.proceduralSkillScore,
+				softSkillScore: validated.softSkillScore,
+				researchScore: validated.researchScore,
+				overallScore,
+				evaluatedById: facultyUser.id,
 				remarks: validated.remarks,
 				status: "SUBMITTED",
 			},
 		});
 	}
 
-	revalidatePath("/dashboard/student/training-mentoring");
-	revalidatePath("/dashboard/faculty/training-mentoring");
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
 	return { success: true, data: record };
 }
 
@@ -72,7 +97,6 @@ export async function upsertTrainingRecord(
  */
 export async function getStudentTrainingRecords(studentId?: string) {
 	if (studentId) {
-		// Faculty/HOD looking at a specific student
 		await requireRole(["faculty", "hod"]);
 		return prisma.trainingMentoringRecord.findMany({
 			where: { userId: studentId },
@@ -80,19 +104,24 @@ export async function getStudentTrainingRecords(studentId?: string) {
 		});
 	}
 
-	// Student viewing their own
+	// Student viewing own
 	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
 	return prisma.trainingMentoringRecord.findMany({
-		where: { userId },
+		where: { userId: user.id },
 		orderBy: { semester: "asc" },
 	});
 }
 
 /**
- * HOD: Sign a training record.
+ * HOD: Sign a training record (final approval).
  */
 export async function signTrainingRecord(recordId: string) {
 	const { userId } = await requireRole(["hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
 
 	const record = await prisma.trainingMentoringRecord.findUnique({
 		where: { id: recordId },
@@ -106,12 +135,13 @@ export async function signTrainingRecord(recordId: string) {
 
 	await prisma.digitalSignature.create({
 		data: {
-			signedById: userId,
+			signedById: user.id,
 			entityType: "TrainingMentoringRecord",
 			entityId: recordId,
 		},
 	});
 
-	revalidatePath("/dashboard/student/training-mentoring");
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
 	return { success: true };
 }

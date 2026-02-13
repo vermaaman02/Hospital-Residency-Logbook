@@ -1,6 +1,7 @@
 /**
  * @module Thesis Tracking Actions
  * @description Server actions for thesis topic, chief guide, and semester records.
+ * Faculty member field uses faculty dropdown (linked to batch).
  *
  * @see PG Logbook .md — Thesis section: Topic, Chief Guide, Semester 1-6 records
  * @see prisma/schema.prisma — Thesis, ThesisSemesterRecord models
@@ -23,27 +24,21 @@ import { revalidatePath } from "next/cache";
  */
 export async function getMyThesis() {
 	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
 
 	let thesis = await prisma.thesis.findUnique({
-		where: { userId },
+		where: { userId: user.id },
 		include: {
-			semesterRecords: {
-				orderBy: { semester: "asc" },
-			},
+			semesterRecords: { orderBy: { semester: "asc" } },
 		},
 	});
 
 	if (!thesis) {
 		thesis = await prisma.thesis.create({
-			data: {
-				userId,
-				topic: "",
-				chiefGuide: "",
-			},
+			data: { userId: user.id, topic: "", chiefGuide: "" },
 			include: {
-				semesterRecords: {
-					orderBy: { semester: "asc" },
-				},
+				semesterRecords: { orderBy: { semester: "asc" } },
 			},
 		});
 	}
@@ -58,10 +53,13 @@ export async function updateThesis(data: ThesisInput) {
 	const userId = await requireAuth();
 	const validated = thesisSchema.parse(data);
 
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
 	const thesis = await prisma.thesis.upsert({
-		where: { userId },
+		where: { userId: user.id },
 		create: {
-			userId,
+			userId: user.id,
 			topic: validated.topic,
 			chiefGuide: validated.chiefGuide,
 		},
@@ -70,13 +68,11 @@ export async function updateThesis(data: ThesisInput) {
 			chiefGuide: validated.chiefGuide,
 		},
 		include: {
-			semesterRecords: {
-				orderBy: { semester: "asc" },
-			},
+			semesterRecords: { orderBy: { semester: "asc" } },
 		},
 	});
 
-	revalidatePath("/dashboard/student/thesis");
+	revalidatePath("/dashboard/student/rotation-postings");
 	return { success: true, data: thesis };
 }
 
@@ -90,12 +86,8 @@ export async function upsertThesisSemesterRecord(
 	await requireAuth();
 	const validated = thesisSemesterRecordSchema.parse(data);
 
-	// Check if a record for this semester already exists
 	const existing = await prisma.thesisSemesterRecord.findFirst({
-		where: {
-			thesisId,
-			semester: validated.semester,
-		},
+		where: { thesisId, semester: validated.semester },
 	});
 
 	let record;
@@ -120,7 +112,7 @@ export async function upsertThesisSemesterRecord(
 		});
 	}
 
-	revalidatePath("/dashboard/student/thesis");
+	revalidatePath("/dashboard/student/rotation-postings");
 	return { success: true, data: record };
 }
 
@@ -133,9 +125,7 @@ export async function getStudentThesis(studentId: string) {
 	return prisma.thesis.findUnique({
 		where: { userId: studentId },
 		include: {
-			semesterRecords: {
-				orderBy: { semester: "asc" },
-			},
+			semesterRecords: { orderBy: { semester: "asc" } },
 		},
 	});
 }

@@ -158,13 +158,16 @@ model RotationPosting {
   isElective    Boolean     @default(false)
   startDate     DateTime?
   endDate       DateTime?
-  totalDuration String?
+  totalDuration String?     // e.g., "3 months", "6 weeks"
+  durationDays  Int?        // Auto-calculated from start/end date if available
+  facultyId     String?     // Faculty selected by student for signature/approval
   status        EntryStatus @default(DRAFT)
   facultyRemark String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   @@index([userId])
+  @@index([facultyId])
   @@index([status])
 }
 
@@ -715,17 +718,26 @@ model ResidentEvaluation {
 // ======================== MODULE 14: TRAINING & MENTORING ========================
 
 model TrainingMentoringRecord {
-  id        String      @id @default(cuid())
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
-  semester  Int
-  score     Int         // 1=Requires remedial, 2=Inconsistent, 3=Meets, 4=Exceeds, 5=Exceptional
-  remarks   String?
-  status    EntryStatus @default(DRAFT)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id                   String      @id @default(cuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  semester             Int         // 1-6
+  // 5 domains, each scored 1-5 (1=Requires remedial, 5=Exceptional)
+  knowledgeScore       Int?        // Knowledge domain
+  clinicalSkillScore   Int?        // Clinical Skills domain
+  proceduralSkillScore Int?        // Procedural Skills domain
+  softSkillScore       Int?        // Soft Skills domain
+  researchScore        Int?        // Research domain
+  overallScore         Float?      // Auto-calculated average
+  evaluatedById        String?     // Faculty who evaluated
+  remarks              String?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
+  @@unique([userId, semester])
   @@index([userId])
+  @@index([evaluatedById])
   @@index([status])
 }
 

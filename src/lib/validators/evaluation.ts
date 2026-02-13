@@ -24,10 +24,4 @@ export const residentEvaluationSchema = z.object({
 
 export type ResidentEvaluationInput = z.infer<typeof residentEvaluationSchema>;
 
-export const trainingMentoringSchema = z.object({
-	semester: z.number().int().min(1).max(6),
-	score: z.number().int().min(1).max(5, "Score must be between 1 and 5"),
-	remarks: z.string().optional(),
-});
-
-export type TrainingMentoringInput = z.infer<typeof trainingMentoringSchema>;
+// trainingMentoringSchema moved to administrative.ts (5-domain scoring)
