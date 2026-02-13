@@ -596,7 +596,7 @@ export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
 										</SelectTrigger>
 										<SelectContent>
 											{availableFaculty.map((f) => (
-												<SelectItem key={f.id} value={f.clerkId}>
+												<SelectItem key={f.id} value={f.id}>
 													{f.firstName} {f.lastName} ({f.email})
 												</SelectItem>
 											))}
