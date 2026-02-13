@@ -49,11 +49,25 @@ import {
 	signProcedureLogEntry,
 	rejectProcedureLogEntry,
 } from "@/actions/procedure-logs";
+import {
+	signDiagnosticSkillEntry,
+	rejectDiagnosticSkillEntry,
+} from "@/actions/diagnostic-skills";
+import {
+	signImagingLogEntry,
+	rejectImagingLogEntry,
+} from "@/actions/imaging-logs";
 import { CONFIDENCE_LEVELS } from "@/lib/constants/clinical-skills";
 import { CASE_CATEGORY_LABELS } from "@/lib/constants/case-categories";
 import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
 import { PROCEDURE_CATEGORY_LABELS } from "@/lib/constants/procedure-categories";
 import { SKILL_LEVEL_LABELS } from "@/lib/constants/procedure-log-fields";
+import {
+	DIAGNOSTIC_CATEGORY_LABELS,
+	CONFIDENCE_LEVEL_LABELS,
+} from "@/lib/constants/diagnostic-types";
+import { IMAGING_CATEGORY_LABELS } from "@/lib/constants/imaging-categories";
+import { IMAGING_SKILL_LEVEL_LABELS } from "@/lib/constants/imaging-log-fields";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -69,6 +83,8 @@ import {
 	Stethoscope,
 	ClipboardList,
 	Syringe,
+	Activity,
+	Scan,
 } from "lucide-react";
 
 interface UserInfo {
@@ -128,6 +144,8 @@ interface FacultyReviewsClientProps {
 	pendingClinicalSkillsPediatric: ClinicalSkillReviewEntry[];
 	pendingCaseManagement: CaseManagementReviewEntry[];
 	pendingProcedureLogs: ProcedureLogReviewEntry[];
+	pendingDiagnosticSkills: DiagnosticSkillReviewEntry[];
+	pendingImagingLogs: ImagingLogReviewEntry[];
 	isHod: boolean;
 }
 
@@ -174,6 +192,34 @@ interface ProcedureLogReviewEntry {
 	[key: string]: unknown;
 }
 
+interface DiagnosticSkillReviewEntry {
+	id: string;
+	slNo: number;
+	diagnosticCategory: string;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
+}
+
+interface ImagingLogReviewEntry {
+	id: string;
+	slNo: number;
+	imagingCategory: string;
+	date: Date | string | null;
+	patientInfo: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	status: string;
+	user: UserInfo;
+	[key: string]: unknown;
+}
+
 type RejectType =
 	| "rotation"
 	| "casePresentation"
@@ -182,7 +228,9 @@ type RejectType =
 	| "clinicalSkillAdult"
 	| "clinicalSkillPediatric"
 	| "caseManagement"
-	| "procedureLog";
+	| "procedureLog"
+	| "diagnosticSkill"
+	| "imagingLog";
 
 export function FacultyReviewsClient({
 	pendingRotations,
@@ -194,6 +242,8 @@ export function FacultyReviewsClient({
 	pendingClinicalSkillsPediatric,
 	pendingCaseManagement,
 	pendingProcedureLogs,
+	pendingDiagnosticSkills,
+	pendingImagingLogs,
 	isHod,
 }: FacultyReviewsClientProps) {
 	const router = useRouter();
@@ -233,6 +283,12 @@ export function FacultyReviewsClient({
 					case "procedureLog":
 						await signProcedureLogEntry(id);
 						break;
+					case "diagnosticSkill":
+						await signDiagnosticSkillEntry(id);
+						break;
+					case "imagingLog":
+						await signImagingLogEntry(id);
+						break;
 				}
 				toast.success("Entry signed successfully");
 				router.refresh();
@@ -266,13 +322,23 @@ export function FacultyReviewsClient({
 						await rejectClinicalSkill("adult", rejectTarget.id, rejectRemark);
 						break;
 					case "clinicalSkillPediatric":
-						await rejectClinicalSkill("pediatric", rejectTarget.id, rejectRemark);
+						await rejectClinicalSkill(
+							"pediatric",
+							rejectTarget.id,
+							rejectRemark,
+						);
 						break;
 					case "caseManagement":
 						await rejectCaseManagementEntry(rejectTarget.id, rejectRemark);
 						break;
 					case "procedureLog":
 						await rejectProcedureLogEntry(rejectTarget.id, rejectRemark);
+						break;
+					case "diagnosticSkill":
+						await rejectDiagnosticSkillEntry(rejectTarget.id, rejectRemark);
+						break;
+					case "imagingLog":
+						await rejectImagingLogEntry(rejectTarget.id, rejectRemark);
 						break;
 				}
 				toast.success("Revision requested");
@@ -312,7 +378,9 @@ export function FacultyReviewsClient({
 		pendingClinicalSkillsAdult.length +
 		pendingClinicalSkillsPediatric.length +
 		pendingCaseManagement.length +
-		pendingProcedureLogs.length;
+		pendingProcedureLogs.length +
+		pendingDiagnosticSkills.length +
+		pendingImagingLogs.length;
 
 	return (
 		<div className="space-y-6">
@@ -361,16 +429,23 @@ export function FacultyReviewsClient({
 						<Syringe className="h-4 w-4 mr-1" />
 						Procedures ({pendingProcedureLogs.length})
 					</TabsTrigger>
+					<TabsTrigger value="diagnosticSkills">
+						<Activity className="h-4 w-4 mr-1" />
+						Diagnostics ({pendingDiagnosticSkills.length})
+					</TabsTrigger>
+					<TabsTrigger value="imagingLogs">
+						<Scan className="h-4 w-4 mr-1" />
+						Imaging ({pendingImagingLogs.length})
+					</TabsTrigger>
 				</TabsList>
 
 				{/* Rotations Tab */}
 				<TabsContent value="rotations" className="mt-4 space-y-4">
-					{pendingRotations.length === 0 ? (
+					{pendingRotations.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending rotation postings to review
 						</div>
-					) : (
-						pendingRotations.map((rotation) => (
+					:	pendingRotations.map((rotation) => (
 							<Card key={rotation.id}>
 								<CardHeader className="pb-3">
 									<div className="flex items-start justify-between">
@@ -411,19 +486,15 @@ export function FacultyReviewsClient({
 											onClick={() => handleSign(rotation.id, "rotation")}
 											disabled={isPending}
 										>
-											{isPending ? (
+											{isPending ?
 												<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-											) : (
-												<Check className="h-3.5 w-3.5 mr-1" />
-											)}
+											:	<Check className="h-3.5 w-3.5 mr-1" />}
 											Sign Off
 										</Button>
 										<Button
 											variant="outline"
 											size="sm"
-											onClick={() =>
-												openRejectDialog(rotation.id, "rotation")
-											}
+											onClick={() => openRejectDialog(rotation.id, "rotation")}
 											disabled={isPending}
 										>
 											<X className="h-3.5 w-3.5 mr-1" />
@@ -433,18 +504,17 @@ export function FacultyReviewsClient({
 								</CardContent>
 							</Card>
 						))
-					)}
+					}
 				</TabsContent>
 
 				{/* Attendance Tab — HOD only */}
 				{isHod && (
 					<TabsContent value="attendance" className="mt-4 space-y-4">
-						{pendingAttendance.length === 0 ? (
+						{pendingAttendance.length === 0 ?
 							<div className="border rounded-lg p-8 text-center text-muted-foreground">
 								No pending attendance sheets to review
 							</div>
-						) : (
-							pendingAttendance.map((sheet) => {
+						:	pendingAttendance.map((sheet) => {
 								const presentDays = sheet.entries.filter(
 									(e) => e.presentAbsent?.toLowerCase() === "present",
 								).length;
@@ -480,11 +550,9 @@ export function FacultyReviewsClient({
 													onClick={() => handleSignAttendance(sheet.id)}
 													disabled={isPending}
 												>
-													{isPending ? (
+													{isPending ?
 														<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-													) : (
-														<Check className="h-3.5 w-3.5 mr-1" />
-													)}
+													:	<Check className="h-3.5 w-3.5 mr-1" />}
 													Sign Off
 												</Button>
 											</div>
@@ -492,18 +560,17 @@ export function FacultyReviewsClient({
 									</Card>
 								);
 							})
-						)}
+						}
 					</TabsContent>
 				)}
 
 				{/* Case Presentations Tab */}
 				<TabsContent value="casePresentations" className="mt-4 space-y-4">
-					{pendingCasePresentations.length === 0 ? (
+					{pendingCasePresentations.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending case presentations to review
 						</div>
-					) : (
-						pendingCasePresentations.map((entry) => (
+					:	pendingCasePresentations.map((entry) => (
 							<AcademicReviewCard
 								key={entry.id}
 								entry={entry}
@@ -513,22 +580,19 @@ export function FacultyReviewsClient({
 								detail={entry.patientInfo ?? ""}
 								isPending={isPending}
 								onSign={() => handleSign(entry.id, "casePresentation")}
-								onReject={() =>
-									openRejectDialog(entry.id, "casePresentation")
-								}
+								onReject={() => openRejectDialog(entry.id, "casePresentation")}
 							/>
 						))
-					)}
+					}
 				</TabsContent>
 
 				{/* Seminars Tab */}
 				<TabsContent value="seminars" className="mt-4 space-y-4">
-					{pendingSeminars.length === 0 ? (
+					{pendingSeminars.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending seminars to review
 						</div>
-					) : (
-						pendingSeminars.map((entry) => (
+					:	pendingSeminars.map((entry) => (
 							<AcademicReviewCard
 								key={entry.id}
 								entry={entry}
@@ -541,17 +605,16 @@ export function FacultyReviewsClient({
 								onReject={() => openRejectDialog(entry.id, "seminar")}
 							/>
 						))
-					)}
+					}
 				</TabsContent>
 
 				{/* Journal Clubs Tab */}
 				<TabsContent value="journalClubs" className="mt-4 space-y-4">
-					{pendingJournalClubs.length === 0 ? (
+					{pendingJournalClubs.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending journal clubs to review
 						</div>
-					) : (
-						pendingJournalClubs.map((entry) => (
+					:	pendingJournalClubs.map((entry) => (
 							<AcademicReviewCard
 								key={entry.id}
 								entry={entry}
@@ -561,23 +624,22 @@ export function FacultyReviewsClient({
 								detail={entry.typeOfStudy ?? ""}
 								isPending={isPending}
 								onSign={() => handleSign(entry.id, "journalClub")}
-								onReject={() =>
-									openRejectDialog(entry.id, "journalClub")
-								}
+								onReject={() => openRejectDialog(entry.id, "journalClub")}
 							/>
 						))
-					)}
+					}
 				</TabsContent>
 
 				{/* Clinical Skills Tab */}
 				<TabsContent value="clinicalSkills" className="mt-4 space-y-4">
-					{pendingClinicalSkillsAdult.length === 0 &&
-					pendingClinicalSkillsPediatric.length === 0 ? (
+					{(
+						pendingClinicalSkillsAdult.length === 0 &&
+						pendingClinicalSkillsPediatric.length === 0
+					) ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending clinical skills to review
 						</div>
-					) : (
-						<>
+					:	<>
 							{pendingClinicalSkillsAdult.length > 0 && (
 								<div className="space-y-3">
 									<h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
@@ -624,21 +686,16 @@ export function FacultyReviewsClient({
 															}
 															disabled={isPending}
 														>
-															{isPending ? (
+															{isPending ?
 																<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-															) : (
-																<Check className="h-3.5 w-3.5 mr-1" />
-															)}
+															:	<Check className="h-3.5 w-3.5 mr-1" />}
 															Sign Off
 														</Button>
 														<Button
 															variant="outline"
 															size="sm"
 															onClick={() =>
-																openRejectDialog(
-																	skill.id,
-																	"clinicalSkillAdult",
-																)
+																openRejectDialog(skill.id, "clinicalSkillAdult")
 															}
 															disabled={isPending}
 														>
@@ -655,8 +712,7 @@ export function FacultyReviewsClient({
 							{pendingClinicalSkillsPediatric.length > 0 && (
 								<div className="space-y-3">
 									<h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-										Pediatric Skills (
-										{pendingClinicalSkillsPediatric.length})
+										Pediatric Skills ({pendingClinicalSkillsPediatric.length})
 									</h3>
 									{pendingClinicalSkillsPediatric.map((skill) => {
 										const confLabel =
@@ -695,18 +751,13 @@ export function FacultyReviewsClient({
 														<Button
 															size="sm"
 															onClick={() =>
-																handleSign(
-																	skill.id,
-																	"clinicalSkillPediatric",
-																)
+																handleSign(skill.id, "clinicalSkillPediatric")
 															}
 															disabled={isPending}
 														>
-															{isPending ? (
+															{isPending ?
 																<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-															) : (
-																<Check className="h-3.5 w-3.5 mr-1" />
-															)}
+															:	<Check className="h-3.5 w-3.5 mr-1" />}
 															Sign Off
 														</Button>
 														<Button
@@ -731,17 +782,16 @@ export function FacultyReviewsClient({
 								</div>
 							)}
 						</>
-					)}
+					}
 				</TabsContent>
 
 				{/* Case Management Tab */}
 				<TabsContent value="caseManagement" className="mt-4 space-y-4">
-					{pendingCaseManagement.length === 0 ? (
+					{pendingCaseManagement.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending case management entries to review
 						</div>
-					) : (
-						pendingCaseManagement.map((entry) => {
+					:	pendingCaseManagement.map((entry) => {
 							const catLabel =
 								CASE_CATEGORY_LABELS[entry.category] ?? entry.category;
 							const compLabel =
@@ -792,16 +842,12 @@ export function FacultyReviewsClient({
 										<div className="flex items-center gap-2">
 											<Button
 												size="sm"
-												onClick={() =>
-													handleSign(entry.id, "caseManagement")
-												}
+												onClick={() => handleSign(entry.id, "caseManagement")}
 												disabled={isPending}
 											>
-												{isPending ? (
+												{isPending ?
 													<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-												) : (
-													<Check className="h-3.5 w-3.5 mr-1" />
-												)}
+												:	<Check className="h-3.5 w-3.5 mr-1" />}
 												Sign Off
 											</Button>
 											<Button
@@ -820,23 +866,23 @@ export function FacultyReviewsClient({
 								</Card>
 							);
 						})
-					)}
+					}
 				</TabsContent>
 
 				{/* Procedure Logs Tab */}
 				<TabsContent value="procedureLogs" className="mt-4 space-y-4">
-					{pendingProcedureLogs.length === 0 ? (
+					{pendingProcedureLogs.length === 0 ?
 						<div className="border rounded-lg p-8 text-center text-muted-foreground">
 							No pending procedure log entries to review
 						</div>
-					) : (
-						pendingProcedureLogs.map((entry) => {
+					:	pendingProcedureLogs.map((entry) => {
 							const catLabel =
 								PROCEDURE_CATEGORY_LABELS[entry.procedureCategory] ??
 								entry.procedureCategory;
-							const skillLabel = entry.skillLevel
-								? `${entry.skillLevel} — ${SKILL_LEVEL_LABELS[entry.skillLevel] ?? entry.skillLevel}`
-								: "—";
+							const skillLabel =
+								entry.skillLevel ?
+									`${entry.skillLevel} — ${SKILL_LEVEL_LABELS[entry.skillLevel] ?? entry.skillLevel}`
+								:	"—";
 							return (
 								<Card key={entry.id}>
 									<CardHeader className="pb-3">
@@ -881,16 +927,12 @@ export function FacultyReviewsClient({
 										<div className="flex items-center gap-2">
 											<Button
 												size="sm"
-												onClick={() =>
-													handleSign(entry.id, "procedureLog")
-												}
+												onClick={() => handleSign(entry.id, "procedureLog")}
 												disabled={isPending}
 											>
-												{isPending ? (
+												{isPending ?
 													<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-												) : (
-													<Check className="h-3.5 w-3.5 mr-1" />
-												)}
+												:	<Check className="h-3.5 w-3.5 mr-1" />}
 												Sign Off
 											</Button>
 											<Button
@@ -909,7 +951,171 @@ export function FacultyReviewsClient({
 								</Card>
 							);
 						})
-					)}
+					}
+				</TabsContent>
+
+				{/* Diagnostics Tab */}
+				<TabsContent value="diagnosticSkills" className="mt-4 space-y-4">
+					{pendingDiagnosticSkills.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending diagnostic skill entries to review
+						</div>
+					:	pendingDiagnosticSkills.map((entry) => {
+							const catLabel =
+								DIAGNOSTIC_CATEGORY_LABELS[entry.diagnosticCategory] ??
+								entry.diagnosticCategory;
+							const confLabel =
+								entry.confidenceLevel ?
+									`${entry.confidenceLevel} — ${CONFIDENCE_LEVEL_LABELS[entry.confidenceLevel] ?? entry.confidenceLevel}`
+								:	"—";
+							return (
+								<Card key={entry.id}>
+									<CardHeader className="pb-3">
+										<div className="flex items-start justify-between">
+											<div>
+												<CardTitle className="text-base">
+													{catLabel} — {entry.skillName}
+												</CardTitle>
+												<CardDescription>
+													{entry.user.firstName} {entry.user.lastName} — Sl.{" "}
+													{entry.slNo}
+												</CardDescription>
+											</div>
+											<Badge
+												variant="outline"
+												className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+											>
+												Submitted
+											</Badge>
+										</div>
+									</CardHeader>
+									<CardContent>
+										<div className="text-sm text-muted-foreground mb-4 space-y-1">
+											{entry.representativeDiagnosis && (
+												<p>
+													Representative Diagnosis:{" "}
+													{entry.representativeDiagnosis}
+												</p>
+											)}
+											<p>
+												Confidence:{" "}
+												<Badge variant="outline" className="text-xs">
+													{confLabel}
+												</Badge>
+											</p>
+											<p>Times Performed: {entry.totalTimesPerformed}</p>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button
+												size="sm"
+												onClick={() => handleSign(entry.id, "diagnosticSkill")}
+												disabled={isPending}
+											>
+												{isPending ?
+													<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+												:	<Check className="h-3.5 w-3.5 mr-1" />}
+												Sign Off
+											</Button>
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() =>
+													openRejectDialog(entry.id, "diagnosticSkill")
+												}
+												disabled={isPending}
+											>
+												<X className="h-3.5 w-3.5 mr-1" />
+												Request Revision
+											</Button>
+										</div>
+									</CardContent>
+								</Card>
+							);
+						})
+					}
+				</TabsContent>
+
+				{/* Imaging Tab */}
+				<TabsContent value="imagingLogs" className="mt-4 space-y-4">
+					{pendingImagingLogs.length === 0 ?
+						<div className="border rounded-lg p-8 text-center text-muted-foreground">
+							No pending imaging log entries to review
+						</div>
+					:	pendingImagingLogs.map((entry) => {
+							const catLabel =
+								IMAGING_CATEGORY_LABELS[entry.imagingCategory] ??
+								entry.imagingCategory;
+							const skillLabel =
+								entry.skillLevel ?
+									`${entry.skillLevel} — ${IMAGING_SKILL_LEVEL_LABELS[entry.skillLevel] ?? entry.skillLevel}`
+								:	"—";
+							return (
+								<Card key={entry.id}>
+									<CardHeader className="pb-3">
+										<div className="flex items-start justify-between">
+											<div>
+												<CardTitle className="text-base">
+													{catLabel} — Sl. {entry.slNo}
+												</CardTitle>
+												<CardDescription>
+													{entry.user.firstName} {entry.user.lastName}
+													{entry.date &&
+														` — ${format(new Date(entry.date as string), "dd MMM yyyy")}`}
+												</CardDescription>
+											</div>
+											<Badge
+												variant="outline"
+												className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+											>
+												Submitted
+											</Badge>
+										</div>
+									</CardHeader>
+									<CardContent>
+										<div className="text-sm text-muted-foreground mb-4 space-y-1">
+											{entry.patientInfo && <p>Patient: {entry.patientInfo}</p>}
+											{entry.completeDiagnosis && (
+												<p>Diagnosis: {entry.completeDiagnosis}</p>
+											)}
+											{entry.procedureDescription && (
+												<p>Procedure: {entry.procedureDescription}</p>
+											)}
+											{entry.performedAtLocation && (
+												<p>Location: {entry.performedAtLocation}</p>
+											)}
+											<p>
+												Skill Level:{" "}
+												<Badge variant="outline" className="text-xs">
+													{skillLabel}
+												</Badge>
+											</p>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button
+												size="sm"
+												onClick={() => handleSign(entry.id, "imagingLog")}
+												disabled={isPending}
+											>
+												{isPending ?
+													<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+												:	<Check className="h-3.5 w-3.5 mr-1" />}
+												Sign Off
+											</Button>
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() => openRejectDialog(entry.id, "imagingLog")}
+												disabled={isPending}
+											>
+												<X className="h-3.5 w-3.5 mr-1" />
+												Request Revision
+											</Button>
+										</div>
+									</CardContent>
+								</Card>
+							);
+						})
+					}
 				</TabsContent>
 			</Tabs>
 
@@ -1000,11 +1206,9 @@ function AcademicReviewCard({
 				</div>
 				<div className="flex items-center gap-2">
 					<Button size="sm" onClick={onSign} disabled={isPending}>
-						{isPending ? (
+						{isPending ?
 							<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-						) : (
-							<Check className="h-3.5 w-3.5 mr-1" />
-						)}
+						:	<Check className="h-3.5 w-3.5 mr-1" />}
 						Sign Off
 					</Button>
 					<Button

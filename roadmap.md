@@ -1286,13 +1286,18 @@ npx prisma migrate deploy
   - [x] Student pages: landing (49 category cards), [category] list, new, edit
   - [x] Faculty reviews updated with Procedure Logs tab (8 total tabs)
 
-### Phase 6: Diagnostic & Imaging (Week 15-16)
+### Phase 6: Diagnostic & Imaging (Week 15-16) ✅ COMPLETED
 
-- [ ] **F1: ABG Analysis** (10 disorders)
-- [ ] **F2: ECG Analysis** (10 types)
-- [ ] **F3: Other Diagnostic Analysis** (10 investigations)
-- [ ] **G1-G5: ALL Imaging Logs** (5 categories, 210 entry slots)
-- [ ] Confidence level tracking with visual indicators
+- [x] **F1: ABG Analysis** (10 disorders) — DiagnosticSkillEntryForm + predefined skills
+- [x] **F2: ECG Analysis** (10 types) — Shared diagnostic constants & form
+- [x] **F3: Other Diagnostic Analysis** (10 investigations) — Shared diagnostic constants & form
+- [x] **G1-G5: ALL Imaging Logs** (5 categories, 210 entry slots) — ImagingLogEntryForm + ImagingLogTable
+- [x] Confidence level tracking with visual indicators (VC green, FC blue, SC amber, NC red)
+- [x] Slug-based routing with helpers (diagnosticEnumToSlug, imagingEnumToSlug, etc.)
+- [x] Server actions: 9 diagnostic + 9 imaging (CRUD, submit, sign, reject)
+- [x] Student pages: diagnostics landing (3 cards), imaging landing (5 cards), category list, new, edit
+- [x] Faculty reviews updated with Diagnostics + Imaging tabs (10 total tabs)
+- [x] Build clean — 42 routes, 0 errors
 
 ### Phase 7: Professional Development (Week 17-18)
 

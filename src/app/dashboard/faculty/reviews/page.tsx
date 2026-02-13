@@ -29,9 +29,9 @@ export default async function FacultyReviewsPage() {
 
 	// For HOD, get ALL submitted entries; for faculty, only assigned students
 	const studentFilter =
-		authResult.role === "hod"
-			? { status: "SUBMITTED" as const }
-			: { userId: { in: studentIds }, status: "SUBMITTED" as const };
+		authResult.role === "hod" ?
+			{ status: "SUBMITTED" as const }
+		:	{ userId: { in: studentIds }, status: "SUBMITTED" as const };
 
 	// Get pending rotation postings
 	const pendingRotations = await prisma.rotationPosting.findMany({
@@ -44,16 +44,16 @@ export default async function FacultyReviewsPage() {
 
 	// Get pending attendance sheets (HOD only)
 	const pendingAttendance =
-		authResult.role === "hod"
-			? await prisma.attendanceSheet.findMany({
-					where: { status: "SUBMITTED" },
-					include: {
-						user: { select: { firstName: true, lastName: true, email: true } },
-						entries: true,
-					},
-					orderBy: { createdAt: "desc" },
-				})
-			: [];
+		authResult.role === "hod" ?
+			await prisma.attendanceSheet.findMany({
+				where: { status: "SUBMITTED" },
+				include: {
+					user: { select: { firstName: true, lastName: true, email: true } },
+					entries: true,
+				},
+				orderBy: { createdAt: "desc" },
+			})
+		:	[];
 
 	// Get pending academic entries (Case Presentations, Seminars, Journal Clubs)
 	const pendingCasePresentations = await prisma.casePresentation.findMany({
@@ -116,6 +116,24 @@ export default async function FacultyReviewsPage() {
 		orderBy: { createdAt: "desc" },
 	});
 
+	// Get pending diagnostic skill entries
+	const pendingDiagnosticSkills = await prisma.diagnosticSkill.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	// Get pending imaging log entries
+	const pendingImagingLogs = await prisma.imagingLog.findMany({
+		where: studentFilter,
+		include: {
+			user: { select: { firstName: true, lastName: true, email: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -144,9 +162,11 @@ export default async function FacultyReviewsPage() {
 				pendingCaseManagement={JSON.parse(
 					JSON.stringify(pendingCaseManagement),
 				)}
-				pendingProcedureLogs={JSON.parse(
-					JSON.stringify(pendingProcedureLogs),
+				pendingProcedureLogs={JSON.parse(JSON.stringify(pendingProcedureLogs))}
+				pendingDiagnosticSkills={JSON.parse(
+					JSON.stringify(pendingDiagnosticSkills),
 				)}
+				pendingImagingLogs={JSON.parse(JSON.stringify(pendingImagingLogs))}
 				isHod={authResult.role === "hod"}
 			/>
 		</div>
