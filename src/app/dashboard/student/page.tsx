@@ -8,6 +8,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { ensureUserInDb } from "@/lib/auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import {
@@ -27,6 +28,7 @@ import {
 	DIAGNOSTIC_SKILLS,
 	IMAGING_CATEGORIES,
 } from "@/lib/constants";
+import { prisma } from "@/lib/prisma";
 
 const quickLinks = [
 	{
@@ -99,12 +101,31 @@ export default async function StudentDashboardPage() {
 	const { userId } = await auth();
 	if (!userId) redirect("/sign-in");
 
-	// TODO: Fetch actual counts from database when API routes are ready
+	const user = await ensureUserInDb();
+	if (!user) redirect("/sign-in");
+
+	const [totalCases, totalProcedures, totalDiagnostics, pendingSignoffs] =
+		await Promise.all([
+			prisma.caseManagementLog.count({ where: { userId: user.id } }),
+			prisma.procedureLog.count({ where: { userId: user.id } }),
+			prisma.diagnosticSkill.count({ where: { userId: user.id } }),
+			prisma.caseManagementLog
+				.count({
+					where: { userId: user.id, status: "SUBMITTED" as never },
+				})
+				.then(async (cases) => {
+					const procs = await prisma.procedureLog.count({
+						where: { userId: user.id, status: "SUBMITTED" as never },
+					});
+					return cases + procs;
+				}),
+		]);
+
 	const stats = {
-		totalCases: 0,
-		totalProcedures: 0,
-		totalDiagnostics: 0,
-		pendingSignoffs: 0,
+		totalCases,
+		totalProcedures,
+		totalDiagnostics,
+		pendingSignoffs,
 	};
 
 	return (
@@ -143,7 +164,11 @@ export default async function StudentDashboardPage() {
 					value={stats.pendingSignoffs}
 					icon={FileText}
 					description="Awaiting faculty review"
-					trend={stats.pendingSignoffs > 0 ? { value: stats.pendingSignoffs, isPositive: false } : undefined}
+					trend={
+						stats.pendingSignoffs > 0 ?
+							{ value: stats.pendingSignoffs, isPositive: false }
+						:	undefined
+					}
 				/>
 			</div>
 

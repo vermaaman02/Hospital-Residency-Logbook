@@ -97,7 +97,7 @@ export function AttendanceSheetForm({ initialData }: AttendanceSheetFormProps) {
 	);
 
 	// Build initial entries
-	const initialEntries = DAYS.map((day, i) => {
+	const initialEntries = DAYS.map((day, _i) => {
 		const existing = initialData?.entries.find((e) => e.day === day);
 		return {
 			day: day as (typeof DAYS)[number],

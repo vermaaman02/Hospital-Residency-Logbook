@@ -50,7 +50,7 @@ export function MobileNav() {
 				},
 				{
 					title: "Add",
-					href: `${basePath}/quick-add`,
+					href: `${basePath}/case-management`,
 					icon: <Plus className="h-6 w-6" />,
 				},
 				{

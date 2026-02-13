@@ -49,7 +49,22 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { EvaluationGraph } from "@/components/charts/EvaluationGraph";
+import dynamic from "next/dynamic";
+
+const EvaluationGraph = dynamic(
+	() =>
+		import("@/components/charts/EvaluationGraph").then(
+			(mod) => mod.EvaluationGraph,
+		),
+	{
+		ssr: false,
+		loading: () => (
+			<div className="h-80 flex items-center justify-center text-muted-foreground">
+				Loading chart…
+			</div>
+		),
+	},
+);
 import { REVIEW_SCHEDULE, SCORE_LABELS, SCORE_COLORS } from "@/lib/constants";
 import {
 	createPeriodicReview,

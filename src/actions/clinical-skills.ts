@@ -26,9 +26,9 @@ const REVALIDATE_PATH = "/dashboard/student/clinical-skills";
 // ─── Helpers ────────────────────────────────────────────────
 
 function getModel(type: "adult" | "pediatric") {
-	return type === "adult"
-		? prisma.clinicalSkillAdult
-		: prisma.clinicalSkillPediatric;
+	return type === "adult" ?
+			prisma.clinicalSkillAdult
+		:	prisma.clinicalSkillPediatric;
 }
 
 function getSkillList(type: "adult" | "pediatric") {
@@ -100,9 +100,11 @@ export async function updateClinicalSkill(
 	const model = getModel(type);
 	const validated = clinicalSkillSchema.parse(data);
 
-	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique({
-		where: { id },
-	});
+	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique(
+		{
+			where: { id },
+		},
+	);
 	if (!existing || existing.userId !== userId) {
 		throw new Error("Entry not found or unauthorized");
 	}
@@ -136,9 +138,11 @@ export async function submitClinicalSkill(
 	const userId = await requireAuth();
 	const model = getModel(type);
 
-	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique({
-		where: { id },
-	});
+	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique(
+		{
+			where: { id },
+		},
+	);
 	if (!existing || existing.userId !== userId) {
 		throw new Error("Entry not found or unauthorized");
 	}
@@ -202,7 +206,7 @@ export async function signClinicalSkill(
 export async function rejectClinicalSkill(
 	type: "adult" | "pediatric",
 	id: string,
-	remark: string,
+	_remark: string,
 ) {
 	await requireRole(["faculty", "hod"]);
 	const model = getModel(type);

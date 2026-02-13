@@ -47,6 +47,7 @@ import {
 	UserCircle,
 	HeartHandshake,
 	BarChart3,
+	HelpCircle,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -331,6 +332,17 @@ const hodNavSections: NavSection[] = [
 				href: "/dashboard/faculty/training-mentoring",
 				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["hod"],
+			},
+		],
+	},
+	{
+		title: "Support",
+		items: [
+			{
+				title: "Help & Guide",
+				href: "/dashboard/help",
+				icon: <HelpCircle className="h-4 w-4" />,
+				roles: ["student", "faculty", "hod"],
 			},
 		],
 	},

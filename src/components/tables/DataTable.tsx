@@ -94,6 +94,7 @@ export function DataTable<T>({
 	const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 	const [globalFilter, setGlobalFilter] = useState("");
 
+	// eslint-disable-next-line react-hooks/incompatible-library
 	const table = useReactTable({
 		data,
 		columns,
@@ -197,7 +198,7 @@ export function DataTable<T>({
 			)}
 
 			{/* Table */}
-			<div className="rounded-md border">
+			<div className="rounded-md border overflow-x-auto">
 				<Table>
 					<TableHeader>
 						{table.getHeaderGroups().map((headerGroup) => (

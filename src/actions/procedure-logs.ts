@@ -239,7 +239,7 @@ export async function signProcedureLogEntry(id: string, remark?: string) {
 /**
  * Faculty: Reject a procedure log entry with remark.
  */
-export async function rejectProcedureLogEntry(id: string, remark: string) {
+export async function rejectProcedureLogEntry(id: string, _remark: string) {
 	await requireRole(["faculty", "hod"]);
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
