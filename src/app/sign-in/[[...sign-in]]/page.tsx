@@ -4,6 +4,8 @@
  */
 
 import { SignIn } from "@clerk/nextjs";
+import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 
 export default function SignInPage() {
 	return (
@@ -25,6 +27,15 @@ export default function SignInPage() {
 						},
 					}}
 				/>
+				<div className="text-center">
+					<Link
+						href="/banned"
+						className="inline-flex items-center gap-1.5 text-xs text-hospital-text-secondary hover:text-red-600 transition-colors"
+					>
+						<ShieldAlert className="h-3.5 w-3.5" />
+						Banned? Check your account status &amp; reason
+					</Link>
+				</div>
 			</div>
 		</div>
 	);

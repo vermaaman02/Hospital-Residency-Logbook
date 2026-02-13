@@ -1,7 +1,7 @@
 /**
  * @module ManageUsersPage
- * @description HOD admin panel for managing user roles and faculty-student assignments.
- * Uses Clerk's Backend SDK to list and update users.
+ * @description HOD admin panel for user management, batch management,
+ * and semester promotion. Tab-based layout.
  *
  * @see copilot-instructions.md — Section 8
  * @see PG Logbook .md — Faculty-student assignment is required for sign-off workflow
@@ -10,14 +10,11 @@
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { UserManagementClient } from "./UserManagementClient";
+import { ManageUsersClient } from "./ManageUsersClient";
 import { getAllUsers } from "@/actions/user-management";
+import { getAllBatches } from "@/actions/batch-management";
 
-export default async function ManageUsersPage({
-	searchParams,
-}: {
-	searchParams: Promise<{ search?: string }>;
-}) {
+export default async function ManageUsersPage() {
 	try {
 		await requireRole(["hod"]);
 	} catch {
@@ -25,11 +22,11 @@ export default async function ManageUsersPage({
 	}
 
 	let users: Awaited<ReturnType<typeof getAllUsers>> = [];
+	let batches: Awaited<ReturnType<typeof getAllBatches>> = [];
 	let fetchError = false;
 
 	try {
-		const params = await searchParams;
-		users = await getAllUsers(params.search);
+		[users, batches] = await Promise.all([getAllUsers(), getAllBatches()]);
 	} catch (error) {
 		console.error("[MANAGE_USERS_FETCH]", error);
 		fetchError = true;
@@ -38,23 +35,23 @@ export default async function ManageUsersPage({
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Manage Users"
-				description="Assign roles (HOD, Faculty, Student) and manage faculty-student assignments"
+				title="User Management"
+				description="Manage users, batches, roles, access control, and semester promotions"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/hod" },
-					{ label: "Manage Users" },
+					{ label: "User Management" },
 				]}
 			/>
 			{fetchError ?
 				<div className="border rounded-lg p-8 text-center space-y-2">
 					<p className="text-muted-foreground">
-						Failed to load users from Clerk. Please try again.
+						Failed to load data. Please try again.
 					</p>
 					<p className="text-xs text-muted-foreground/70">
-						If this persists, check the CLERK_SECRET_KEY in your environment.
+						If this persists, check your CLERK_SECRET_KEY and DATABASE_URL.
 					</p>
 				</div>
-			:	<UserManagementClient users={users} />}
+			:	<ManageUsersClient users={users} batches={batches} />}
 		</div>
 	);
 }

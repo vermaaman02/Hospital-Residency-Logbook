@@ -17,18 +17,23 @@ datasource db {
 // ======================== USER & AUTH ========================
 
 model User {
-  id              String   @id @default(cuid())
-  clerkId         String   @unique
-  email           String   @unique
+  id              String     @id @default(cuid())
+  clerkId         String     @unique
+  email           String     @unique
   firstName       String
   lastName        String
-  role            Role     @default(STUDENT)
-  batch           String?  // e.g., "July 2022"
-  currentSemester Int?     @default(1)
-  department      String?  @default("Emergency Medicine")
+  role            Role       @default(STUDENT)
+  status          UserStatus @default(ACTIVE)
+  bannedUntil     DateTime?  // null = permanent ban (if BANNED), or temp ban end date
+  banReason       String?
+  batch           String?    // e.g., "July 2022"
+  batchId         String?
+  batchRelation   Batch?     @relation(fields: [batchId], references: [id])
+  currentSemester Int?       @default(1)
+  department      String?    @default("Emergency Medicine")
   profileImage    String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   // Relations
   rotationPostings          RotationPosting[]
@@ -58,15 +63,58 @@ model User {
   assignedStudents FacultyStudentAssignment[] @relation("FacultyAssignments")
   assignedFaculty  FacultyStudentAssignment[] @relation("StudentAssignments")
   signedEntries    DigitalSignature[]
+  facultyBatchAssignments FacultyBatchAssignment[] @relation("FacultyBatchAssignments")
 
   @@index([clerkId])
   @@index([role])
+  @@index([status])
+  @@index([batchId])
 }
 
 enum Role {
   HOD
   FACULTY
   STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  TEMPORARILY_BANNED
+}
+
+// ======================== BATCH MANAGEMENT ========================
+
+model Batch {
+  id              String   @id @default(cuid())
+  name            String   @unique // e.g., "July 2022", "January 2023"
+  currentSemester Int      @default(1) // 1-6
+  startDate       DateTime
+  endDate         DateTime?
+  isActive        Boolean  @default(true)
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  students           User[]
+  facultyAssignments FacultyBatchAssignment[]
+
+  @@index([isActive])
+}
+
+model FacultyBatchAssignment {
+  id        String   @id @default(cuid())
+  facultyId String
+  batchId   String
+  createdAt DateTime @default(now())
+
+  faculty User  @relation("FacultyBatchAssignments", fields: [facultyId], references: [id])
+  batch   Batch @relation(fields: [batchId], references: [id])
+
+  @@unique([facultyId, batchId])
+  @@index([facultyId])
+  @@index([batchId])
 }
 
 model FacultyStudentAssignment {
