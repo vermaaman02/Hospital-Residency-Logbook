@@ -378,22 +378,22 @@ export function Sidebar({ className }: SidebarProps) {
 						<Image
 							src="/AIIMS%20patna%20icon.jpeg"
 							alt="AIIMS Patna"
-							width={32}
-							height={32}
-							className="h-8 w-8 rounded-md object-contain"
+							width={36}
+							height={36}
+							className="h-9 w-9 rounded-lg object-contain"
 						/>
 					:	<Image
 							src="/AIIMS%20patana%20logo.png"
 							alt="AIIMS Patna - PG Logbook"
-							width={180}
-							height={40}
-							className="h-9 w-auto object-contain"
+							width={190}
+							height={44}
+							className="h-10 w-auto object-contain"
 							priority
 						/>
 					}
 					<button
 						onClick={() => setIsCollapsed(!isCollapsed)}
-						className="rounded-md p-1.5 hover:bg-sidebar-accent transition-colors"
+						className="rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
 					>
 						{isCollapsed ?
 							<ChevronRight className="h-4 w-4" />
@@ -407,7 +407,7 @@ export function Sidebar({ className }: SidebarProps) {
 						{navSections.map((section) => (
 							<div key={section.title}>
 								{!isCollapsed && (
-									<h4 className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+									<h4 className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
 										{section.title}
 									</h4>
 								)}
@@ -425,10 +425,10 @@ export function Sidebar({ className }: SidebarProps) {
 												key={item.href}
 												href={item.href}
 												className={cn(
-													"flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+													"flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
 													isActive ?
-														"bg-sidebar-primary text-sidebar-primary-foreground"
-													:	"text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+														"bg-blue-600 text-white shadow-sm"
+													:	"text-gray-600 hover:bg-gray-100 hover:text-gray-900",
 													isCollapsed && "justify-center px-0",
 												)}
 											>
@@ -458,8 +458,8 @@ export function Sidebar({ className }: SidebarProps) {
 
 				{/* Footer */}
 				{!isCollapsed && (
-					<div className="border-t border-sidebar-border p-4">
-						<p className="text-[9px] text-sidebar-foreground/40 text-center leading-tight">
+					<div className="border-t border-gray-100 px-4 py-3">
+						<p className="text-[9px] text-gray-400 text-center leading-tight">
 							{INSTITUTION_NAME}
 						</p>
 					</div>
