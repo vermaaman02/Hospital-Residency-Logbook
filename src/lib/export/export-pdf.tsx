@@ -21,6 +21,40 @@ import {
 } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 
+// ======================== UTILITIES ========================
+
+/**
+ * Strip markdown syntax into clean plain text for PDF rendering.
+ * Converts bold, italic, headings, lists, etc. to readable text.
+ */
+function stripMarkdown(text: string | null | undefined): string {
+	if (!text) return "—";
+	return (
+		text
+			// Remove headings markers
+			.replace(/^#{1,6}\s+/gm, "")
+			// Bold
+			.replace(/\*\*(.+?)\*\*/g, "$1")
+			// Italic
+			.replace(/\*(.+?)\*/g, "$1")
+			// Unordered list
+			.replace(/^[\s]*[-*+]\s+/gm, "• ")
+			// Ordered list (keep numbers)
+			.replace(/^(\d+)\.\s+/gm, "$1. ")
+			// Horizontal rules
+			.replace(/^---+$/gm, "")
+			// Blockquotes
+			.replace(/^>\s?/gm, "")
+			// Inline code
+			.replace(/`([^`]+)`/g, "$1")
+			// Links [text](url) → text
+			.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+			// Clean up multiple blank lines
+			.replace(/\n{3,}/g, "\n\n")
+			.trim()
+	);
+}
+
 // ======================== STYLES ========================
 
 const styles = StyleSheet.create({
@@ -66,6 +100,9 @@ const styles = StyleSheet.create({
 		borderBottomColor: "#ddd",
 		minHeight: 20,
 		alignItems: "center",
+	},
+	tableRowAlt: {
+		backgroundColor: "#f9fafb",
 	},
 	tableHeader: {
 		flexDirection: "row",
@@ -680,4 +717,241 @@ export async function exportReviewDataToPdf(
 function formatFileDate(): string {
 	const d = new Date();
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ======================== CASE PRESENTATION TYPES ========================
+
+interface CasePresentationPdfEntry {
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: string | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	category: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+interface CasePresentationReviewPdfEntry extends CasePresentationPdfEntry {
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+// ======================== CASE PRESENTATION PDF DOCUMENTS ========================
+
+function CasePresentationStudentPdf({
+	entries,
+	studentName,
+}: {
+	entries: CasePresentationPdfEntry[];
+	studentName: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						ACADEMIC CASE PRESENTATION AND DISCUSSION
+					</Text>
+					<Text style={styles.subtitle}>
+						AIIMS Patna — MD Emergency Medicine
+					</Text>
+					<Text style={styles.subtitle}>Student: {studentName}</Text>
+				</View>
+
+				<View style={styles.table}>
+					{/* Header */}
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "13%" }]}>
+							Patient Name
+						</Text>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Age</Text>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Sex</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>UHID</Text>
+						<Text style={[styles.tableCell, { width: "22%" }]}>
+							Complete Diagnosis
+						</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Category</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>
+							Faculty Remark
+						</Text>
+						<Text style={[styles.tableCell, { width: "7%" }]}>Status</Text>
+					</View>
+
+					{entries.length === 0 ?
+						<Text style={styles.emptyText}>No entries yet</Text>
+					:	entries.map((e, i) => (
+							<View
+								key={i}
+								style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+							>
+								<Text style={[styles.tableCell, { width: "5%" }]}>
+									{e.slNo}
+								</Text>
+								<Text style={[styles.tableCell, { width: "9%" }]}>
+									{e.date ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "13%" }]}>
+									{e.patientName ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "5%" }]}>
+									{e.patientAge ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "5%" }]}>
+									{e.patientSex ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "10%" }]}>
+									{e.uhid ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "22%" }]}>
+									{stripMarkdown(e.completeDiagnosis)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "12%" }]}>
+									{e.category ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "12%" }]}>
+									{stripMarkdown(e.facultyRemark)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "7%" }]}>
+									{e.status}
+								</Text>
+							</View>
+						))
+					}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+function CasePresentationReviewPdf({
+	entries,
+	reviewerRole,
+}: {
+	entries: CasePresentationReviewPdfEntry[];
+	reviewerRole: "faculty" | "hod";
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						ACADEMIC CASE PRESENTATION AND DISCUSSION — Review
+					</Text>
+					<Text style={styles.subtitle}>
+						AIIMS Patna — MD Emergency Medicine
+					</Text>
+					<Text style={styles.subtitle}>
+						{reviewerRole === "hod" ? "HOD" : "Faculty"} Review Report
+					</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "4%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Student</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Patient</Text>
+						<Text style={[styles.tableCell, { width: "4%" }]}>Age</Text>
+						<Text style={[styles.tableCell, { width: "4%" }]}>Sex</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>UHID</Text>
+						<Text style={[styles.tableCell, { width: "20%" }]}>Diagnosis</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Category</Text>
+						<Text style={[styles.tableCell, { width: "13%" }]}>Remark</Text>
+						<Text style={[styles.tableCell, { width: "7%" }]}>Status</Text>
+					</View>
+
+					{entries.length === 0 ?
+						<Text style={styles.emptyText}>No submissions yet</Text>
+					:	entries.map((e, i) => (
+							<View
+								key={i}
+								style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+							>
+								<Text style={[styles.tableCell, { width: "4%" }]}>
+									{e.slNo}
+								</Text>
+								<Text style={[styles.tableCell, { width: "12%" }]}>
+									{e.studentName}
+								</Text>
+								<Text style={[styles.tableCell, { width: "8%" }]}>
+									{e.date ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "10%" }]}>
+									{e.patientName ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "4%" }]}>
+									{e.patientAge ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "4%" }]}>
+									{e.patientSex ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "8%" }]}>
+									{e.uhid ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "20%" }]}>
+									{stripMarkdown(e.completeDiagnosis)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "10%" }]}>
+									{e.category ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "13%" }]}>
+									{stripMarkdown(e.facultyRemark)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "7%" }]}>
+									{e.status}
+								</Text>
+							</View>
+						))
+					}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+// ======================== CASE PRESENTATION PUBLIC EXPORT FUNCTIONS ========================
+
+export async function exportCasePresentationsToPdf(
+	entries: CasePresentationPdfEntry[],
+	studentName: string,
+) {
+	const blob = await pdf(
+		<CasePresentationStudentPdf entries={entries} studentName={studentName} />,
+	).toBlob();
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Case_Presentations_${safeName}_${formatFileDate()}.pdf`);
+}
+
+export async function exportCasePresentationReviewToPdf(
+	entries: CasePresentationReviewPdfEntry[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const blob = await pdf(
+		<CasePresentationReviewPdf entries={entries} reviewerRole={reviewerRole} />,
+	).toBlob();
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		blob,
+		`Case_Presentations_Review_${roleLabel}_${formatFileDate()}.pdf`,
+	);
 }

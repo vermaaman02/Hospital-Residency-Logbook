@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 export interface PendingCounts {
 	rotationPostings: number;
 	thesisRecords: number;
+	casePresentations: number;
 	total: number;
 }
 
@@ -26,7 +27,12 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user)
-		return { rotationPostings: 0, thesisRecords: 0, total: 0 };
+		return {
+			rotationPostings: 0,
+			thesisRecords: 0,
+			casePresentations: 0,
+			total: 0,
+		};
 
 	let studentIds: string[] = [];
 
@@ -37,7 +43,12 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		});
 		const batchIds = batchAssignments.map((b) => b.batchId);
 		if (batchIds.length === 0)
-			return { rotationPostings: 0, thesisRecords: 0, total: 0 };
+			return {
+				rotationPostings: 0,
+				thesisRecords: 0,
+				casePresentations: 0,
+				total: 0,
+			};
 
 		const students = await prisma.user.findMany({
 			where: { batchId: { in: batchIds }, role: "STUDENT" as never },
@@ -49,20 +60,24 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const studentFilter =
 		studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
-	const [rotationPostings, thesisRecords] = await Promise.all([
-		prisma.rotationPosting.count({
-			where: { ...studentFilter, status: "SUBMITTED" as never },
-		}),
-		prisma.thesis.count({
-			where: {
-				...studentFilter,
-				// Count theses that have content (topic set) — useful for review
-				topic: { not: null },
-			},
-		}),
-	]);
+	const [rotationPostings, thesisRecords, casePresentations] =
+		await Promise.all([
+			prisma.rotationPosting.count({
+				where: { ...studentFilter, status: "SUBMITTED" as never },
+			}),
+			prisma.thesis.count({
+				where: {
+					...studentFilter,
+					// Count theses that have content (topic set) — useful for review
+					topic: { not: null },
+				},
+			}),
+			prisma.casePresentation.count({
+				where: { ...studentFilter, status: "SUBMITTED" as never },
+			}),
+		]);
 
-	const total = rotationPostings + thesisRecords;
+	const total = rotationPostings + thesisRecords + casePresentations;
 
-	return { rotationPostings, thesisRecords, total };
+	return { rotationPostings, thesisRecords, casePresentations, total };
 }

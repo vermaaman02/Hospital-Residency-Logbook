@@ -1,18 +1,29 @@
 /**
- * @module Case Presentations List Page
- * @description Student view: list all case presentation entries with progress tracking.
+ * @module CasePresentationsPage
+ * @description Student view: inline-editing table for Academic Case Presentation
+ * and Discussion entries. Fetches entries + faculty list on server, renders
+ * client-side CasePresentationTable for inline editing.
  *
  * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION" (20 entries)
  */
 
 import { requireAuth } from "@/lib/auth";
-import { getMyCasePresentations } from "@/actions/case-presentations";
+import {
+	getMyCasePresentations,
+	getAvailableFaculty,
+} from "@/actions/case-presentations";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { CasePresentationList } from "./CasePresentationList";
+import { CasePresentationTable } from "./CasePresentationTable";
 
 export default async function CasePresentationsPage() {
 	await requireAuth();
-	const entries = await getMyCasePresentations();
+	const [entries, facultyList] = await Promise.all([
+		getMyCasePresentations(),
+		getAvailableFaculty(),
+	]);
+
+	// Serialize dates for client
+	const serialized = JSON.parse(JSON.stringify(entries));
 
 	return (
 		<div className="space-y-6">
@@ -24,7 +35,7 @@ export default async function CasePresentationsPage() {
 					{ label: "Case Presentations" },
 				]}
 			/>
-			<CasePresentationList entries={entries} />
+			<CasePresentationTable entries={serialized} facultyList={facultyList} />
 		</div>
 	);
 }

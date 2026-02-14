@@ -15,12 +15,14 @@ import { revalidatePath } from "next/cache";
 export type AutoReviewCategory =
 	| "rotationPostings"
 	| "thesis"
-	| "trainingMentoring";
+	| "trainingMentoring"
+	| "casePresentations";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
 	thesis: boolean;
 	trainingMentoring: boolean;
+	casePresentations: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		rotationPostings: map["rotationPostings"] ?? false,
 		thesis: map["thesis"] ?? false,
 		trainingMentoring: map["trainingMentoring"] ?? false,
+		casePresentations: map["casePresentations"] ?? false,
 	};
 }
 
@@ -65,6 +68,8 @@ export async function toggleAutoReview(
 	});
 
 	revalidatePath("/dashboard/hod/rotation-postings");
+	revalidatePath("/dashboard/hod/case-presentations");
+	revalidatePath("/dashboard/faculty/case-presentations");
 	return { success: true, category, enabled };
 }
 

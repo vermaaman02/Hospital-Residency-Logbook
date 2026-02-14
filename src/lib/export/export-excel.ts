@@ -10,6 +10,25 @@
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
+// ======================== UTILITIES ========================
+
+/** Strip markdown syntax for clean Excel cell values. */
+function stripMd(text: string | null | undefined): string {
+	if (!text) return "";
+	return text
+		.replace(/^#{1,6}\s+/gm, "")
+		.replace(/\*\*(.+?)\*\*/g, "$1")
+		.replace(/\*(.+?)\*/g, "$1")
+		.replace(/^[\s]*[-*+]\s+/gm, "• ")
+		.replace(/^(\d+)\.\s+/gm, "$1. ")
+		.replace(/^---+$/gm, "")
+		.replace(/^>\s?/gm, "")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
 // ======================== TYPES ========================
 
 interface RotationRow {
@@ -233,4 +252,99 @@ function setColumnWidths(ws: XLSX.WorkSheet, widths: number[]) {
 function formatDateForFile(): string {
 	const d = new Date();
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ======================== CASE PRESENTATION TYPES ========================
+
+export interface CasePresentationExportRow {
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: string | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	category: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+export interface CasePresentationReviewRow extends CasePresentationExportRow {
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+// ======================== CASE PRESENTATION — STUDENT EXPORT ========================
+
+export function exportCasePresentationsToExcel(
+	entries: CasePresentationExportRow[],
+	studentName: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		"Complete Diagnosis": stripMd(e.completeDiagnosis),
+		Category: e.category ?? "",
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }],
+	);
+	setColumnWidths(ws, [8, 14, 22, 8, 10, 16, 36, 22, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Case Presentations");
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Case_Presentations_${safeName}_${formatDateForFile()}.xlsx`);
+}
+
+// ======================== CASE PRESENTATION — FACULTY/HOD EXPORT ========================
+
+export function exportCasePresentationReviewToExcel(
+	entries: CasePresentationReviewRow[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		"Complete Diagnosis": stripMd(e.completeDiagnosis),
+		Category: e.category ?? "",
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 14, 22, 8, 10, 16, 36, 22, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Case Presentations Review");
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Case_Presentations_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
 }

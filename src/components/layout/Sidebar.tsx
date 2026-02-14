@@ -258,9 +258,10 @@ const facultyNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Case Presentations",
-				href: "/dashboard/faculty/reviews?category=academic&tab=casePresentations",
+				href: "/dashboard/faculty/case-presentations",
 				icon: <BookOpen className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "casePresentations",
 			},
 			{
 				title: "Seminars",
@@ -440,9 +441,10 @@ const hodNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Case Presentations",
-				href: "/dashboard/faculty/reviews?category=academic&tab=casePresentations",
+				href: "/dashboard/hod/case-presentations",
 				icon: <BookOpen className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "casePresentations",
 			},
 			{
 				title: "Seminars",
