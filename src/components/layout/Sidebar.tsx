@@ -259,9 +259,10 @@ const facultyNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Clinical Skills",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=clinicalSkills",
+				href: "/dashboard/faculty/clinical-skills",
 				icon: <Stethoscope className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "clinicalSkills",
 			},
 			{
 				title: "Case Management",
@@ -437,9 +438,10 @@ const hodNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Clinical Skills",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=clinicalSkills",
+				href: "/dashboard/hod/clinical-skills",
 				icon: <Stethoscope className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "clinicalSkills",
 			},
 			{
 				title: "Case Management",

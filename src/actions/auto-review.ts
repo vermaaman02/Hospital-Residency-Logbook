@@ -18,7 +18,8 @@ export type AutoReviewCategory =
 	| "trainingMentoring"
 	| "casePresentations"
 	| "seminarDiscussions"
-	| "journalClubs";
+	| "journalClubs"
+	| "clinicalSkills";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -27,6 +28,7 @@ export interface AutoReviewSettings {
 	casePresentations: boolean;
 	seminarDiscussions: boolean;
 	journalClubs: boolean;
+	clinicalSkills: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		casePresentations: map["casePresentations"] ?? false,
 		seminarDiscussions: map["seminarDiscussions"] ?? false,
 		journalClubs: map["journalClubs"] ?? false,
+		clinicalSkills: map["clinicalSkills"] ?? false,
 	};
 }
 
@@ -77,6 +80,8 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/case-presentations");
 	revalidatePath("/dashboard/faculty/case-presentations");
 	revalidatePath("/dashboard/faculty/reviews");
+	revalidatePath("/dashboard/faculty/clinical-skills");
+	revalidatePath("/dashboard/hod/clinical-skills");
 	return { success: true, category, enabled };
 }
 

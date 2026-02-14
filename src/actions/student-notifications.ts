@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 
 export interface StudentNotification {
 	id: string;
-	type: "rotation" | "case-presentation" | "seminar" | "thesis";
+	type: "rotation" | "case-presentation" | "seminar" | "thesis" | "clinical-skill";
 	title: string;
 	message: string;
 	status: "SIGNED" | "NEEDS_REVISION";
@@ -45,7 +45,7 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 	const notifications: StudentNotification[] = [];
 
 	// Fetch signed/rejected entries from all modules in parallel
-	const [rotations, casePresentations, seminars, thesis] = await Promise.all([
+	const [rotations, casePresentations, seminars, thesis, clinicalSkillsAdult, clinicalSkillsPediatric] = await Promise.all([
 		prisma.rotationPosting.findMany({
 			where: {
 				userId: user.id,
@@ -95,6 +95,36 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			where: { userId: user.id },
 			select: {
 				id: true,
+				status: true,
+				facultyRemark: true,
+				updatedAt: true,
+			},
+		}),
+		prisma.clinicalSkillAdult.findMany({
+			where: {
+				userId: user.id,
+				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				skillName: true,
+				status: true,
+				facultyRemark: true,
+				updatedAt: true,
+			},
+		}),
+		prisma.clinicalSkillPediatric.findMany({
+			where: {
+				userId: user.id,
+				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				skillName: true,
 				status: true,
 				facultyRemark: true,
 				updatedAt: true,
@@ -184,6 +214,23 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			remark: thesis.facultyRemark,
 			updatedAt: thesis.updatedAt.toISOString(),
 			href: "/dashboard/student/rotation-postings?tab=thesis",
+		});
+	}
+
+	// Map clinical skills (adult + pediatric)
+	for (const cs of [...clinicalSkillsAdult, ...clinicalSkillsPediatric]) {
+		notifications.push({
+			id: cs.id,
+			type: "clinical-skill",
+			title: cs.skillName,
+			message:
+				cs.status === "SIGNED"
+					? "Clinical skill approved"
+					: "Revision needed for clinical skill",
+			status: cs.status as "SIGNED" | "NEEDS_REVISION",
+			remark: cs.facultyRemark,
+			updatedAt: cs.updatedAt.toISOString(),
+			href: "/dashboard/student/clinical-skills",
 		});
 	}
 

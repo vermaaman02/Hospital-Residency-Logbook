@@ -431,3 +431,92 @@ export function exportJournalClubReviewToExcel(
 		`Journal_Clubs_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
 	);
 }
+
+// ======================== CLINICAL SKILLS — STUDENT EXPORT ========================
+
+interface ClinicalSkillExportRow {
+	slNo: number;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+}
+
+export function exportClinicalSkillsToExcel(
+	entries: ClinicalSkillExportRow[],
+	studentName: string,
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Clinical Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Clinical Skill": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 30, 40, 20, 18, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Skills`);
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Clinical_Skills_${label}_${safeName}_${formatDateForFile()}.xlsx`);
+}
+
+// ======================== CLINICAL SKILLS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface ClinicalSkillReviewRow {
+	slNo: number;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportClinicalSkillReviewToExcel(
+	entries: ClinicalSkillReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		"Clinical Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 30, 40, 20, 18, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Skills Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Clinical_Skills_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}

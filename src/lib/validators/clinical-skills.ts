@@ -1,8 +1,8 @@
 /**
  * @module ClinicalSkillsValidator
- * @description Zod schema for clinical skills (adult & pediatric) entries.
+ * @description Zod schemas for clinical skill entries (Adult and Pediatric).
  *
- * @see PG Logbook .md — Section: "LOG OF UP CLINICAL SKILLS TRAINING"
+ * @see PG Logbook .md — Section: "LOG OF CLINICAL SKILL TRAINING"
  * @see prisma/schema.prisma — ClinicalSkillAdult, ClinicalSkillPediatric models
  */
 
