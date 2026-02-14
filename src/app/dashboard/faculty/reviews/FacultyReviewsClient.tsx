@@ -35,7 +35,10 @@ import {
 	signCasePresentation,
 	rejectCasePresentation,
 } from "@/actions/case-presentations";
-import { signSeminar, rejectSeminar } from "@/actions/seminars";
+import {
+	signSeminarDiscussion,
+	rejectSeminarDiscussion,
+} from "@/actions/seminar-discussions";
 import { signJournalClub, rejectJournalClub } from "@/actions/journal-clubs";
 import {
 	signClinicalSkill,
@@ -152,7 +155,10 @@ interface AcademicEntry {
 	id: string;
 	slNo: number;
 	date: Date | string | null;
-	patientInfo?: string | null;
+	patientName?: string | null;
+	patientAge?: string | null;
+	patientSex?: string | null;
+	uhid?: string | null;
 	completeDiagnosis?: string | null;
 	category?: string | null;
 	journalArticle?: string | null;
@@ -345,7 +351,7 @@ export function FacultyReviewsClient({
 						await signCasePresentation(id);
 						break;
 					case "seminar":
-						await signSeminar(id);
+						await signSeminarDiscussion(id);
 						break;
 					case "journalClub":
 						await signJournalClub(id);
@@ -416,7 +422,7 @@ export function FacultyReviewsClient({
 						await rejectCasePresentation(rejectTarget.id, rejectRemark);
 						break;
 					case "seminar":
-						await rejectSeminar(rejectTarget.id, rejectRemark);
+						await rejectSeminarDiscussion(rejectTarget.id, rejectRemark);
 						break;
 					case "journalClub":
 						await rejectJournalClub(rejectTarget.id, rejectRemark);
@@ -864,7 +870,11 @@ export function FacultyReviewsClient({
 								type="casePresentation"
 								title={`Case Presentation #${entry.slNo}`}
 								subtitle={entry.completeDiagnosis ?? "No diagnosis"}
-								detail={entry.patientInfo ?? ""}
+								detail={
+									[entry.patientName, entry.patientAge, entry.patientSex]
+										.filter(Boolean)
+										.join(", ") || ""
+								}
 								isPending={isPending}
 								onSign={() => handleSign(entry.id, "casePresentation")}
 								onReject={() => openRejectDialog(entry.id, "casePresentation")}
@@ -886,7 +896,11 @@ export function FacultyReviewsClient({
 								type="seminar"
 								title={`Seminar #${entry.slNo}`}
 								subtitle={entry.completeDiagnosis ?? "No diagnosis"}
-								detail={entry.patientInfo ?? ""}
+								detail={
+									[entry.patientName, entry.patientAge, entry.patientSex]
+										.filter(Boolean)
+										.join(", ") || ""
+								}
 								isPending={isPending}
 								onSign={() => handleSign(entry.id, "seminar")}
 								onReject={() => openRejectDialog(entry.id, "seminar")}

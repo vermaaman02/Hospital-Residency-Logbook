@@ -281,16 +281,21 @@ model Seminar {
   user              User            @relation(fields: [userId], references: [id])
   slNo              Int
   date              DateTime?
-  patientInfo       String?
-  completeDiagnosis String?
+  patientName       String?         // Patient name
+  patientAge        String?         // Age (string to allow "2 months", "45 years" etc.)
+  patientSex        String?         // Male / Female / Other
+  uhid              String?         // UHID — can be alphanumeric
+  completeDiagnosis String?         // Markdown-supported diagnosis
   category          PatientCategory?
-  facultyRemark     String?
+  facultyRemark     String?         // Markdown-supported remark by faculty
+  facultyId         String?         // Faculty selected by student for approval
   status            EntryStatus     @default(DRAFT)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model JournalClub {

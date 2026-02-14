@@ -1,21 +1,19 @@
 /**
- * @module Faculty Case Presentations Review Page
- * @description Faculty/HOD review page for student case presentation submissions.
- * Fetches role-scoped data and renders CasePresentationReviewClient.
+ * @module Faculty Case Presentations & Seminars Review Page
+ * @description Faculty/HOD review page for student case presentation and
+ * seminar/evidence-based discussion submissions. Tabbed layout.
  *
  * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION"
- * @see actions/case-presentations.ts — getCasePresentationsForReview
+ * @see PG Logbook .md — "SEMINAR/EVIDENCE BASED DISCUSSION PRESENTED"
  */
 
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { getCasePresentationsForReview } from "@/actions/case-presentations";
+import { getSeminarDiscussionsForReview } from "@/actions/seminar-discussions";
 import { getAutoReviewSettings } from "@/actions/auto-review";
-import {
-	CasePresentationReviewClient,
-	type CasePresentationSubmission,
-} from "./CasePresentationReviewClient";
+import { ReviewAcademicTabs } from "./ReviewAcademicTabs";
 
 export default async function FacultyCasePresentationsPage() {
 	let authResult: { userId: string; role: string };
@@ -25,22 +23,22 @@ export default async function FacultyCasePresentationsPage() {
 		redirect("/dashboard/student");
 	}
 
-	const [rawSubmissions, autoReviewSettings] = await Promise.all([
+	const [rawCPs, rawSDs, autoReviewSettings] = await Promise.all([
 		getCasePresentationsForReview(),
+		getSeminarDiscussionsForReview(),
 		getAutoReviewSettings(),
 	]);
-	const submissions: CasePresentationSubmission[] = JSON.parse(
-		JSON.stringify(rawSubmissions),
-	);
+	const casePresentations = JSON.parse(JSON.stringify(rawCPs));
+	const seminarDiscussions = JSON.parse(JSON.stringify(rawSDs));
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Case Presentations — Review"
+				title="Case Presentations & Seminars — Review"
 				description={
 					authResult.role === "hod" ?
-						"Review all student case presentation submissions"
-					:	"Review case presentations from your assigned students"
+						"Review all student case presentation and seminar submissions"
+					:	"Review case presentations and seminars from your assigned students"
 				}
 				breadcrumbs={[
 					{
@@ -50,13 +48,15 @@ export default async function FacultyCasePresentationsPage() {
 								"/dashboard/hod"
 							:	"/dashboard/faculty",
 					},
-					{ label: "Case Presentations" },
+					{ label: "Case Presentations & Seminars" },
 				]}
 			/>
-			<CasePresentationReviewClient
-				submissions={submissions}
+			<ReviewAcademicTabs
+				casePresentations={casePresentations}
+				seminarDiscussions={seminarDiscussions}
 				role={authResult.role as "faculty" | "hod"}
-				autoReviewEnabled={autoReviewSettings.casePresentations}
+				autoReviewCasePresentations={autoReviewSettings.casePresentations}
+				autoReviewSeminarDiscussions={autoReviewSettings.seminarDiscussions}
 			/>
 		</div>
 	);

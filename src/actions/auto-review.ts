@@ -16,13 +16,15 @@ export type AutoReviewCategory =
 	| "rotationPostings"
 	| "thesis"
 	| "trainingMentoring"
-	| "casePresentations";
+	| "casePresentations"
+	| "seminarDiscussions";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
 	thesis: boolean;
 	trainingMentoring: boolean;
 	casePresentations: boolean;
+	seminarDiscussions: boolean;
 }
 
 /**
@@ -42,6 +44,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		thesis: map["thesis"] ?? false,
 		trainingMentoring: map["trainingMentoring"] ?? false,
 		casePresentations: map["casePresentations"] ?? false,
+		seminarDiscussions: map["seminarDiscussions"] ?? false,
 	};
 }
 

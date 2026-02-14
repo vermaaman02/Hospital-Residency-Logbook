@@ -1,10 +1,11 @@
 /**
  * @module CasePresentationsPage
- * @description Student view: inline-editing table for Academic Case Presentation
- * and Discussion entries. Fetches entries + faculty list on server, renders
- * client-side CasePresentationTable for inline editing.
+ * @description Student view: tabbed page for Academic Case Presentations
+ * and Seminar/Evidence Based Discussion entries. Both share the same
+ * column structure. Each tab has its own inline-editing table.
  *
  * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION" (20 entries)
+ * @see PG Logbook .md — "SEMINAR/EVIDENCE BASED DISCUSSION PRESENTED" (10 entries)
  */
 
 import { requireAuth } from "@/lib/auth";
@@ -12,30 +13,38 @@ import {
 	getMyCasePresentations,
 	getAvailableFaculty,
 } from "@/actions/case-presentations";
+import { getMySeminarDiscussions } from "@/actions/seminar-discussions";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { CasePresentationTable } from "./CasePresentationTable";
+import { StudentAcademicTabs } from "./StudentAcademicTabs";
 
 export default async function CasePresentationsPage() {
 	await requireAuth();
-	const [entries, facultyList] = await Promise.all([
-		getMyCasePresentations(),
-		getAvailableFaculty(),
-	]);
+	const [casePresentations, seminarDiscussions, facultyList] =
+		await Promise.all([
+			getMyCasePresentations(),
+			getMySeminarDiscussions(),
+			getAvailableFaculty(),
+		]);
 
 	// Serialize dates for client
-	const serialized = JSON.parse(JSON.stringify(entries));
+	const serializedCP = JSON.parse(JSON.stringify(casePresentations));
+	const serializedSD = JSON.parse(JSON.stringify(seminarDiscussions));
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Academic Case Presentations"
-				description="Case Presentation and Discussion — Target: 20 entries"
+				title="Academic Case Presentations & Seminars"
+				description="Case Presentation, Discussion & Seminar/Evidence Based Discussion"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/student" },
-					{ label: "Case Presentations" },
+					{ label: "Case Presentations & Seminars" },
 				]}
 			/>
-			<CasePresentationTable entries={serialized} facultyList={facultyList} />
+			<StudentAcademicTabs
+				casePresentations={serializedCP}
+				seminarDiscussions={serializedSD}
+				facultyList={facultyList}
+			/>
 		</div>
 	);
 }

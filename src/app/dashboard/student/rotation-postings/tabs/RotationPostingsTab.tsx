@@ -10,7 +10,13 @@
 
 "use client";
 
-import { useState, useTransition, useMemo, useCallback } from "react";
+import {
+	useState,
+	useTransition,
+	useMemo,
+	useCallback,
+	useEffect,
+} from "react";
 import {
 	Card,
 	CardContent,
@@ -117,6 +123,17 @@ export function RotationPostingsTab({
 		totalDuration: "",
 		facultyId: "",
 	});
+	const [validationErrors, setValidationErrors] = useState<
+		Record<string, string>
+	>({});
+
+	// Clear validation errors when form changes
+	useEffect(() => {
+		if (Object.keys(validationErrors).length > 0) {
+			setValidationErrors({});
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [form]);
 
 	const corePostings = postings.filter((p) => !p.isElective);
 	const electivePostings = postings.filter((p) => p.isElective);
@@ -158,7 +175,27 @@ export function RotationPostingsTab({
 		setEditingSlNo(null);
 	}
 
+	function validateForm(): Record<string, string> {
+		const errors: Record<string, string> = {};
+		if (!form.startDate) errors.startDate = "Start date is required";
+		if (!form.endDate) errors.endDate = "End date is required";
+		if (
+			!form.totalDuration.trim() &&
+			!calcDuration(form.startDate, form.endDate)
+		)
+			errors.totalDuration = "Duration is required";
+		if (!form.facultyId) errors.facultyId = "Faculty is required";
+		return errors;
+	}
+
 	function handleSave(config: RotationPostingConfig, existingId?: string) {
+		const errors = validateForm();
+		if (Object.keys(errors).length > 0) {
+			setValidationErrors(errors);
+			toast.error("Please fill all required fields");
+			return;
+		}
+
 		const data = {
 			rotationName: config.name,
 			isElective: config.isElective,
@@ -186,6 +223,18 @@ export function RotationPostingsTab({
 	}
 
 	function handleSubmit(id: string) {
+		const posting = postings.find((p) => p.id === id);
+		if (posting) {
+			const missing: string[] = [];
+			if (!posting.startDate) missing.push("Start Date");
+			if (!posting.endDate) missing.push("End Date");
+			if (!posting.totalDuration) missing.push("Duration");
+			if (!posting.facultyId) missing.push("Faculty");
+			if (missing.length > 0) {
+				toast.error(`Cannot submit — fill: ${missing.join(", ")}`);
+				return;
+			}
+		}
 		startTransition(async () => {
 			try {
 				await submitRotationPosting(id);
@@ -234,6 +283,7 @@ export function RotationPostingsTab({
 						autoDuration={autoDuration}
 						facultyList={facultyList}
 						isPending={isPending}
+						validationErrors={validationErrors}
 						onSave={() => handleSave(config, posting?.id)}
 						onCancel={cancelEditing}
 						onDelete={
@@ -375,6 +425,7 @@ interface InlineEditRowProps {
 	autoDuration: string;
 	facultyList: FacultyOption[];
 	isPending: boolean;
+	validationErrors: Record<string, string>;
 	onSave: () => void;
 	onCancel: () => void;
 	onDelete?: () => void;
@@ -387,6 +438,7 @@ function InlineEditRow({
 	autoDuration,
 	facultyList,
 	isPending,
+	validationErrors,
 	onSave,
 	onCancel,
 	onDelete,
@@ -454,7 +506,11 @@ function InlineEditRow({
 			{/* Duration */}
 			<TableCell className="text-center">
 				<Input
-					className="h-8 text-xs text-center w-24 mx-auto"
+					className={cn(
+						"h-8 text-xs text-center w-24 mx-auto",
+						validationErrors.totalDuration &&
+							"border-red-500 ring-1 ring-red-500",
+					)}
 					placeholder={autoDuration || "Duration"}
 					value={form.totalDuration}
 					onChange={(e) =>
@@ -476,7 +532,13 @@ function InlineEditRow({
 						setForm((p) => ({ ...p, facultyId: v === "none" ? "" : v }))
 					}
 				>
-					<SelectTrigger className="h-8 text-xs w-36 mx-auto">
+					<SelectTrigger
+						className={cn(
+							"h-8 text-xs w-36 mx-auto",
+							validationErrors.facultyId &&
+								"border-red-500 ring-1 ring-red-500",
+						)}
+					>
 						<SelectValue placeholder="Faculty" />
 					</SelectTrigger>
 					<SelectContent>

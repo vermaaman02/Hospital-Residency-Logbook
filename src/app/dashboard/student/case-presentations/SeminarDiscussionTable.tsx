@@ -1,12 +1,13 @@
 /**
- * @module CasePresentationTable
- * @description Inline-editing table for Academic Case Presentation and Discussion.
+ * @module SeminarDiscussionTable
+ * @description Inline-editing table for Seminar/Evidence Based Discussion Presented.
+ * 100% same structure as CasePresentationTable — only title and server actions differ.
  * Click any row to edit. "Insert New Row" to add unlimited entries.
  * Columns: Sl.No (auto), Date (datepicker), Patient Name, Age, Sex (dropdown),
  * UHID, Complete Diagnosis (MD editor), Category (dropdown),
  * Faculty Remark (MD editor), Faculty Sign (searchable dropdown).
  *
- * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION"
+ * @see PG Logbook .md — "SEMINAR/EVIDENCE BASED DISCUSSION PRESENTED"
  */
 
 "use client";
@@ -67,7 +68,7 @@ import {
 	Check,
 	X,
 	Plus,
-	BookOpen,
+	FileText,
 	ChevronsUpDown,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -79,16 +80,16 @@ import {
 	SEX_OPTIONS,
 } from "@/lib/constants/academic-fields";
 import {
-	createCasePresentation,
-	updateCasePresentation,
-	submitCasePresentation,
-	deleteCasePresentation,
-} from "@/actions/case-presentations";
+	createSeminarDiscussion,
+	updateSeminarDiscussion,
+	submitSeminarDiscussion,
+	deleteSeminarDiscussion,
+} from "@/actions/seminar-discussions";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-export interface CasePresentationData {
+export interface SeminarDiscussionData {
 	id: string;
 	slNo: number;
 	date: Date | string | null;
@@ -109,8 +110,8 @@ export interface FacultyOption {
 	lastName: string;
 }
 
-interface CasePresentationTableProps {
-	entries: CasePresentationData[];
+interface SeminarDiscussionTableProps {
+	entries: SeminarDiscussionData[];
 	facultyList: FacultyOption[];
 }
 
@@ -140,10 +141,10 @@ const emptyForm: InlineForm = {
 
 // ======================== MAIN COMPONENT ========================
 
-export function CasePresentationTable({
+export function SeminarDiscussionTable({
 	entries,
 	facultyList,
-}: CasePresentationTableProps) {
+}: SeminarDiscussionTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -189,7 +190,7 @@ export function CasePresentationTable({
 
 	// ---- Editing  ----
 
-	function startEditing(entry: CasePresentationData) {
+	function startEditing(entry: SeminarDiscussionData) {
 		if (entry.status === "SUBMITTED" || entry.status === "SIGNED") return;
 		setIsAddingNew(false);
 		setEditingId(entry.id);
@@ -263,10 +264,10 @@ export function CasePresentationTable({
 		startTransition(async () => {
 			try {
 				if (existingId) {
-					await updateCasePresentation(existingId, data);
+					await updateSeminarDiscussion(existingId, data);
 					toast.success("Updated");
 				} else {
-					await createCasePresentation(data);
+					await createSeminarDiscussion(data);
 					toast.success("Row added");
 				}
 				setEditingId(null);
@@ -297,7 +298,7 @@ export function CasePresentationTable({
 		}
 		startTransition(async () => {
 			try {
-				await submitCasePresentation(id);
+				await submitSeminarDiscussion(id);
 				toast.success("Submitted for review");
 				router.refresh();
 			} catch (error) {
@@ -311,7 +312,7 @@ export function CasePresentationTable({
 	function handleDelete(id: string) {
 		startTransition(async () => {
 			try {
-				await deleteCasePresentation(id);
+				await deleteSeminarDiscussion(id);
 				toast.success("Deleted");
 				setEditingId(null);
 				router.refresh();
@@ -363,13 +364,13 @@ export function CasePresentationTable({
 				<CardHeader className="pb-3">
 					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 						<div className="flex items-center gap-2">
-							<BookOpen className="h-5 w-5 text-hospital-primary" />
+							<FileText className="h-5 w-5 text-hospital-primary" />
 							<div>
 								<CardTitle className="text-lg">
-									ACADEMIC CASE PRESENTATION AND DISCUSSION
+									SEMINAR / EVIDENCE BASED DISCUSSION PRESENTED
 								</CardTitle>
 								<CardDescription>
-									Click any row to edit. Target: 20 entries.
+									Click any row to edit. Target: 10 entries.
 								</CardDescription>
 							</div>
 						</div>
@@ -509,7 +510,7 @@ export function CasePresentationTable({
 											className="text-center py-10 text-muted-foreground"
 										>
 											No entries yet. Click &quot;Insert New Row&quot; to add
-											your first case presentation.
+											your first seminar discussion entry.
 										</TableCell>
 									</TableRow>
 								)}
@@ -522,7 +523,7 @@ export function CasePresentationTable({
 						<div>
 							Total:{" "}
 							<span className="font-medium text-foreground">
-								{stats.total}/20
+								{stats.total}/10
 							</span>
 						</div>
 						<div>
@@ -870,7 +871,7 @@ function EditRow({
 // ======================== READ ROW ========================
 
 interface ReadRowProps {
-	entry: CasePresentationData;
+	entry: SeminarDiscussionData;
 	getFacultyName: (id: string | null) => string;
 	getCategoryLabel: (val: string | null) => string;
 	canEdit: boolean;
