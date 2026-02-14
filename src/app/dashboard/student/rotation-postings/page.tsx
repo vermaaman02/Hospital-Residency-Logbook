@@ -33,8 +33,14 @@ export default async function RotationPostingsPage({
 		redirect("/sign-in");
 	}
 
-	const user = await prisma.user.findUnique({ where: { clerkId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId },
+		select: { id: true, firstName: true, lastName: true },
+	});
 	if (!user) redirect("/sign-in");
+
+	const studentName =
+		`${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Student";
 
 	// Fetch all data in parallel
 	const [postings, thesis, trainingRecords, facultyList] = await Promise.all([
@@ -61,6 +67,7 @@ export default async function RotationPostingsPage({
 				trainingRecords={JSON.parse(JSON.stringify(trainingRecords))}
 				facultyList={JSON.parse(JSON.stringify(facultyList))}
 				defaultTab={tab}
+				studentName={studentName}
 			/>
 		</div>
 	);

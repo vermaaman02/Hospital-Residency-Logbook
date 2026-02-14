@@ -11,11 +11,18 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { RotateCcw, BookOpen, HeartHandshake, Loader2 } from "lucide-react";
+import {
+	RotateCcw,
+	BookOpen,
+	HeartHandshake,
+	Loader2,
+	ChevronsUpDown,
+	Check,
+} from "lucide-react";
 import {
 	RotationReviewClient,
 	type RotationSubmission,
@@ -30,6 +37,22 @@ import {
 	type ExistingRecord,
 } from "../training-mentoring/FacultyTrainingForm";
 import { toggleAutoReview } from "@/actions/auto-review";
+import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -59,6 +82,8 @@ export function ReviewTabsClient({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [activeTab, setActiveTab] = useState("rotations");
+	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
+	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
 	const [settings, setSettings] = useState<AutoReviewSettings>(
 		autoReviewSettings ?? {
 			rotationPostings: false,
@@ -66,6 +91,137 @@ export function ReviewTabsClient({
 			trainingMentoring: false,
 		},
 	);
+
+	// Build unique student list from all data sources
+	const studentOptions = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const s of submissions) {
+			map.set(s.user.id, `${s.user.firstName} ${s.user.lastName}`.trim());
+		}
+		for (const t of theses) {
+			map.set(
+				t.user.id,
+				`${t.user.firstName ?? ""} ${t.user.lastName ?? ""}`.trim(),
+			);
+		}
+		for (const s of trainingStudents) {
+			map.set(s.id, `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim());
+		}
+		return Array.from(map.entries())
+			.map(([id, name]) => ({ id, name: name || "Unknown" }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}, [submissions, theses, trainingStudents]);
+
+	// ======================== EXPORT HANDLERS ========================
+
+	const buildReviewExportData = useCallback(() => {
+		// Filter by selected student
+		const filteredSubmissions =
+			selectedStudentId === "all" ? submissions : (
+				submissions.filter((s) => s.user.id === selectedStudentId)
+			);
+		const filteredTheses =
+			selectedStudentId === "all" ? theses : (
+				theses.filter((t) => t.user.id === selectedStudentId)
+			);
+		const filteredTraining =
+			selectedStudentId === "all" ? trainingRecords : (
+				trainingRecords.filter((r) => {
+					// Match training records to students by userId
+					const student = trainingStudents.find(
+						(s) => s.id === selectedStudentId,
+					);
+					return student ? r.userId === student.id : false;
+				})
+			);
+
+		const rotationExportRows = filteredSubmissions.map((s) => ({
+			slNo: s.slNo,
+			rotationName: s.rotationName,
+			isElective: s.isElective,
+			startDate: s.startDate,
+			endDate: s.endDate,
+			totalDuration: s.totalDuration,
+			durationDays: s.durationDays,
+			status: s.status,
+			facultyRemark: s.facultyRemark,
+			studentName: `${s.user.firstName} ${s.user.lastName}`.trim(),
+			batch: s.user.batchRelation?.name ?? "—",
+			semester: s.user.currentSemester ?? 0,
+		}));
+
+		const thesisExportRows = filteredTheses.map((t) => ({
+			topic: t.topic,
+			chiefGuide: t.chiefGuide,
+			semesterRecords: t.semesterRecords.map((sr) => ({
+				semester: sr.semester,
+				srJrMember: sr.srJrMember,
+				srMember: sr.srMember,
+				facultyMember: sr.facultyMember,
+			})),
+			studentName: `${t.user.firstName ?? ""} ${t.user.lastName ?? ""}`.trim(),
+			status: t.status,
+			facultyRemark: t.facultyRemark,
+		}));
+
+		// Build student name lookup for training records
+		const studentMap = new Map(
+			trainingStudents.map((s) => [
+				s.id,
+				`${s.firstName ?? ""} ${s.lastName ?? ""}`.trim(),
+			]),
+		);
+
+		const trainingExportRows = filteredTraining.map((r) => ({
+			semester: r.semester,
+			knowledgeScore: r.knowledgeScore,
+			clinicalSkillScore: r.clinicalSkillScore,
+			proceduralSkillScore: r.proceduralSkillScore,
+			softSkillScore: r.softSkillScore,
+			researchScore: r.researchScore,
+			overallScore: r.overallScore,
+			remarks: r.remarks,
+			status: r.status,
+			studentName: studentMap.get(r.userId) ?? "Unknown",
+			evaluatedBy: role === "hod" ? "HOD" : "Faculty",
+		}));
+
+		return { rotationExportRows, thesisExportRows, trainingExportRows };
+	}, [
+		submissions,
+		theses,
+		trainingRecords,
+		trainingStudents,
+		role,
+		selectedStudentId,
+	]);
+
+	const handleExportPdf = useCallback(async () => {
+		const { exportReviewDataToPdf } = await import("@/lib/export/export-pdf");
+		const { rotationExportRows, thesisExportRows, trainingExportRows } =
+			buildReviewExportData();
+		await exportReviewDataToPdf(
+			rotationExportRows,
+			thesisExportRows,
+			trainingExportRows,
+			role,
+		);
+	}, [buildReviewExportData, role]);
+
+	const handleExportExcel = useCallback(async () => {
+		const { exportReviewDataToExcel } =
+			await import("@/lib/export/export-excel");
+		const { rotationExportRows, thesisExportRows, trainingExportRows } =
+			buildReviewExportData();
+		exportReviewDataToExcel(
+			rotationExportRows,
+			thesisExportRows,
+			trainingExportRows,
+			role,
+		);
+	}, [buildReviewExportData, role]);
+
+	// ======================== AUTO-REVIEW TOGGLE ========================
 
 	function handleToggle(
 		category: "rotationPostings" | "thesis" | "trainingMentoring",
@@ -154,6 +310,81 @@ export function ReviewTabsClient({
 						/>
 					</div>
 				)}
+
+				<div className="flex items-center gap-2">
+					{/* Searchable Student Selector for Export */}
+					<Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+						<PopoverTrigger asChild>
+							<Button
+								variant="outline"
+								size="sm"
+								role="combobox"
+								aria-expanded={studentPickerOpen}
+								className="w-48 justify-between text-xs"
+							>
+								{selectedStudentId === "all" ?
+									"All Students"
+								:	(studentOptions.find((s) => s.id === selectedStudentId)
+										?.name ?? "Select student...")
+								}
+								<ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent className="w-56 p-0" align="end">
+							<Command>
+								<CommandInput placeholder="Search student..." />
+								<CommandList>
+									<CommandEmpty>No student found.</CommandEmpty>
+									<CommandGroup>
+										<CommandItem
+											value="all"
+											onSelect={() => {
+												setSelectedStudentId("all");
+												setStudentPickerOpen(false);
+											}}
+										>
+											<Check
+												className={cn(
+													"mr-2 h-4 w-4",
+													selectedStudentId === "all" ? "opacity-100" : (
+														"opacity-0"
+													),
+												)}
+											/>
+											All Students
+										</CommandItem>
+										{studentOptions.map((s) => (
+											<CommandItem
+												key={s.id}
+												value={s.name}
+												onSelect={() => {
+													setSelectedStudentId(s.id);
+													setStudentPickerOpen(false);
+												}}
+											>
+												<Check
+													className={cn(
+														"mr-2 h-4 w-4",
+														selectedStudentId === s.id ?
+															"opacity-100"
+														:	"opacity-0",
+													)}
+												/>
+												{s.name}
+											</CommandItem>
+										))}
+									</CommandGroup>
+								</CommandList>
+							</Command>
+						</PopoverContent>
+					</Popover>
+
+					<ExportDropdown
+						onExportPdf={handleExportPdf}
+						onExportExcel={handleExportExcel}
+						label={selectedStudentId === "all" ? "Download All" : "Download"}
+					/>
+				</div>
 			</div>
 
 			<TabsContent value="rotations">
