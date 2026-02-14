@@ -1226,78 +1226,95 @@ npx prisma migrate deploy
 
 ## 10. Development Phases & Timeline
 
-### Phase 1: Foundation (Week 1-2)
+### Phase 1: Foundation (Week 1-2) ✅ COMPLETED
 
 - [x] Initialize Next.js 14 project with TypeScript
-- [ ] Set up Tailwind CSS + shadcn/ui
-- [ ] Configure Prisma with PostgreSQL (Railway)
-- [ ] Integrate Clerk authentication
-- [ ] Set up role-based middleware
-- [ ] Create Clerk webhook handler for user sync
-- [ ] Design and implement the hospital theme
-- [ ] Build sidebar layout with navigation
-- [ ] Create shared UI components (DataTable, FormWrapper, StatusBadge)
-- [ ] Seed database with rotation posting master data (20 departments)
-- [ ] Seed database with case categories & procedure categories
+- [x] Set up Tailwind CSS + shadcn/ui
+- [x] Configure Prisma with PostgreSQL (Railway)
+- [x] Integrate Clerk authentication
+- [x] Set up role-based middleware
+- [x] Create Clerk webhook handler for user sync
+- [x] Design and implement the hospital theme
+- [x] Build sidebar layout with navigation
+- [x] Create shared UI components (DataTable, FormWrapper, StatusBadge)
+- [x] Seed database with rotation posting master data (20 departments)
+- [x] Seed database with case categories & procedure categories
 - [ ] Deploy initial version to Railway
 
-### Phase 2: Administrative Modules (Week 3-4)
+### Phase 2: Administrative Modules (Week 3-4) ✅ COMPLETED
 
-- [ ] **A1: Rotation Postings** — CRUD + faculty sign-off
-- [ ] **A2: Thesis Tracking** — Topic, guide, semester records
-- [ ] **A3: Weekly Attendance** — Calendar-based weekly entry
-- [ ] **A4: Resident Training & Mentoring Record** — 5-point scoring
-- [ ] Student profile page with metadata
-- [ ] HOD: Batch & semester management
-- [ ] HOD: Faculty-student assignment
+- [x] **A1: Rotation Postings** — CRUD + faculty sign-off
+- [x] **A2: Thesis Tracking** — Topic, guide, semester records
+- [x] **A3: Weekly Attendance** — Calendar-based weekly entry
+- [x] **A4: Resident Training & Mentoring Record** — 5-point scoring
+- [x] Student profile page with metadata
+- [x] HOD: Batch & semester management (Manage Users page)
+- [x] HOD: Faculty-student assignment (with semester selector)
 
-### Phase 3: Academic Modules (Week 5-6)
+### Phase 3: Academic Modules (Week 5-6) ✅ COMPLETED
 
-- [ ] **B1: Academic Case Presentations** (20 entries)
-- [ ] **B2: Seminars / Evidence Based Discussions** (10 entries)
-- [ ] **B3: Journal Club Discussions** (10 entries)
-- [ ] Digital signature flow for academic entries
-- [ ] Faculty remark system
+- [x] **B1: Academic Case Presentations** (20 entries)
+- [x] **B2: Seminars / Evidence Based Discussions** (10 entries)
+- [x] **B3: Journal Club Discussions** (10 entries)
+- [x] Digital signature flow for academic entries
+- [x] Faculty remark system
 
-### Phase 4: Clinical Skills & Case Management (Week 7-10)
+### Phase 4: Clinical Skills & Case Management (Week 7-10) ✅ COMPLETED
 
-- [ ] **C1: Clinical Skills — Adult** (10 skills with confidence tracking)
-- [ ] **C2: Clinical Skills — Pediatric** (10 skills)
-- [ ] **D1-D24: ALL Case Management Logs** (25 categories, 300+ case types)
-  - Reusable CaseManagementForm component
-  - Category selector with pre-populated case types
+- [x] **C1: Clinical Skills — Adult** (10 skills with confidence tracking)
+- [x] **C2: Clinical Skills — Pediatric** (10 skills)
+- [x] **D1-D24: ALL Case Management Logs** (25 categories, 300+ case types)
+  - Reusable CaseManagementEntryForm component
+  - Category selector with pre-populated case types (24 categories, 308 sub-types)
   - Competency level tracking (CBD/S/O/MS/MI)
   - Running tally per case type
   - Faculty sign-off per entry
+- [x] ClinicalSkillsTable reusable component (auto-initialize, confidence badges)
+- [x] CaseManagementTable reusable component (table with all actions)
+- [x] Faculty reviews updated with Clinical Skills + Case Management tabs
 
-### Phase 5: Procedure Logs (Week 11-14)
+### Phase 5: Procedure Logs (Week 11-14) ✅ COMPLETED
 
-- [ ] **E1-E49: ALL Procedure Logs** (48 categories, 1000+ slots)
-  - Reusable ProcedureLogForm component
-  - Procedure category selector
-  - Skill level tracking (S/O/A/PS/PI and S/TM/TL)
-  - Location tracking
-  - Faculty sign-off
-  - Skill progression charts
+- [x] **E1-E49: ALL Procedure Logs** (49 categories, 1000+ slots)
+  - [x] Reusable ProcedureLogEntryForm component
+  - [x] Procedure category selector (49 categories with slug routing)
+  - [x] Skill level tracking (S/O/A/PS/PI and S/TM/TL for CPR)
+  - [x] Location tracking (performedAtLocation field)
+  - [x] Faculty sign-off (sign/reject in faculty reviews)
+  - [x] Procedure log server actions (create, update, submit, delete, get, summary, sign, reject)
+  - [x] ProcedureLogTable component with progress bars
+  - [x] Student pages: landing (49 category cards), [category] list, new, edit
+  - [x] Faculty reviews updated with Procedure Logs tab (8 total tabs)
 
-### Phase 6: Diagnostic & Imaging (Week 15-16)
+### Phase 6: Diagnostic & Imaging (Week 15-16) ✅ COMPLETED
 
-- [ ] **F1: ABG Analysis** (10 disorders)
-- [ ] **F2: ECG Analysis** (10 types)
-- [ ] **F3: Other Diagnostic Analysis** (10 investigations)
-- [ ] **G1-G5: ALL Imaging Logs** (5 categories, 210 entry slots)
-- [ ] Confidence level tracking with visual indicators
+- [x] **F1: ABG Analysis** (10 disorders) — DiagnosticSkillEntryForm + predefined skills
+- [x] **F2: ECG Analysis** (10 types) — Shared diagnostic constants & form
+- [x] **F3: Other Diagnostic Analysis** (10 investigations) — Shared diagnostic constants & form
+- [x] **G1-G5: ALL Imaging Logs** (5 categories, 210 entry slots) — ImagingLogEntryForm + ImagingLogTable
+- [x] Confidence level tracking with visual indicators (VC green, FC blue, SC amber, NC red)
+- [x] Slug-based routing with helpers (diagnosticEnumToSlug, imagingEnumToSlug, etc.)
+- [x] Server actions: 9 diagnostic + 9 imaging (CRUD, submit, sign, reject)
+- [x] Student pages: diagnostics landing (3 cards), imaging landing (5 cards), category list, new, edit
+- [x] Faculty reviews updated with Diagnostics + Imaging tabs (10 total tabs)
+- [x] Build clean — 42 routes, 0 errors
 
-### Phase 7: Professional Development (Week 17-18)
+### Phase 7: Professional Development (Week 17-18) ✅ COMPLETED
 
-- [ ] **H1: Life Support Courses** (10 entries)
-- [ ] **H2: Conference Participation** (10 entries)
-- [ ] **H3: Research/Teaching/Community Activities** (10 entries)
-- [ ] **H4: Disaster Management Drills** (10 entries)
-- [ ] **H5: Quality Improvement/Clinical Audit** (10 entries)
-- [ ] **H6: Transport of Critically Ill Patient** (10 entries)
-- [ ] **H7: Taking Informed Consent** (10 entries)
-- [ ] **H8: Breaking Bad News** (10 entries)
+- [x] **H1: Life Support Courses** (10 entries) — CourseAttended CRUD, submit, sign, reject
+- [x] **H2: Conference Participation** (10 entries) — ConferenceParticipation CRUD, submit, sign, reject
+- [x] **H3: Research/Teaching/Community Activities** (10 entries) — ResearchActivity CRUD, submit, sign, reject
+- [x] **H4: Disaster Management Drills** (10 entries) — DisasterDrill CRUD, submit, sign, reject
+- [x] **H5: Quality Improvement/Clinical Audit** (10 entries) — QualityImprovement CRUD, submit, sign, reject
+- [x] **H6: Transport of Critically Ill Patient** (10 entries) — TransportLog with S/O/A/PS/PI skill levels
+- [x] **H7: Taking Informed Consent** (10 entries) — ConsentLog with S/O/A/PS/PI skill levels
+- [x] **H8: Breaking Bad News** (10 entries) — BadNewsLog with S/O/A/PS/PI skill levels
+- [x] Constants & field configs: professional-fields.ts (H1-H5), other-logs-fields.ts (H6-H8)
+- [x] Reusable components: ProfessionalEntryTable, OtherLogTable, ProfessionalEntryForm, OtherLogEntryForm
+- [x] Server actions: courses-conferences.ts (24 actions), disaster-qi.ts (16 actions), other-logs.ts (24 actions)
+- [x] Student pages: 5 route groups, 22 page files (courses-conferences, research, disaster-qi, transport, consent-bad-news)
+- [x] Faculty reviews updated with 8 new tabs (18 total tabs)
+- [x] Build clean — 46 routes, 0 errors
 
 ### Phase 8: Evaluation & Reporting (Week 19-20)
 
