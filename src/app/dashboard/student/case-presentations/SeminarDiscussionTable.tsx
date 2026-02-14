@@ -637,6 +637,7 @@ function EditRow({
 							"border-red-500 ring-1 ring-red-500",
 					)}
 					placeholder="Name"
+					spellCheck
 					value={form.patientName}
 					onChange={(e) =>
 						setForm((p) => ({ ...p, patientName: e.target.value }))
@@ -714,6 +715,7 @@ function EditRow({
 						placeholder="Diagnosis..."
 						minRows={2}
 						compact
+						spellCheck
 					/>
 				</div>
 			</TableCell>

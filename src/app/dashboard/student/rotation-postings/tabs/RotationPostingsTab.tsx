@@ -10,7 +10,7 @@
 
 "use client";
 
-import {
+import React, {
 	useState,
 	useTransition,
 	useMemo,
@@ -56,6 +56,7 @@ import {
 	Check,
 	X,
 	BookOpen,
+	AlertTriangle,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -273,46 +274,77 @@ export function RotationPostingsTab({
 				posting.status === "DRAFT" ||
 				posting.status === "NEEDS_REVISION";
 
+			const showRemark =
+				posting?.status === "NEEDS_REVISION" && posting?.facultyRemark;
+
 			if (isEditing) {
 				return (
-					<InlineEditRow
-						key={config.slNo}
+					<React.Fragment key={config.slNo}>
+						<InlineEditRow
+							config={config}
+							form={form}
+							setForm={setForm}
+							autoDuration={autoDuration}
+							facultyList={facultyList}
+							isPending={isPending}
+							validationErrors={validationErrors}
+							onSave={() => handleSave(config, posting?.id)}
+							onCancel={cancelEditing}
+							onDelete={
+								posting?.status === "DRAFT" ?
+									() => handleDelete(posting.id)
+								:	undefined
+							}
+						/>
+						{showRemark && (
+							<TableRow className="bg-amber-50 hover:bg-amber-50 border-l-4 border-l-amber-400">
+								<TableCell colSpan={7} className="py-2 px-4">
+									<div className="flex items-start gap-2 text-sm text-amber-800">
+										<AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+										<div>
+											<span className="font-semibold">Revision Required:</span>{" "}
+											<span>{posting.facultyRemark}</span>
+										</div>
+									</div>
+								</TableCell>
+							</TableRow>
+						)}
+					</React.Fragment>
+				);
+			}
+
+			return (
+				<React.Fragment key={config.slNo}>
+					<ReadOnlyRow
 						config={config}
-						form={form}
-						setForm={setForm}
-						autoDuration={autoDuration}
-						facultyList={facultyList}
+						posting={posting}
+						getFacultyName={getFacultyName}
+						canEdit={canEdit}
 						isPending={isPending}
-						validationErrors={validationErrors}
-						onSave={() => handleSave(config, posting?.id)}
-						onCancel={cancelEditing}
+						onClick={() => canEdit && startEditing(config, posting)}
+						onSubmit={
+							posting && canEdit ? () => handleSubmit(posting.id) : undefined
+						}
 						onDelete={
 							posting?.status === "DRAFT" ?
 								() => handleDelete(posting.id)
 							:	undefined
 						}
 					/>
-				);
-			}
-
-			return (
-				<ReadOnlyRow
-					key={config.slNo}
-					config={config}
-					posting={posting}
-					getFacultyName={getFacultyName}
-					canEdit={canEdit}
-					isPending={isPending}
-					onClick={() => canEdit && startEditing(config, posting)}
-					onSubmit={
-						posting && canEdit ? () => handleSubmit(posting.id) : undefined
-					}
-					onDelete={
-						posting?.status === "DRAFT" ?
-							() => handleDelete(posting.id)
-						:	undefined
-					}
-				/>
+					{showRemark && (
+						<TableRow className="bg-amber-50 hover:bg-amber-50 border-l-4 border-l-amber-400">
+							<TableCell colSpan={7} className="py-2 px-4">
+								<div className="flex items-start gap-2 text-sm text-amber-800">
+									<AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+									<div>
+										<span className="font-semibold">Revision Required:</span>{" "}
+										<span>{posting.facultyRemark}</span>
+									</div>
+								</div>
+							</TableCell>
+						</TableRow>
+					)}
+				</React.Fragment>
 			);
 		});
 	}

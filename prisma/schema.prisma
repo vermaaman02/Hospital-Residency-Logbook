@@ -198,15 +198,20 @@ model Thesis {
 }
 
 model ThesisSemesterRecord {
-  id            String @id @default(cuid())
+  id            String      @id @default(cuid())
   thesisId      String
-  thesis        Thesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
-  semester      Int    // 1-6
+  thesis        Thesis      @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+  semester      Int         // 1-6
   srJrMember    String?
   srMember      String?
   facultyMember String?
+  status        EntryStatus @default(DRAFT)
+  facultyRemark String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([thesisId])
+  @@index([status])
 }
 
 // ======================== MODULE 3: ATTENDANCE ========================

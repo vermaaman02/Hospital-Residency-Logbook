@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import React, { useState, useTransition, useCallback } from "react";
 import {
 	Card,
 	CardContent,
@@ -42,16 +42,26 @@ import {
 	GraduationCap,
 	Check,
 	X,
+	Send,
+	AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { updateThesis, upsertThesisSemesterRecord } from "@/actions/thesis";
+import {
+	updateThesis,
+	upsertThesisSemesterRecord,
+	submitThesis,
+	submitSemesterRecord,
+} from "@/actions/thesis";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import type {
 	ThesisData,
 	ThesisSemesterRecordData,
 	FacultyOption,
 } from "../RotationPostingsClient";
+import type { EntryStatus } from "@/types";
 
 interface ThesisTopicTabProps {
 	thesis: ThesisData;
@@ -63,6 +73,12 @@ const SEMESTERS = [1, 2, 3, 4, 5, 6] as const;
 export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	const thesisStatus = (thesis.status ?? "DRAFT") as EntryStatus;
+	const isLocked = thesisStatus === "SUBMITTED" || thesisStatus === "SIGNED";
+	const canSubmit =
+		!!thesis.topic?.trim() &&
+		(thesisStatus === "DRAFT" || thesisStatus === "NEEDS_REVISION");
 
 	// Thesis topic/guide state
 	const [topic, setTopic] = useState(thesis.topic ?? "");
@@ -103,8 +119,29 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 		});
 	}
 
+	function handleSubmitThesis() {
+		if (!thesis.topic?.trim()) {
+			toast.error("Please set a thesis topic before submitting");
+			return;
+		}
+		startTransition(async () => {
+			try {
+				await submitThesis(thesis.id);
+				toast.success("Thesis submitted for review");
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to submit thesis",
+				);
+			}
+		});
+	}
+
 	function startEditingSemester(semester: number) {
 		const record = getSemesterRecord(semester);
+		const recStatus = record?.status ?? "DRAFT";
+		// Only allow editing when DRAFT or NEEDS_REVISION
+		if (recStatus === "SUBMITTED" || recStatus === "SIGNED") return;
 		setEditingSemester(semester);
 		setSemesterForm({
 			srJrMember: record?.srJrMember ?? "",
@@ -136,6 +173,20 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 		});
 	}
 
+	function handleSubmitSemester(record: ThesisSemesterRecordData) {
+		startTransition(async () => {
+			try {
+				await submitSemesterRecord(record.id);
+				toast.success(`Semester ${record.semester} submitted for review`);
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to submit",
+				);
+			}
+		});
+	}
+
 	function getFacultyName(name: string | null) {
 		if (!name) return null;
 		const faculty = facultyList.find((f) => f.id === name);
@@ -145,6 +196,21 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 
 	return (
 		<div className="space-y-6">
+			{/* Faculty Remark Alert — show when rejected */}
+			{thesisStatus === "NEEDS_REVISION" && thesis.facultyRemark && (
+				<div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+					<AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+					<div>
+						<p className="font-semibold text-amber-800 text-sm">
+							Revision Required
+						</p>
+						<p className="text-sm text-amber-700 mt-1">
+							{thesis.facultyRemark}
+						</p>
+					</div>
+				</div>
+			)}
+
 			{/* Thesis Topic & Chief Guide */}
 			<Card>
 				<CardHeader className="pb-3">
@@ -152,24 +218,40 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 						<div className="flex items-center gap-2">
 							<GraduationCap className="h-5 w-5 text-hospital-primary" />
 							<CardTitle className="text-lg">Thesis Details</CardTitle>
+							<StatusBadge status={thesisStatus} size="sm" />
 						</div>
-						{!isTopicEditing && thesis.topic && (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => setIsTopicEditing(true)}
-							>
-								<Pencil className="h-3.5 w-3.5 mr-1.5" />
-								Edit
-							</Button>
-						)}
+						<div className="flex items-center gap-2">
+							{canSubmit && (
+								<Button
+									size="sm"
+									onClick={handleSubmitThesis}
+									disabled={isPending}
+									className="bg-hospital-primary hover:bg-hospital-primary/90"
+								>
+									{isPending ?
+										<Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+									:	<Send className="h-3.5 w-3.5 mr-1.5" />}
+									Submit for Review
+								</Button>
+							)}
+							{!isTopicEditing && thesis.topic && !isLocked && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => setIsTopicEditing(true)}
+								>
+									<Pencil className="h-3.5 w-3.5 mr-1.5" />
+									Edit
+								</Button>
+							)}
+						</div>
 					</div>
 					<CardDescription>
 						Your MD thesis topic and chief guide details
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isTopicEditing ?
+					{isTopicEditing && !isLocked ?
 						<div className="space-y-4">
 							<div>
 								<label className="text-sm font-medium">
@@ -181,6 +263,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 									value={topic}
 									onChange={(e) => setTopic(e.target.value)}
 									maxLength={500}
+									spellCheck
 								/>
 							</div>
 							<div>
@@ -266,21 +349,25 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 						</CardTitle>
 					</div>
 					<CardDescription>
-						Click on any semester row to edit committee members inline
+						Fill each semester&apos;s committee and submit individually for
+						review
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-150">
+					<div className="border rounded-lg min-w-170">
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">
-									<TableHead className="w-24 text-center font-bold">
-										Semester
+									<TableHead className="w-16 text-center font-bold">
+										Sem
 									</TableHead>
 									<TableHead className="font-bold">SR/JR Member</TableHead>
 									<TableHead className="font-bold">SR Member</TableHead>
 									<TableHead className="font-bold">Faculty Member</TableHead>
-									<TableHead className="w-28 text-center font-bold">
+									<TableHead className="w-24 text-center font-bold">
+										Status
+									</TableHead>
+									<TableHead className="w-36 text-center font-bold">
 										Action
 									</TableHead>
 								</TableRow>
@@ -293,6 +380,12 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 										record?.srJrMember ||
 										record?.srMember ||
 										record?.facultyMember;
+									const semStatus = (record?.status ?? "DRAFT") as string;
+									const semLocked =
+										semStatus === "SUBMITTED" || semStatus === "SIGNED";
+									const canSubmitSem =
+										hasData &&
+										(semStatus === "DRAFT" || semStatus === "NEEDS_REVISION");
 
 									if (isEditing) {
 										return (
@@ -312,6 +405,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 															}))
 														}
 														maxLength={200}
+														spellCheck
 													/>
 												</TableCell>
 												<TableCell>
@@ -326,6 +420,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 															}))
 														}
 														maxLength={200}
+														spellCheck
 													/>
 												</TableCell>
 												<TableCell>
@@ -354,6 +449,7 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 														</SelectContent>
 													</Select>
 												</TableCell>
+												<TableCell />
 												<TableCell>
 													<div className="flex items-center justify-center gap-1">
 														<Button
@@ -383,44 +479,105 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 									}
 
 									return (
-										<TableRow
-											key={sem}
-											className={cn(
-												"cursor-pointer transition-colors hover:bg-muted/40",
-												hasData ? "" : "text-muted-foreground/60",
-											)}
-											onClick={() => startEditingSemester(sem)}
-										>
-											<TableCell className="text-center font-medium">
-												{sem}
-											</TableCell>
-											<TableCell className="text-sm">
-												{record?.srJrMember || (
-													<span className="text-muted-foreground/40 italic text-xs">
-														Click to fill
-													</span>
+										<React.Fragment key={sem}>
+											<TableRow
+												className={cn(
+													"transition-colors",
+													!semLocked && "cursor-pointer hover:bg-muted/40",
+													semStatus === "SIGNED" && "bg-green-50/40",
+													semStatus === "NEEDS_REVISION" && "bg-amber-50/40",
+													!hasData && "text-muted-foreground/60",
 												)}
-											</TableCell>
-											<TableCell className="text-sm">
-												{record?.srMember || (
-													<span className="text-muted-foreground/40 italic text-xs">
-														Click to fill
-													</span>
+												onClick={() => !semLocked && startEditingSemester(sem)}
+											>
+												<TableCell className="text-center font-medium">
+													{sem}
+												</TableCell>
+												<TableCell className="text-sm">
+													{record?.srJrMember || (
+														<span className="text-muted-foreground/40 italic text-xs">
+															Click to fill
+														</span>
+													)}
+												</TableCell>
+												<TableCell className="text-sm">
+													{record?.srMember || (
+														<span className="text-muted-foreground/40 italic text-xs">
+															Click to fill
+														</span>
+													)}
+												</TableCell>
+												<TableCell className="text-sm">
+													{getFacultyName(record?.facultyMember ?? null) || (
+														<span className="text-muted-foreground/40 italic text-xs">
+															Click to fill
+														</span>
+													)}
+												</TableCell>
+												<TableCell className="text-center">
+													{hasData ?
+														<SemesterStatusBadge status={semStatus} />
+													:	<span className="text-xs text-muted-foreground/40">
+															—
+														</span>
+													}
+												</TableCell>
+												<TableCell
+													className="text-center"
+													onClick={(e) => e.stopPropagation()}
+												>
+													<div className="flex items-center justify-center gap-1">
+														{canSubmitSem && record && (
+															<Button
+																variant="outline"
+																size="sm"
+																className="h-7 text-xs gap-1 border-hospital-primary text-hospital-primary hover:bg-hospital-primary/5"
+																onClick={() => handleSubmitSemester(record)}
+																disabled={isPending}
+															>
+																{isPending ?
+																	<Loader2 className="h-3 w-3 animate-spin" />
+																:	<Send className="h-3 w-3" />}
+																Submit
+															</Button>
+														)}
+														{semStatus === "SIGNED" && (
+															<span className="text-xs text-green-600 font-medium flex items-center gap-1">
+																<Check className="h-3 w-3" /> Approved
+															</span>
+														)}
+														{!semLocked && !canSubmitSem && hasData && (
+															<span className="text-xs text-muted-foreground/40">
+																<Pencil className="h-3 w-3 inline" />
+															</span>
+														)}
+														{!hasData && (
+															<span className="text-xs text-muted-foreground/40">
+																<Pencil className="h-3 w-3 inline" />
+															</span>
+														)}
+													</div>
+												</TableCell>
+											</TableRow>
+											{/* Remark row for NEEDS_REVISION */}
+											{semStatus === "NEEDS_REVISION" &&
+												record?.facultyRemark && (
+													<TableRow className="bg-amber-50/60 border-l-4 border-l-amber-400">
+														<TableCell />
+														<TableCell colSpan={5} className="py-2">
+															<div className="flex items-start gap-2 text-xs">
+																<AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+																<span className="text-amber-700">
+																	<span className="font-semibold">
+																		Revision Required:
+																	</span>{" "}
+																	{record.facultyRemark}
+																</span>
+															</div>
+														</TableCell>
+													</TableRow>
 												)}
-											</TableCell>
-											<TableCell className="text-sm">
-												{getFacultyName(record?.facultyMember ?? null) || (
-													<span className="text-muted-foreground/40 italic text-xs">
-														Click to fill
-													</span>
-												)}
-											</TableCell>
-											<TableCell className="text-center">
-												<span className="text-xs text-muted-foreground/40">
-													<Pencil className="h-3 w-3 inline" />
-												</span>
-											</TableCell>
-										</TableRow>
+										</React.Fragment>
 									);
 								})}
 							</TableBody>
@@ -428,14 +585,57 @@ export function ThesisTopicTab({ thesis, facultyList }: ThesisTopicTabProps) {
 					</div>
 
 					{/* Completion */}
-					<div className="mt-4 text-sm text-muted-foreground px-2 sm:px-0">
-						Semesters filled:{" "}
-						<span className="font-medium text-foreground">
-							{thesis.semesterRecords.length}/6
+					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground px-2 sm:px-0">
+						<span>
+							Semesters filled:{" "}
+							<span className="font-medium text-foreground">
+								{thesis.semesterRecords.length}/6
+							</span>
+						</span>
+						<span>
+							Approved:{" "}
+							<span className="font-medium text-green-600">
+								{
+									thesis.semesterRecords.filter((r) => r.status === "SIGNED")
+										.length
+								}
+								/6
+							</span>
 						</span>
 					</div>
 				</CardContent>
 			</Card>
 		</div>
+	);
+}
+
+/** Small inline status badge for semester rows */
+function SemesterStatusBadge({ status }: { status: string }) {
+	const map: Record<string, { label: string; className: string }> = {
+		DRAFT: {
+			label: "Draft",
+			className: "bg-gray-100 text-gray-600 border-gray-200",
+		},
+		SUBMITTED: {
+			label: "Submitted",
+			className: "bg-amber-100 text-amber-700 border-amber-200",
+		},
+		SIGNED: {
+			label: "Approved",
+			className: "bg-green-100 text-green-700 border-green-200",
+		},
+		NEEDS_REVISION: {
+			label: "Revision",
+			className: "bg-red-100 text-red-700 border-red-200",
+		},
+	};
+	const info = map[status] ?? map.DRAFT;
+	return (
+		<Badge
+			variant="outline"
+			className={cn("text-[10px] px-1.5 py-0 font-medium", info.className)}
+		>
+			{info.label}
+		</Badge>
 	);
 }

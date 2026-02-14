@@ -42,6 +42,8 @@ export interface ThesisSemesterRecordData {
 	srJrMember: string | null;
 	srMember: string | null;
 	facultyMember: string | null;
+	status: string;
+	facultyRemark: string | null;
 }
 
 export interface ThesisData {
@@ -49,6 +51,8 @@ export interface ThesisData {
 	userId: string;
 	topic: string | null;
 	chiefGuide: string | null;
+	status: string;
+	facultyRemark: string | null;
 	semesterRecords: ThesisSemesterRecordData[];
 }
 
