@@ -92,21 +92,9 @@ const studentNavSections: NavSection[] = [
 				roles: ["student"],
 			},
 			{
-				title: "Thesis",
-				href: "/dashboard/student/rotation-postings?tab=thesis",
-				icon: <GraduationCap className="h-4 w-4" />,
-				roles: ["student"],
-			},
-			{
 				title: "Attendance",
 				href: "/dashboard/student/attendance",
 				icon: <CalendarDays className="h-4 w-4" />,
-				roles: ["student"],
-			},
-			{
-				title: "Training & Mentoring",
-				href: "/dashboard/student/rotation-postings?tab=training",
-				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["student"],
 			},
 			{
@@ -121,15 +109,9 @@ const studentNavSections: NavSection[] = [
 		title: "Academic",
 		items: [
 			{
-				title: "Case Presentations",
+				title: "Case Presentations & Seminars",
 				href: "/dashboard/student/case-presentations",
 				icon: <BookOpen className="h-4 w-4" />,
-				roles: ["student"],
-			},
-			{
-				title: "Seminars",
-				href: "/dashboard/student/seminars",
-				icon: <FileText className="h-4 w-4" />,
 				roles: ["student"],
 			},
 			{
@@ -257,17 +239,11 @@ const facultyNavSections: NavSection[] = [
 		title: "Academic",
 		items: [
 			{
-				title: "Case Presentations",
+				title: "Case Presentations & Seminars",
 				href: "/dashboard/faculty/case-presentations",
 				icon: <BookOpen className="h-4 w-4" />,
 				roles: ["faculty"],
 				badgeKey: "casePresentations",
-			},
-			{
-				title: "Seminars",
-				href: "/dashboard/faculty/reviews?category=academic&tab=seminars",
-				icon: <FileText className="h-4 w-4" />,
-				roles: ["faculty"],
 			},
 			{
 				title: "Journal Clubs",
@@ -440,17 +416,11 @@ const hodNavSections: NavSection[] = [
 		title: "Academic",
 		items: [
 			{
-				title: "Case Presentations",
+				title: "Case Presentations & Seminars",
 				href: "/dashboard/hod/case-presentations",
 				icon: <BookOpen className="h-4 w-4" />,
 				roles: ["hod"],
 				badgeKey: "casePresentations",
-			},
-			{
-				title: "Seminars",
-				href: "/dashboard/faculty/reviews?category=academic&tab=seminars",
-				icon: <FileText className="h-4 w-4" />,
-				roles: ["hod"],
 			},
 			{
 				title: "Journal Clubs",

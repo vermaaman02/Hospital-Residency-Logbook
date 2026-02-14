@@ -1,11 +1,11 @@
 /**
- * @module CasePresentationReviewClient
- * @description Faculty/HOD review page for student case presentation submissions.
+ * @module SeminarDiscussionReviewClient
+ * @description Faculty/HOD review page for student seminar/evidence-based discussion submissions.
  * Features: search, status filter, bulk select, detail sheet, sign/reject dialogs,
- * pagination, MD preview.
+ * pagination, MD preview. Mirrors CasePresentationReviewClient exactly.
  *
- * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION"
- * @see actions/case-presentations.ts — signCasePresentation, rejectCasePresentation
+ * @see PG Logbook .md — "SEMINAR/EVIDENCE BASED DISCUSSION PRESENTED"
+ * @see actions/seminar-discussions.ts
  */
 
 "use client";
@@ -77,9 +77,8 @@ import {
 	ChevronsUpDown,
 	ChevronLeft,
 	ChevronRight,
-	Stethoscope,
-	User,
 	FileText,
+	User,
 	CalendarDays,
 	Tag,
 	MessageSquare,
@@ -90,17 +89,17 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-	signCasePresentation,
-	rejectCasePresentation,
-	bulkSignCasePresentations,
-} from "@/actions/case-presentations";
+	signSeminarDiscussion,
+	rejectSeminarDiscussion,
+	bulkSignSeminarDiscussions,
+} from "@/actions/seminar-discussions";
 import { toggleAutoReview } from "@/actions/auto-review";
 import { PATIENT_CATEGORY_OPTIONS } from "@/lib/constants/academic-fields";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-export interface CasePresentationSubmission {
+export interface SeminarDiscussionSubmission {
 	id: string;
 	slNo: number;
 	date: string | null;
@@ -123,8 +122,8 @@ export interface CasePresentationSubmission {
 	};
 }
 
-interface CasePresentationReviewClientProps {
-	submissions: CasePresentationSubmission[];
+interface SeminarDiscussionReviewClientProps {
+	submissions: SeminarDiscussionSubmission[];
 	role: "faculty" | "hod";
 	autoReviewEnabled?: boolean;
 }
@@ -135,11 +134,11 @@ const PAGE_SIZE = 10;
 
 // ======================== MAIN COMPONENT ========================
 
-export function CasePresentationReviewClient({
+export function SeminarDiscussionReviewClient({
 	submissions,
 	role,
 	autoReviewEnabled,
-}: CasePresentationReviewClientProps) {
+}: SeminarDiscussionReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
@@ -162,17 +161,16 @@ export function CasePresentationReviewClient({
 
 	// Detail sheet
 	const [detailEntry, setDetailEntry] =
-		useState<CasePresentationSubmission | null>(null);
+		useState<SeminarDiscussionSubmission | null>(null);
 
 	// Reject dialog
 	const [rejectEntry, setRejectEntry] =
-		useState<CasePresentationSubmission | null>(null);
+		useState<SeminarDiscussionSubmission | null>(null);
 	const [rejectRemark, setRejectRemark] = useState("");
 
 	// Sign dialog
-	const [signEntry, setSignEntry] = useState<CasePresentationSubmission | null>(
-		null,
-	);
+	const [signEntry, setSignEntry] =
+		useState<SeminarDiscussionSubmission | null>(null);
 	const [signRemark, setSignRemark] = useState("");
 
 	// Pagination
@@ -283,7 +281,7 @@ export function CasePresentationReviewClient({
 	}
 
 	// ---- Actions ----
-	const handleSign = useCallback((entry: CasePresentationSubmission) => {
+	const handleSign = useCallback((entry: SeminarDiscussionSubmission) => {
 		setSignEntry(entry);
 		setSignRemark("");
 	}, []);
@@ -292,7 +290,7 @@ export function CasePresentationReviewClient({
 		if (!signEntry) return;
 		startTransition(async () => {
 			try {
-				await signCasePresentation(signEntry.id, signRemark || undefined);
+				await signSeminarDiscussion(signEntry.id, signRemark || undefined);
 				toast.success(
 					`Signed: ${signEntry.patientName ?? "Entry"} (${signEntry.user.firstName})`,
 				);
@@ -310,7 +308,7 @@ export function CasePresentationReviewClient({
 		});
 	}
 
-	function openReject(entry: CasePresentationSubmission) {
+	function openReject(entry: SeminarDiscussionSubmission) {
 		setRejectEntry(entry);
 		setRejectRemark("");
 	}
@@ -323,7 +321,7 @@ export function CasePresentationReviewClient({
 		}
 		startTransition(async () => {
 			try {
-				await rejectCasePresentation(rejectEntry.id, rejectRemark);
+				await rejectSeminarDiscussion(rejectEntry.id, rejectRemark);
 				toast.success("Sent back for revision");
 				setRejectEntry(null);
 				setDetailEntry(null);
@@ -346,7 +344,7 @@ export function CasePresentationReviewClient({
 		if (ids.length === 0) return;
 		startTransition(async () => {
 			try {
-				const result = await bulkSignCasePresentations(ids);
+				const result = await bulkSignSeminarDiscussions(ids);
 				setSelectedIds(new Set());
 				toast.success(`Signed ${result.signedCount} entries`);
 				router.refresh();
@@ -362,9 +360,9 @@ export function CasePresentationReviewClient({
 		setAutoReview(enabled);
 		startTransition(async () => {
 			try {
-				await toggleAutoReview("casePresentations", enabled);
+				await toggleAutoReview("seminarDiscussions", enabled);
 				toast.success(
-					`Auto review ${enabled ? "enabled" : "disabled"} for Case Presentations`,
+					`Auto review ${enabled ? "enabled" : "disabled"} for Seminar Discussions`,
 				);
 				router.refresh();
 			} catch {
@@ -432,13 +430,13 @@ export function CasePresentationReviewClient({
 							<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
 						)}
 						<label
-							htmlFor="cp-auto-review"
+							htmlFor="sd-auto-review"
 							className="text-xs font-medium text-muted-foreground cursor-pointer"
 						>
-							Auto Review (Case Presentations)
+							Auto Review (Seminar Discussions)
 						</label>
 						<Switch
-							id="cp-auto-review"
+							id="sd-auto-review"
 							checked={autoReview}
 							onCheckedChange={handleAutoReviewToggle}
 							disabled={isPending}
@@ -780,7 +778,7 @@ export function CasePresentationReviewClient({
 										>
 											{searchQuery || statusFilter !== "ALL" ?
 												"No matching entries found."
-											:	"No case presentation submissions yet."}
+											:	"No seminar discussion submissions yet."}
 										</TableCell>
 									</TableRow>
 								)}
@@ -831,9 +829,9 @@ export function CasePresentationReviewClient({
 								<div className="flex items-start justify-between gap-3">
 									<SheetTitle className="flex items-center gap-2.5">
 										<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hospital-primary/10">
-											<Stethoscope className="h-4.5 w-4.5 text-hospital-primary" />
+											<FileText className="h-4.5 w-4.5 text-hospital-primary" />
 										</div>
-										Case Presentation #{detailEntry.slNo}
+										Seminar Discussion #{detailEntry.slNo}
 									</SheetTitle>
 									<StatusBadge
 										status={detailEntry.status as EntryStatus}
@@ -961,7 +959,7 @@ export function CasePresentationReviewClient({
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Sign Case Presentation</DialogTitle>
+						<DialogTitle>Sign Seminar Discussion</DialogTitle>
 						<DialogDescription>
 							Entry #{signEntry?.slNo} by {signEntry?.user.firstName}{" "}
 							{signEntry?.user.lastName} — {signEntry?.patientName ?? ""}

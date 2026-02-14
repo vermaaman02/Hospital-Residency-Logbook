@@ -127,6 +127,16 @@ export function RotationReviewClient({
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+	const [batchFilter, setBatchFilter] = useState("ALL");
+
+	// Available batches (derived from submissions)
+	const batches = useMemo(() => {
+		const set = new Set<string>();
+		submissions.forEach((s) => {
+			if (s.user.batchRelation?.name) set.add(s.user.batchRelation.name);
+		});
+		return Array.from(set).sort();
+	}, [submissions]);
 
 	// Bulk selection
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -157,6 +167,10 @@ export function RotationReviewClient({
 			result = result.filter((s) => s.status === statusFilter);
 		}
 
+		if (batchFilter !== "ALL") {
+			result = result.filter((s) => s.user.batchRelation?.name === batchFilter);
+		}
+
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase();
 			result = result.filter(
@@ -168,7 +182,7 @@ export function RotationReviewClient({
 		}
 
 		return result;
-	}, [submissions, statusFilter, searchQuery]);
+	}, [submissions, statusFilter, batchFilter, searchQuery]);
 
 	// Paginate
 	const totalPages = Math.max(
@@ -187,6 +201,10 @@ export function RotationReviewClient({
 	}, []);
 	const handleStatusChange = useCallback((val: StatusFilter) => {
 		setStatusFilter(val);
+		setPage(1);
+	}, []);
+	const handleBatchChange = useCallback((val: string) => {
+		setBatchFilter(val);
 		setPage(1);
 	}, []);
 
@@ -375,6 +393,23 @@ export function RotationReviewClient({
 								</SelectContent>
 							</Select>
 						</div>
+
+						{/* Batch Filter */}
+						{batches.length > 0 && (
+							<Select value={batchFilter} onValueChange={handleBatchChange}>
+								<SelectTrigger className="w-44">
+									<SelectValue placeholder="Batch" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="ALL">All Batches</SelectItem>
+									{batches.map((b) => (
+										<SelectItem key={b} value={b}>
+											{b}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
 					</div>
 
 					{/* Bulk Actions Bar */}

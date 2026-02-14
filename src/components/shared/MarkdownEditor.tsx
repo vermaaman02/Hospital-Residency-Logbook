@@ -33,6 +33,7 @@ interface MarkdownEditorProps {
 	className?: string;
 	minRows?: number;
 	compact?: boolean;
+	spellCheck?: boolean;
 }
 
 /** Render basic markdown to HTML for preview */
@@ -82,6 +83,7 @@ export function MarkdownEditor({
 	className,
 	minRows = 3,
 	compact = false,
+	spellCheck,
 }: MarkdownEditorProps) {
 	const [isPreview, setIsPreview] = useState(false);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -264,6 +266,7 @@ export function MarkdownEditor({
 					placeholder={placeholder}
 					className="border-0 rounded-none focus-visible:ring-0 resize-y text-sm"
 					rows={minRows}
+					spellCheck={spellCheck}
 				/>
 			}
 		</div>

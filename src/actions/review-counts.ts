@@ -68,8 +68,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			prisma.thesis.count({
 				where: {
 					...studentFilter,
-					// Count theses that have content (topic set) — useful for review
-					topic: { not: null },
+					status: "SUBMITTED" as never,
 				},
 			}),
 			prisma.casePresentation.count({

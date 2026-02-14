@@ -1,20 +1,19 @@
 /**
- * @module HOD Case Presentations Review Page
- * @description HOD review page for student case presentation submissions.
- * Same as the faculty page but always scoped as HOD (sees all students).
+ * @module HOD Case Presentations & Seminars Review Page
+ * @description HOD review page for student case presentation and seminar submissions.
+ * Same as the faculty page but always scoped as HOD (sees all students). Tabbed layout.
  *
  * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION"
+ * @see PG Logbook .md — "SEMINAR/EVIDENCE BASED DISCUSSION PRESENTED"
  */
 
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { getCasePresentationsForReview } from "@/actions/case-presentations";
+import { getSeminarDiscussionsForReview } from "@/actions/seminar-discussions";
 import { getAutoReviewSettings } from "@/actions/auto-review";
-import {
-	CasePresentationReviewClient,
-	type CasePresentationSubmission,
-} from "../../faculty/case-presentations/CasePresentationReviewClient";
+import { ReviewAcademicTabs } from "../../faculty/case-presentations/ReviewAcademicTabs";
 
 export default async function HodCasePresentationsPage() {
 	try {
@@ -23,28 +22,30 @@ export default async function HodCasePresentationsPage() {
 		redirect("/dashboard/student");
 	}
 
-	const [rawSubmissions, autoReviewSettings] = await Promise.all([
+	const [rawCPs, rawSDs, autoReviewSettings] = await Promise.all([
 		getCasePresentationsForReview(),
+		getSeminarDiscussionsForReview(),
 		getAutoReviewSettings(),
 	]);
-	const submissions: CasePresentationSubmission[] = JSON.parse(
-		JSON.stringify(rawSubmissions),
-	);
+	const casePresentations = JSON.parse(JSON.stringify(rawCPs));
+	const seminarDiscussions = JSON.parse(JSON.stringify(rawSDs));
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Case Presentations — Review"
-				description="Review all student case presentation submissions"
+				title="Case Presentations & Seminars — Review"
+				description="Review all student case presentation and seminar submissions"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/hod" },
-					{ label: "Case Presentations" },
+					{ label: "Case Presentations & Seminars" },
 				]}
 			/>
-			<CasePresentationReviewClient
-				submissions={submissions}
+			<ReviewAcademicTabs
+				casePresentations={casePresentations}
+				seminarDiscussions={seminarDiscussions}
 				role="hod"
-				autoReviewEnabled={autoReviewSettings.casePresentations}
+				autoReviewCasePresentations={autoReviewSettings.casePresentations}
+				autoReviewSeminarDiscussions={autoReviewSettings.seminarDiscussions}
 			/>
 		</div>
 	);

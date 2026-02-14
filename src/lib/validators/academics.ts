@@ -31,17 +31,15 @@ export const casePresentationSchema = z.object({
 export type CasePresentationInput = z.infer<typeof casePresentationSchema>;
 
 export const seminarSchema = z.object({
-	date: z.coerce.date({ error: "Date is required" }),
-	patientInfo: z.string().min(1, "Patient information is required"),
-	completeDiagnosis: z.string().min(1, "Complete diagnosis is required"),
-	category: z
-		.enum([
-			"ADULT_NON_TRAUMA",
-			"ADULT_TRAUMA",
-			"PEDIATRIC_NON_TRAUMA",
-			"PEDIATRIC_TRAUMA",
-		])
-		.optional(),
+	date: z.coerce.date().optional().nullable(),
+	patientName: z.string().optional().nullable(),
+	patientAge: z.string().optional().nullable(),
+	patientSex: z.enum(["Male", "Female", "Other"]).optional().nullable(),
+	uhid: z.string().optional().nullable(),
+	completeDiagnosis: z.string().optional().nullable(),
+	category: z.enum(PATIENT_CATEGORIES).optional().nullable(),
+	facultyRemark: z.string().optional().nullable(),
+	facultyId: z.string().optional().nullable(),
 });
 
 export type SeminarInput = z.infer<typeof seminarSchema>;

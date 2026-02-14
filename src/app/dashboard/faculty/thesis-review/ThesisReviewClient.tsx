@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useMemo, useTransition, useCallback } from "react";
+import React, { useState, useMemo, useTransition, useCallback } from "react";
 import {
 	Card,
 	CardContent,
@@ -69,7 +69,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { signThesis, rejectThesis, bulkSignTheses } from "@/actions/thesis";
+import {
+	signThesis,
+	rejectThesis,
+	bulkSignTheses,
+	signSemesterRecord,
+	rejectSemesterRecord,
+} from "@/actions/thesis";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -82,6 +88,8 @@ interface SemesterRecord {
 	srJrMember: string | null;
 	srMember: string | null;
 	facultyMember: string | null;
+	status: string;
+	facultyRemark: string | null;
 }
 
 export interface ThesisForReview {
@@ -128,9 +136,11 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 	const [page, setPage] = useState(1);
 
-	// Detail sheet
-	const [selectedThesis, setSelectedThesis] = useState<ThesisForReview | null>(
-		null,
+	// Detail sheet — store ID, derive object from props so it stays fresh
+	const [selectedThesisId, setSelectedThesisId] = useState<string | null>(null);
+	const selectedThesis = useMemo(
+		() => theses.find((t) => t.id === selectedThesisId) ?? null,
+		[theses, selectedThesisId],
 	);
 
 	// Bulk selection
@@ -143,6 +153,46 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 	// Sign dialog
 	const [signEntry, setSignEntry] = useState<ThesisForReview | null>(null);
 	const [signRemark, setSignRemark] = useState("");
+
+	// Per-semester review
+	const [semRejectId, setSemRejectId] = useState<string | null>(null);
+	const [semRejectSem, setSemRejectSem] = useState<number | null>(null);
+	const [semRejectRemark, setSemRejectRemark] = useState("");
+
+	const handleSignSemester = useCallback(
+		(recordId: string, semester: number) => {
+			startTransition(async () => {
+				try {
+					await signSemesterRecord(recordId);
+					toast.success(`Semester ${semester} approved`);
+					router.refresh();
+				} catch {
+					toast.error("Failed to approve semester record");
+				}
+			});
+		},
+		[router],
+	);
+
+	const openSemReject = useCallback((recordId: string, semester: number) => {
+		setSemRejectId(recordId);
+		setSemRejectSem(semester);
+		setSemRejectRemark("");
+	}, []);
+
+	const confirmSemReject = useCallback(() => {
+		if (!semRejectId || !semRejectRemark.trim()) return;
+		startTransition(async () => {
+			try {
+				await rejectSemesterRecord(semRejectId, semRejectRemark);
+				toast.success(`Semester ${semRejectSem} sent back for revision`);
+				setSemRejectId(null);
+				router.refresh();
+			} catch {
+				toast.error("Failed to reject semester record");
+			}
+		});
+	}, [semRejectId, semRejectRemark, semRejectSem, router]);
 
 	const batches = useMemo(() => {
 		const set = new Set<string>();
@@ -355,7 +405,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 								onChange={(e) => handleSearch(e.target.value)}
 							/>
 						</div>
-						{batches.length > 1 && (
+						{batches.length > 0 && (
 							<Select value={batchFilter} onValueChange={handleBatchFilter}>
 								<SelectTrigger className="w-40">
 									<SelectValue placeholder="Batch" />
@@ -462,7 +512,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 											</TableCell>
 											<TableCell
 												className="max-w-48 truncate text-sm cursor-pointer"
-												onClick={() => setSelectedThesis(thesis)}
+												onClick={() => setSelectedThesisId(thesis.id)}
 											>
 												{thesis.topic || (
 													<span className="text-muted-foreground italic text-xs">
@@ -520,7 +570,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 														variant="ghost"
 														size="sm"
 														className="h-7 w-7 p-0"
-														onClick={() => setSelectedThesis(thesis)}
+														onClick={() => setSelectedThesisId(thesis.id)}
 														title="View details"
 													>
 														<ChevronRight className="h-4 w-4" />
@@ -571,7 +621,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 			{/* Detail Sheet */}
 			<Sheet
 				open={!!selectedThesis}
-				onOpenChange={(open) => !open && setSelectedThesis(null)}
+				onOpenChange={(open) => !open && setSelectedThesisId(null)}
 			>
 				<SheetContent className="sm:max-w-xl overflow-y-auto p-0">
 					{selectedThesis && (
@@ -637,7 +687,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 									</DetailSection>
 								)}
 
-								{/* Semester Committee */}
+								{/* Semester Committee — Per-semester review */}
 								<DetailSection
 									icon={CalendarDays}
 									title="Semester-wise Committee"
@@ -646,7 +696,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 										<Table>
 											<TableHeader>
 												<TableRow className="bg-muted/50">
-													<TableHead className="text-center font-bold w-14">
+													<TableHead className="text-center font-bold w-12">
 														Sem
 													</TableHead>
 													<TableHead className="font-bold text-xs">
@@ -657,6 +707,12 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 													</TableHead>
 													<TableHead className="font-bold text-xs">
 														Faculty Member
+													</TableHead>
+													<TableHead className="text-center font-bold text-xs w-20">
+														Status
+													</TableHead>
+													<TableHead className="text-center font-bold text-xs w-20">
+														Action
 													</TableHead>
 												</TableRow>
 											</TableHeader>
@@ -669,39 +725,119 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 														record?.srJrMember ||
 														record?.srMember ||
 														record?.facultyMember;
+													const semStatus = record?.status ?? "DRAFT";
 													return (
-														<TableRow
-															key={sem}
-															className={cn(
-																!hasFill && "text-muted-foreground/50",
-																hasFill && "bg-green-50/40",
-															)}
-														>
-															<TableCell className="text-center font-bold text-hospital-primary">
-																{sem}
-															</TableCell>
-															<TableCell className="text-sm">
-																{record?.srJrMember || (
-																	<span className="text-muted-foreground/40">
-																		—
-																	</span>
+														<React.Fragment key={sem}>
+															<TableRow
+																className={cn(
+																	!hasFill && "text-muted-foreground/50",
+																	semStatus === "SIGNED" && "bg-green-50/40",
+																	semStatus === "SUBMITTED" && "bg-amber-50/40",
+																	semStatus === "NEEDS_REVISION" &&
+																		"bg-red-50/20",
+																	semStatus === "DRAFT" &&
+																		hasFill &&
+																		"bg-gray-50/40",
 																)}
-															</TableCell>
-															<TableCell className="text-sm">
-																{record?.srMember || (
-																	<span className="text-muted-foreground/40">
-																		—
-																	</span>
+															>
+																<TableCell className="text-center font-bold text-hospital-primary">
+																	{sem}
+																</TableCell>
+																<TableCell className="text-sm">
+																	{record?.srJrMember || (
+																		<span className="text-muted-foreground/40">
+																			—
+																		</span>
+																	)}
+																</TableCell>
+																<TableCell className="text-sm">
+																	{record?.srMember || (
+																		<span className="text-muted-foreground/40">
+																			—
+																		</span>
+																	)}
+																</TableCell>
+																<TableCell className="text-sm">
+																	{record?.facultyMember || (
+																		<span className="text-muted-foreground/40">
+																			—
+																		</span>
+																	)}
+																</TableCell>
+																<TableCell className="text-center">
+																	{hasFill ?
+																		<Badge
+																			variant="outline"
+																			className={cn(
+																				"text-[10px] px-1.5 py-0",
+																				STATUS_COLORS[semStatus] ??
+																					"bg-gray-100",
+																			)}
+																		>
+																			{semStatus === "NEEDS_REVISION" ?
+																				"Revision"
+																			:	semStatus}
+																		</Badge>
+																	:	<span className="text-muted-foreground/40 text-xs">
+																			—
+																		</span>
+																	}
+																</TableCell>
+																<TableCell className="text-center">
+																	{record &&
+																		hasFill &&
+																		semStatus !== "SIGNED" && (
+																			<div className="flex items-center justify-center gap-0.5">
+																				<Button
+																					variant="ghost"
+																					size="sm"
+																					className="h-6 w-6 p-0 text-green-600 hover:bg-green-50"
+																					onClick={() =>
+																						handleSignSemester(record.id, sem)
+																					}
+																					disabled={isPending}
+																					title="Approve semester"
+																				>
+																					<CheckCircle2 className="h-3.5 w-3.5" />
+																				</Button>
+																				<Button
+																					variant="ghost"
+																					size="sm"
+																					className="h-6 w-6 p-0 text-red-600 hover:bg-red-50"
+																					onClick={() =>
+																						openSemReject(record.id, sem)
+																					}
+																					disabled={isPending}
+																					title="Send back"
+																				>
+																					<XCircle className="h-3.5 w-3.5" />
+																				</Button>
+																			</div>
+																		)}
+																	{semStatus === "SIGNED" && (
+																		<span className="text-green-600 text-[10px]">
+																			✓
+																		</span>
+																	)}
+																</TableCell>
+															</TableRow>
+															{/* Per-semester remark */}
+															{semStatus === "NEEDS_REVISION" &&
+																record?.facultyRemark && (
+																	<TableRow className="bg-red-50/40">
+																		<TableCell />
+																		<TableCell
+																			colSpan={5}
+																			className="py-1 text-xs text-red-700"
+																		>
+																			<span className="font-medium">
+																				Remark:
+																			</span>{" "}
+																			{record.facultyRemark}
+																		</TableCell>
+																	</TableRow>
 																)}
-															</TableCell>
-															<TableCell className="text-sm">
-																{record?.facultyMember || (
-																	<span className="text-muted-foreground/40">
-																		—
-																	</span>
-																)}
-															</TableCell>
-														</TableRow>
+														</React.Fragment>
 													);
 												})}
 											</TableBody>
@@ -725,7 +861,6 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 											className="flex-1 bg-green-600 hover:bg-green-700"
 											onClick={() => {
 												handleSign(selectedThesis);
-												setSelectedThesis(null);
 											}}
 											disabled={isPending}
 										>
@@ -736,7 +871,6 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 											className="flex-1"
 											onClick={() => {
 												handleReject(selectedThesis);
-												setSelectedThesis(null);
 											}}
 											disabled={isPending}
 										>
@@ -814,6 +948,55 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 							variant="destructive"
 							onClick={confirmReject}
 							disabled={isPending || !rejectRemark.trim()}
+						>
+							{isPending ?
+								<Loader2 className="h-4 w-4 animate-spin mr-1" />
+							:	<XCircle className="h-4 w-4 mr-1" />}
+							Send Back
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Semester Reject Dialog */}
+			<Dialog
+				open={!!semRejectId}
+				onOpenChange={(open) => {
+					if (!open) {
+						setSemRejectId(null);
+						setSemRejectSem(null);
+						setSemRejectRemark("");
+					}
+				}}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Send Back Semester {semRejectSem}</DialogTitle>
+						<DialogDescription>
+							Provide a remark for semester {semRejectSem} committee record.
+						</DialogDescription>
+					</DialogHeader>
+					<Textarea
+						placeholder="Reason for rejection (required)..."
+						value={semRejectRemark}
+						onChange={(e) => setSemRejectRemark(e.target.value)}
+						rows={3}
+					/>
+					<DialogFooter>
+						<Button
+							variant="outline"
+							onClick={() => {
+								setSemRejectId(null);
+								setSemRejectSem(null);
+								setSemRejectRemark("");
+							}}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={confirmSemReject}
+							disabled={isPending || !semRejectRemark.trim()}
 						>
 							{isPending ?
 								<Loader2 className="h-4 w-4 animate-spin mr-1" />
