@@ -399,6 +399,7 @@ export function ReviewTabsClient({
 				<FacultyTrainingForm
 					students={trainingStudents}
 					existingRecords={trainingRecords}
+					role={role}
 				/>
 			</TabsContent>
 		</Tabs>

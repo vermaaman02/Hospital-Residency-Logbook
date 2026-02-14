@@ -226,6 +226,36 @@ export async function getMyCasePresentations() {
 	});
 }
 
+/**
+ * Faculty/HOD: Get a specific student's case presentations (view-only).
+ */
+export async function getStudentCasePresentations(studentId: string) {
+	await requireRole(["faculty", "hod"]);
+	return prisma.casePresentation.findMany({
+		where: { userId: studentId },
+		orderBy: { slNo: "asc" },
+	});
+}
+
+/**
+ * Faculty/HOD: Get basic student info for view header.
+ */
+export async function getStudentBasicInfo(studentId: string) {
+	await requireRole(["faculty", "hod"]);
+	const student = await prisma.user.findUnique({
+		where: { id: studentId },
+		select: {
+			id: true,
+			firstName: true,
+			lastName: true,
+			currentSemester: true,
+			batchRelation: { select: { name: true } },
+		},
+	});
+	if (!student) throw new Error("Student not found");
+	return student;
+}
+
 // ======================== FACULTY / HOD ACTIONS ========================
 
 /**

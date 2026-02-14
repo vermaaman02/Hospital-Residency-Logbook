@@ -51,6 +51,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { upsertTrainingRecord } from "@/actions/training-mentoring";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export interface Student {
@@ -80,6 +81,7 @@ export interface ExistingRecord {
 interface FacultyTrainingFormProps {
 	students: Student[];
 	existingRecords: ExistingRecord[];
+	role?: "faculty" | "hod";
 }
 
 const DOMAINS = [
@@ -130,6 +132,7 @@ const STUDENTS_PER_PAGE = 10;
 export function FacultyTrainingForm({
 	students,
 	existingRecords,
+	role = "faculty",
 }: FacultyTrainingFormProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -377,12 +380,18 @@ export function FacultyTrainingForm({
 												onClick={() => handleStudentChange(s.id)}
 											>
 												<TableCell className="font-medium">
-													<div>
-														{s.firstName} {s.lastName}
+													<Link
+														href={`/dashboard/${role}/training-mentoring/student/${s.id}`}
+														className="group"
+														onClick={(e) => e.stopPropagation()}
+													>
+														<div className="text-hospital-primary group-hover:underline">
+															{s.firstName} {s.lastName}
+														</div>
 														<span className="block text-xs text-muted-foreground">
 															{s.email}
 														</span>
-													</div>
+													</Link>
 												</TableCell>
 												<TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
 													{s.batchRelation?.name ?? "—"}

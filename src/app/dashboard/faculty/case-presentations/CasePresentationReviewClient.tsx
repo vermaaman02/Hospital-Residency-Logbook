@@ -78,11 +78,17 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Stethoscope,
+	User,
+	FileText,
+	CalendarDays,
+	Tag,
+	MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
 	signCasePresentation,
 	rejectCasePresentation,
@@ -622,14 +628,19 @@ export function CasePresentationReviewClient({
 										<TableCell className="text-center font-medium">
 											{entry.slNo}.
 										</TableCell>
-										<TableCell>
-											<div className="text-sm font-medium">
-												{entry.user.firstName} {entry.user.lastName}
-											</div>
-											<div className="text-xs text-muted-foreground">
-												{entry.user.batchRelation?.name ?? "—"} · Sem{" "}
-												{entry.user.currentSemester ?? "?"}
-											</div>
+										<TableCell onClick={(e) => e.stopPropagation()}>
+											<Link
+												href={`/dashboard/${role}/case-presentations/student/${entry.user.id}`}
+												className="group"
+											>
+												<div className="text-sm font-medium text-hospital-primary group-hover:underline">
+													{entry.user.firstName} {entry.user.lastName}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													{entry.user.batchRelation?.name ?? "—"} · Sem{" "}
+													{entry.user.currentSemester ?? "?"}
+												</div>
+											</Link>
 										</TableCell>
 										<TableCell className="text-center text-sm">
 											{entry.date ?
@@ -762,75 +773,126 @@ export function CasePresentationReviewClient({
 				open={!!detailEntry}
 				onOpenChange={(open) => !open && setDetailEntry(null)}
 			>
-				<SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+				<SheetContent className="w-full sm:max-w-xl overflow-y-auto">
 					{detailEntry && (
 						<>
-							<SheetHeader>
-								<SheetTitle className="flex items-center gap-2">
-									<Stethoscope className="h-5 w-5" />
-									Case Presentation #{detailEntry.slNo}
-								</SheetTitle>
-								<SheetDescription>
+							<SheetHeader className="pb-4 border-b">
+								<div className="flex items-start justify-between gap-3">
+									<SheetTitle className="flex items-center gap-2.5">
+										<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hospital-primary/10">
+											<Stethoscope className="h-4.5 w-4.5 text-hospital-primary" />
+										</div>
+										Case Presentation #{detailEntry.slNo}
+									</SheetTitle>
+									<StatusBadge
+										status={detailEntry.status as EntryStatus}
+										size="md"
+									/>
+								</div>
+								<SheetDescription className="mt-1">
 									by {detailEntry.user.firstName} {detailEntry.user.lastName} ·{" "}
 									{detailEntry.user.batchRelation?.name ?? "—"}
+									{detailEntry.user.currentSemester ?
+										` · Sem ${detailEntry.user.currentSemester}`
+									:	""}
 								</SheetDescription>
 							</SheetHeader>
 
-							<div className="mt-6 space-y-4">
-								<StatusBadge
-									status={detailEntry.status as EntryStatus}
-									size="md"
-								/>
+							<div className="mt-6 space-y-6">
+								{/* Patient Information */}
+								<DetailSection title="Patient Information" icon={User}>
+									<DetailRow
+										label="Name"
+										value={detailEntry.patientName ?? "—"}
+									/>
+									<div className="grid grid-cols-3 gap-x-4">
+										<DetailRow
+											label="Age"
+											value={detailEntry.patientAge ?? "—"}
+										/>
+										<DetailRow
+											label="Sex"
+											value={detailEntry.patientSex ?? "—"}
+										/>
+										<DetailRow label="UHID" value={detailEntry.uhid ?? "—"} />
+									</div>
+								</DetailSection>
 
-								<DetailField
-									label="Date"
-									value={
-										detailEntry.date ?
-											format(new Date(detailEntry.date), "dd MMMM yyyy")
-										:	"—"
-									}
-								/>
-								<DetailField
-									label="Patient Name"
-									value={detailEntry.patientName}
-								/>
-								<div className="grid grid-cols-3 gap-3">
-									<DetailField label="Age" value={detailEntry.patientAge} />
-									<DetailField label="Sex" value={detailEntry.patientSex} />
-									<DetailField label="UHID" value={detailEntry.uhid} />
-								</div>
-								<DetailField
-									label="Complete Diagnosis"
-									value={detailEntry.completeDiagnosis}
-									isMarkdown
-								/>
-								<DetailField
-									label="Category"
-									value={getCategoryLabel(detailEntry.category)}
-								/>
-								<DetailField
-									label="Faculty Remark"
-									value={detailEntry.facultyRemark}
-									isMarkdown
-								/>
+								{/* Case Details */}
+								<DetailSection title="Case Details" icon={CalendarDays}>
+									<DetailRow
+										label="Date"
+										value={
+											detailEntry.date ?
+												format(new Date(detailEntry.date), "dd MMMM yyyy")
+											:	"—"
+										}
+									/>
+									<DetailRow
+										label="Category"
+										value={getCategoryLabel(detailEntry.category)}
+									/>
+								</DetailSection>
 
+								{/* Diagnosis */}
+								<DetailSection title="Complete Diagnosis" icon={FileText}>
+									{detailEntry.completeDiagnosis ?
+										<div
+											className="prose prose-sm max-w-none bg-muted/30 rounded-lg p-3 text-sm"
+											dangerouslySetInnerHTML={{
+												__html: renderMarkdown(detailEntry.completeDiagnosis),
+											}}
+										/>
+									:	<p className="text-sm text-muted-foreground pl-6">—</p>}
+								</DetailSection>
+
+								{/* Faculty Remark */}
+								{detailEntry.facultyRemark && (
+									<DetailSection title="Faculty Remark" icon={MessageSquare}>
+										<div
+											className="prose prose-sm max-w-none bg-amber-50/50 border border-amber-200/50 rounded-lg p-3 text-sm"
+											dangerouslySetInnerHTML={{
+												__html: renderMarkdown(detailEntry.facultyRemark),
+											}}
+										/>
+									</DetailSection>
+								)}
+
+								{/* Status Info */}
+								<DetailSection title="Status" icon={Tag}>
+									<div className="flex items-center gap-2">
+										<StatusBadge
+											status={detailEntry.status as EntryStatus}
+											size="sm"
+										/>
+									</div>
+									<div className="text-xs text-muted-foreground">
+										Created:{" "}
+										{format(
+											new Date(detailEntry.createdAt),
+											"dd MMM yyyy, HH:mm",
+										)}
+									</div>
+								</DetailSection>
+
+								{/* Action Buttons */}
 								{detailEntry.status === "SUBMITTED" && (
-									<div className="flex gap-2 pt-4 border-t">
+									<div className="flex gap-3 pt-4 border-t">
 										<Button
-											className="flex-1 bg-green-600 hover:bg-green-700 gap-1.5"
+											className="flex-1 bg-green-600 hover:bg-green-700 text-white"
 											onClick={() => handleSign(detailEntry)}
 											disabled={isPending}
 										>
-											<CheckCircle2 className="h-4 w-4" />
-											Sign
+											<CheckCircle2 className="h-4 w-4 mr-2" />
+											Sign Off
 										</Button>
 										<Button
-											variant="destructive"
-											className="flex-1 gap-1.5"
+											variant="outline"
+											className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
 											onClick={() => openReject(detailEntry)}
 											disabled={isPending}
 										>
-											<XCircle className="h-4 w-4" />
+											<XCircle className="h-4 w-4 mr-2" />
 											Request Revision
 										</Button>
 									</div>
@@ -967,24 +1029,31 @@ function StatMini({
 	);
 }
 
-function DetailField({
-	label,
-	value,
-	isMarkdown,
+function DetailSection({
+	title,
+	icon: Icon,
+	children,
 }: {
-	label: string;
-	value: string | null | undefined;
-	isMarkdown?: boolean;
+	title: string;
+	icon: React.ComponentType<{ className?: string }>;
+	children: React.ReactNode;
 }) {
 	return (
 		<div>
-			<p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
-			{isMarkdown && value ?
-				<div
-					className="prose prose-sm max-w-none bg-muted/30 rounded-md p-2 text-sm"
-					dangerouslySetInnerHTML={{ __html: renderMarkdown(value) }}
-				/>
-			:	<p className="text-sm">{value || "—"}</p>}
+			<h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+				<Icon className="h-4 w-4 text-hospital-primary" />
+				{title}
+			</h3>
+			<div className="space-y-1.5 pl-6">{children}</div>
+		</div>
+	);
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="flex items-baseline gap-2 text-sm">
+			<span className="text-muted-foreground min-w-28">{label}:</span>
+			<span className="font-medium">{value}</span>
 		</div>
 	);
 }

@@ -338,21 +338,21 @@ export function CasePresentationTable({
 					</div>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-280">
+					<div className="border rounded-lg min-w-300">
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">
-									<TableHead className="w-14 text-center font-bold">
+									<TableHead className="w-16 text-center font-bold">
 										Sl. No.
 									</TableHead>
-									<TableHead className="w-28 text-center font-bold">
+									<TableHead className="w-30 text-center font-bold">
 										Date
 									</TableHead>
-									<TableHead className="w-32 font-bold">Patient Name</TableHead>
-									<TableHead className="w-16 text-center font-bold">
+									<TableHead className="w-36 font-bold">Patient Name</TableHead>
+									<TableHead className="w-18 text-center font-bold">
 										Age
 									</TableHead>
-									<TableHead className="w-20 text-center font-bold">
+									<TableHead className="w-22 text-center font-bold">
 										Sex
 									</TableHead>
 									<TableHead className="w-28 text-center font-bold">
@@ -548,7 +548,7 @@ function EditRow({
 							variant="outline"
 							size="sm"
 							className={cn(
-								"h-8 text-xs px-2 w-26",
+								"h-8 text-sm px-2 w-28",
 								!form.date && "text-muted-foreground",
 							)}
 						>
@@ -570,7 +570,7 @@ function EditRow({
 			{/* Patient Name */}
 			<TableCell className="pt-2">
 				<Input
-					className="h-8 text-xs"
+					className="h-8 text-sm"
 					placeholder="Name"
 					value={form.patientName}
 					onChange={(e) =>
@@ -582,7 +582,7 @@ function EditRow({
 			{/* Age */}
 			<TableCell className="pt-2">
 				<Input
-					className="h-8 text-xs text-center w-14"
+					className="h-8 text-sm text-center w-16"
 					placeholder="Age"
 					value={form.patientAge}
 					onChange={(e) =>
@@ -599,7 +599,7 @@ function EditRow({
 						setForm((p) => ({ ...p, patientSex: v === "none" ? "" : v }))
 					}
 				>
-					<SelectTrigger className="h-8 text-xs w-20">
+					<SelectTrigger className="h-8 text-sm w-22">
 						<SelectValue placeholder="Sex" />
 					</SelectTrigger>
 					<SelectContent>
@@ -616,7 +616,7 @@ function EditRow({
 			{/* UHID */}
 			<TableCell className="pt-2">
 				<Input
-					className="h-8 text-xs text-center"
+					className="h-8 text-sm w-24"
 					placeholder="UHID"
 					value={form.uhid}
 					onChange={(e) => setForm((p) => ({ ...p, uhid: e.target.value }))}

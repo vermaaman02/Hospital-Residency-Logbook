@@ -75,6 +75,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
 	signRotationPosting,
 	rejectRotationPosting,
@@ -476,14 +477,19 @@ export function RotationReviewClient({
 													/>
 												)}
 											</TableCell>
-											<TableCell>
-												<div className="font-medium">
-													{sub.user.firstName} {sub.user.lastName}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													{sub.user.batchRelation?.name ?? "No batch"} · Sem{" "}
-													{sub.user.currentSemester ?? "?"}
-												</div>
+											<TableCell onClick={(e) => e.stopPropagation()}>
+												<Link
+													href={`/dashboard/${role}/rotation-postings/student/${sub.user.id}`}
+													className="group"
+												>
+													<div className="font-medium text-hospital-primary group-hover:underline">
+														{sub.user.firstName} {sub.user.lastName}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														{sub.user.batchRelation?.name ?? "No batch"} · Sem{" "}
+														{sub.user.currentSemester ?? "?"}
+													</div>
+												</Link>
 											</TableCell>
 											<TableCell>
 												<div className="font-medium">{sub.rotationName}</div>

@@ -62,7 +62,12 @@ import {
 	CheckCircle2,
 	XCircle,
 	Loader2,
+	FileText,
+	CalendarDays,
+	MessageSquare,
+	ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { signThesis, rejectThesis, bulkSignTheses } from "@/actions/thesis";
 import { toast } from "sonner";
@@ -115,10 +120,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ======================== COMPONENT ========================
 
-export function ThesisReviewClient({
-	theses,
-	role: _role,
-}: ThesisReviewClientProps) {
+export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [search, setSearch] = useState("");
@@ -443,15 +445,20 @@ export function ThesisReviewClient({
 												/>
 											</TableCell>
 											<TableCell
-												className="font-medium cursor-pointer"
-												onClick={() => setSelectedThesis(thesis)}
+												className="font-medium"
+												onClick={(e) => e.stopPropagation()}
 											>
-												<div>
-													{thesis.user.firstName} {thesis.user.lastName}
+												<Link
+													href={`/dashboard/${role}/thesis-review/student/${thesis.user.id}`}
+													className="group"
+												>
+													<div className="text-hospital-primary group-hover:underline">
+														{thesis.user.firstName} {thesis.user.lastName}
+													</div>
 													<span className="block text-xs text-muted-foreground">
 														Sem {thesis.user.currentSemester ?? "—"}
 													</span>
-												</div>
+												</Link>
 											</TableCell>
 											<TableCell
 												className="max-w-48 truncate text-sm cursor-pointer"
@@ -566,83 +573,89 @@ export function ThesisReviewClient({
 				open={!!selectedThesis}
 				onOpenChange={(open) => !open && setSelectedThesis(null)}
 			>
-				<SheetContent className="sm:max-w-xl overflow-y-auto">
+				<SheetContent className="sm:max-w-xl overflow-y-auto p-0">
 					{selectedThesis && (
 						<>
-							<SheetHeader>
-								<SheetTitle>
-									{selectedThesis.user.firstName} {selectedThesis.user.lastName}{" "}
-									— Thesis
-								</SheetTitle>
-								<SheetDescription>
-									Batch: {selectedThesis.user.batchRelation?.name ?? "N/A"} |
-									Semester: {selectedThesis.user.currentSemester ?? "—"}
-								</SheetDescription>
-							</SheetHeader>
-
-							<div className="mt-6 space-y-6">
-								{/* Status + Remark */}
-								<div className="flex items-center gap-3">
+							{/* Branded Header */}
+							<div className="bg-linear-to-r from-hospital-primary to-hospital-primary-dark p-6 text-white">
+								<div className="flex items-start justify-between">
+									<div className="flex items-center gap-3">
+										<div className="p-2.5 bg-white/20 rounded-lg">
+											<BookOpen className="h-5 w-5" />
+										</div>
+										<div>
+											<SheetHeader className="p-0 space-y-0.5">
+												<SheetTitle className="text-white text-lg">
+													{selectedThesis.user.firstName}{" "}
+													{selectedThesis.user.lastName}
+												</SheetTitle>
+												<SheetDescription className="text-white/80 text-sm">
+													{selectedThesis.user.batchRelation?.name ?? "N/A"} ·
+													Semester {selectedThesis.user.currentSemester ?? "—"}
+												</SheetDescription>
+											</SheetHeader>
+										</div>
+									</div>
 									<Badge
 										className={cn(
-											"text-xs",
+											"text-xs font-semibold",
 											STATUS_COLORS[selectedThesis.status] ?? "bg-gray-100",
 										)}
 									>
-										{selectedThesis.status}
+										{selectedThesis.status === "NEEDS_REVISION" ?
+											"Revision"
+										:	selectedThesis.status}
 									</Badge>
-									{selectedThesis.facultyRemark && (
-										<span className="text-xs text-muted-foreground">
-											Remark: {selectedThesis.facultyRemark}
-										</span>
-									)}
 								</div>
+							</div>
 
-								{/* Topic & Guide */}
-								<div className="space-y-3">
-									<div>
-										<label className="text-xs font-medium text-muted-foreground">
-											THESIS TOPIC
-										</label>
-										<p className="text-sm font-medium mt-0.5">
-											{selectedThesis.topic || (
-												<span className="text-muted-foreground italic">
-													Not set
-												</span>
-											)}
-										</p>
-									</div>
-									<div>
-										<label className="text-xs font-medium text-muted-foreground">
-											CHIEF GUIDE
-										</label>
-										<p className="text-sm font-medium mt-0.5">
-											{selectedThesis.chiefGuide || (
-												<span className="text-muted-foreground italic">
-													Not assigned
-												</span>
-											)}
-										</p>
-									</div>
-								</div>
+							<div className="p-6 space-y-6">
+								{/* Thesis Info Section */}
+								<DetailSection icon={FileText} title="Thesis Information">
+									<DetailRow label="Topic">
+										{selectedThesis.topic || (
+											<span className="text-muted-foreground italic">
+												Not set
+											</span>
+										)}
+									</DetailRow>
+									<DetailRow label="Chief Guide">
+										{selectedThesis.chiefGuide || (
+											<span className="text-muted-foreground italic">
+												Not assigned
+											</span>
+										)}
+									</DetailRow>
+								</DetailSection>
 
-								{/* Semester Records */}
-								<div>
-									<label className="text-xs font-medium text-muted-foreground">
-										SEMESTER-WISE COMMITTEE
-									</label>
-									<div className="mt-2 border rounded-lg">
+								{/* Faculty Remark */}
+								{selectedThesis.facultyRemark && (
+									<DetailSection icon={MessageSquare} title="Faculty Remark">
+										<div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+											{selectedThesis.facultyRemark}
+										</div>
+									</DetailSection>
+								)}
+
+								{/* Semester Committee */}
+								<DetailSection
+									icon={CalendarDays}
+									title="Semester-wise Committee"
+								>
+									<div className="border rounded-lg overflow-hidden">
 										<Table>
 											<TableHeader>
 												<TableRow className="bg-muted/50">
-													<TableHead className="text-center font-bold w-16">
+													<TableHead className="text-center font-bold w-14">
 														Sem
 													</TableHead>
-													<TableHead className="font-bold">
+													<TableHead className="font-bold text-xs">
 														SR/JR Member
 													</TableHead>
-													<TableHead className="font-bold">SR Member</TableHead>
-													<TableHead className="font-bold">
+													<TableHead className="font-bold text-xs">
+														SR Member
+													</TableHead>
+													<TableHead className="font-bold text-xs">
 														Faculty Member
 													</TableHead>
 												</TableRow>
@@ -652,24 +665,41 @@ export function ThesisReviewClient({
 													const record = selectedThesis.semesterRecords.find(
 														(r) => r.semester === sem,
 													);
+													const hasFill =
+														record?.srJrMember ||
+														record?.srMember ||
+														record?.facultyMember;
 													return (
 														<TableRow
 															key={sem}
-															className={
-																record ? "" : "text-muted-foreground/50"
-															}
+															className={cn(
+																!hasFill && "text-muted-foreground/50",
+																hasFill && "bg-green-50/40",
+															)}
 														>
-															<TableCell className="text-center font-medium">
+															<TableCell className="text-center font-bold text-hospital-primary">
 																{sem}
 															</TableCell>
 															<TableCell className="text-sm">
-																{record?.srJrMember || "—"}
+																{record?.srJrMember || (
+																	<span className="text-muted-foreground/40">
+																		—
+																	</span>
+																)}
 															</TableCell>
 															<TableCell className="text-sm">
-																{record?.srMember || "—"}
+																{record?.srMember || (
+																	<span className="text-muted-foreground/40">
+																		—
+																	</span>
+																)}
 															</TableCell>
 															<TableCell className="text-sm">
-																{record?.facultyMember || "—"}
+																{record?.facultyMember || (
+																	<span className="text-muted-foreground/40">
+																		—
+																	</span>
+																)}
 															</TableCell>
 														</TableRow>
 													);
@@ -677,7 +707,16 @@ export function ThesisReviewClient({
 											</TableBody>
 										</Table>
 									</div>
-								</div>
+								</DetailSection>
+
+								{/* View Full Profile link */}
+								<Link
+									href={`/dashboard/${role}/thesis-review/student/${selectedThesis.user.id}`}
+									className="flex items-center justify-center gap-2 text-sm text-hospital-primary hover:underline py-2"
+								>
+									<ExternalLink className="h-4 w-4" />
+									View student thesis page
+								</Link>
 
 								{/* Action buttons in sheet */}
 								{selectedThesis.status !== "SIGNED" && (
@@ -784,6 +823,45 @@ export function ThesisReviewClient({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+		</div>
+	);
+}
+
+// ======================== DETAIL HELPERS ========================
+
+function DetailSection({
+	icon: Icon,
+	title,
+	children,
+}: {
+	icon: React.ComponentType<{ className?: string }>;
+	title: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div className="space-y-3">
+			<div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+				<Icon className="h-4 w-4 text-hospital-primary" />
+				{title}
+			</div>
+			{children}
+		</div>
+	);
+}
+
+function DetailRow({
+	label,
+	children,
+}: {
+	label: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3 py-1.5 border-b border-dashed last:border-0">
+			<span className="text-xs font-medium text-muted-foreground min-w-28 shrink-0 uppercase tracking-wide">
+				{label}
+			</span>
+			<span className="text-sm font-medium text-foreground">{children}</span>
 		</div>
 	);
 }
