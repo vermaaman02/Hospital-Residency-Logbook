@@ -17,6 +17,7 @@ export interface PendingCounts {
 	rotationPostings: number;
 	thesisRecords: number;
 	casePresentations: number;
+	journalClubs: number;
 	total: number;
 }
 
@@ -31,6 +32,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			rotationPostings: 0,
 			thesisRecords: 0,
 			casePresentations: 0,
+			journalClubs: 0,
 			total: 0,
 		};
 
@@ -47,6 +49,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				rotationPostings: 0,
 				thesisRecords: 0,
 				casePresentations: 0,
+				journalClubs: 0,
 				total: 0,
 			};
 
@@ -60,7 +63,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const studentFilter =
 		studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
-	const [rotationPostings, thesisRecords, casePresentations] =
+	const [rotationPostings, thesisRecords, casePresentations, journalClubs] =
 		await Promise.all([
 			prisma.rotationPosting.count({
 				where: { ...studentFilter, status: "SUBMITTED" as never },
@@ -74,9 +77,19 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			prisma.casePresentation.count({
 				where: { ...studentFilter, status: "SUBMITTED" as never },
 			}),
+			prisma.journalClub.count({
+				where: { ...studentFilter, status: "SUBMITTED" as never },
+			}),
 		]);
 
-	const total = rotationPostings + thesisRecords + casePresentations;
+	const total =
+		rotationPostings + thesisRecords + casePresentations + journalClubs;
 
-	return { rotationPostings, thesisRecords, casePresentations, total };
+	return {
+		rotationPostings,
+		thesisRecords,
+		casePresentations,
+		journalClubs,
+		total,
+	};
 }

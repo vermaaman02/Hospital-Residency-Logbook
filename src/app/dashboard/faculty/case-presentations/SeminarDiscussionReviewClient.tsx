@@ -183,16 +183,22 @@ export function SeminarDiscussionReviewClient({
 	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
 	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
 
-	// Unique students list
+	// Export-specific status filter (independent of table display filter)
+	const [exportStatusFilter, setExportStatusFilter] =
+		useState<StatusFilter>("ALL");
+
+	// Unique students list (filtered by batch)
 	const studentOptions = useMemo(() => {
 		const map = new Map<string, string>();
 		for (const s of submissions) {
+			if (batchFilter !== "ALL" && s.user.batchRelation?.name !== batchFilter)
+				continue;
 			map.set(s.user.id, `${s.user.firstName} ${s.user.lastName}`.trim());
 		}
 		return Array.from(map.entries())
 			.map(([id, name]) => ({ id, name: name || "Unknown" }))
 			.sort((a, b) => a.name.localeCompare(b.name));
-	}, [submissions]);
+	}, [submissions, batchFilter]);
 
 	// ---- Category helper ----
 	const getCategoryLabel = useCallback((val: string | null) => {
@@ -244,6 +250,7 @@ export function SeminarDiscussionReviewClient({
 	}, []);
 	const handleBatchChange = useCallback((val: string) => {
 		setBatchFilter(val);
+		setSelectedStudentId("all");
 		setCurrentPage(1);
 	}, []);
 
@@ -381,8 +388,8 @@ export function SeminarDiscussionReviewClient({
 				(s) => s.user.batchRelation?.name === batchFilter,
 			);
 		}
-		if (statusFilter !== "ALL") {
-			exportData = exportData.filter((s) => s.status === statusFilter);
+		if (exportStatusFilter !== "ALL") {
+			exportData = exportData.filter((s) => s.status === exportStatusFilter);
 		}
 		if (selectedStudentId !== "all") {
 			exportData = exportData.filter((s) => s.user.id === selectedStudentId);
@@ -403,7 +410,7 @@ export function SeminarDiscussionReviewClient({
 			batch: e.user.batchRelation?.name ?? "—",
 			semester: e.user.currentSemester ?? 0,
 		}));
-	}, [submissions, selectedStudentId, batchFilter, statusFilter]);
+	}, [submissions, selectedStudentId, batchFilter, exportStatusFilter]);
 
 	const handleExportPdf = useCallback(async () => {
 		const { exportCasePresentationReviewToPdf } =
@@ -421,8 +428,8 @@ export function SeminarDiscussionReviewClient({
 
 	return (
 		<div className="space-y-6">
-			{/* Auto-Review Toggle + Export */}
-			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+			{/* Top-level filter bar — auto-review + batch + export status + student + export */}
+			<div className="flex flex-wrap items-center gap-3">
 				{/* HOD Auto-Review Toggle */}
 				{role === "hod" && (
 					<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30">
@@ -444,73 +451,107 @@ export function SeminarDiscussionReviewClient({
 					</div>
 				)}
 
-				<div className="flex items-center gap-2 ml-auto">
-					{/* Student Filter for Export */}
-					<Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
-						<PopoverTrigger asChild>
-							<Button
-								variant="outline"
-								size="sm"
-								role="combobox"
-								className="w-48 justify-between text-xs"
-							>
-								{selectedStudentId === "all" ?
-									"All Students"
-								:	(studentOptions.find((s) => s.id === selectedStudentId)
-										?.name ?? "Select student...")
-								}
-								<ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-56 p-0" align="end">
-							<Command>
-								<CommandInput placeholder="Search student..." />
-								<CommandList>
-									<CommandEmpty>No student found.</CommandEmpty>
-									<CommandGroup>
+				{/* Batch Filter */}
+				{batches.length > 0 && (
+					<Select value={batchFilter} onValueChange={handleBatchChange}>
+						<SelectTrigger className="w-44 shrink-0">
+							<SelectValue placeholder="Batch" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="ALL">All Batches</SelectItem>
+							{batches.map((b) => (
+								<SelectItem key={b} value={b}>
+									{b}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
+
+				{/* Export Status Filter */}
+				<Select
+					value={exportStatusFilter}
+					onValueChange={(v) => setExportStatusFilter(v as StatusFilter)}
+				>
+					<SelectTrigger className="w-44 shrink-0">
+						<Filter className="h-4 w-4 mr-2" />
+						<SelectValue placeholder="All Status" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="ALL">All Status</SelectItem>
+						<SelectItem value="SUBMITTED">Pending</SelectItem>
+						<SelectItem value="SIGNED">Signed</SelectItem>
+						<SelectItem value="NEEDS_REVISION">Needs Revision</SelectItem>
+					</SelectContent>
+				</Select>
+
+				{/* Student Filter for Export */}
+				<Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+					<PopoverTrigger asChild>
+						<Button
+							variant="outline"
+							size="sm"
+							role="combobox"
+							className="w-48 justify-between text-xs"
+						>
+							{selectedStudentId === "all" ?
+								"All Students"
+							:	(studentOptions.find((s) => s.id === selectedStudentId)?.name ??
+								"Select student...")
+							}
+							<ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent className="w-56 p-0" align="end">
+						<Command>
+							<CommandInput placeholder="Search student..." />
+							<CommandList>
+								<CommandEmpty>No student found.</CommandEmpty>
+								<CommandGroup>
+									<CommandItem
+										value="all"
+										onSelect={() => {
+											setSelectedStudentId("all");
+											setStudentPickerOpen(false);
+										}}
+									>
+										<Check
+											className={cn(
+												"mr-2 h-4 w-4",
+												selectedStudentId === "all" ? "opacity-100" : (
+													"opacity-0"
+												),
+											)}
+										/>
+										All Students
+									</CommandItem>
+									{studentOptions.map((s) => (
 										<CommandItem
-											value="all"
+											key={s.id}
+											value={s.name}
 											onSelect={() => {
-												setSelectedStudentId("all");
+												setSelectedStudentId(s.id);
 												setStudentPickerOpen(false);
 											}}
 										>
 											<Check
 												className={cn(
 													"mr-2 h-4 w-4",
-													selectedStudentId === "all" ? "opacity-100" : (
-														"opacity-0"
-													),
+													selectedStudentId === s.id ?
+														"opacity-100"
+													:	"opacity-0",
 												)}
 											/>
-											All Students
+											{s.name}
 										</CommandItem>
-										{studentOptions.map((s) => (
-											<CommandItem
-												key={s.id}
-												value={s.name}
-												onSelect={() => {
-													setSelectedStudentId(s.id);
-													setStudentPickerOpen(false);
-												}}
-											>
-												<Check
-													className={cn(
-														"mr-2 h-4 w-4",
-														selectedStudentId === s.id ?
-															"opacity-100"
-														:	"opacity-0",
-													)}
-												/>
-												{s.name}
-											</CommandItem>
-										))}
-									</CommandGroup>
-								</CommandList>
-							</Command>
-						</PopoverContent>
-					</Popover>
+									))}
+								</CommandGroup>
+							</CommandList>
+						</Command>
+					</PopoverContent>
+				</Popover>
 
+				<div className="ml-auto">
 					<ExportDropdown
 						onExportPdf={handleExportPdf}
 						onExportExcel={handleExportExcel}
@@ -518,7 +559,7 @@ export function SeminarDiscussionReviewClient({
 							(
 								selectedStudentId !== "all" ||
 								batchFilter !== "ALL" ||
-								statusFilter !== "ALL"
+								exportStatusFilter !== "ALL"
 							) ?
 								"Download (Filtered)"
 							:	"Download All"
@@ -578,23 +619,6 @@ export function SeminarDiscussionReviewClient({
 								</SelectItem>
 							</SelectContent>
 						</Select>
-
-						{/* Batch Filter */}
-						{batches.length > 0 && (
-							<Select value={batchFilter} onValueChange={handleBatchChange}>
-								<SelectTrigger className="w-44 shrink-0">
-									<SelectValue placeholder="Batch" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="ALL">All Batches</SelectItem>
-									{batches.map((b) => (
-										<SelectItem key={b} value={b}>
-											{b}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						)}
 
 						{/* Bulk Sign */}
 						{selectedIds.size > 0 && (

@@ -247,9 +247,10 @@ const facultyNavSections: NavSection[] = [
 			},
 			{
 				title: "Journal Clubs",
-				href: "/dashboard/faculty/reviews?category=academic&tab=journalClubs",
+				href: "/dashboard/faculty/journal-clubs",
 				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "journalClubs",
 			},
 		],
 	},
@@ -424,9 +425,10 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Journal Clubs",
-				href: "/dashboard/faculty/reviews?category=academic&tab=journalClubs",
+				href: "/dashboard/hod/journal-clubs",
 				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "journalClubs",
 			},
 		],
 	},

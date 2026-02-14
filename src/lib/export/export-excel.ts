@@ -348,3 +348,86 @@ export function exportCasePresentationReviewToExcel(
 		`Case_Presentations_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
 	);
 }
+
+// ======================== JOURNAL CLUB TYPES ========================
+
+export interface JournalClubExportRow {
+	slNo: number;
+	date: string | null;
+	journalArticle: string | null;
+	typeOfStudy: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+export interface JournalClubReviewRow extends JournalClubExportRow {
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+// ======================== JOURNAL CLUB — STUDENT EXPORT ========================
+
+export function exportJournalClubsToExcel(
+	entries: JournalClubExportRow[],
+	studentName: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Date: e.date ?? "",
+		"Journal Article": stripMd(e.journalArticle),
+		"Type of Study": stripMd(e.typeOfStudy),
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }],
+	);
+	setColumnWidths(ws, [8, 14, 40, 30, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Journal Clubs");
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Journal_Clubs_${safeName}_${formatDateForFile()}.xlsx`);
+}
+
+// ======================== JOURNAL CLUB — FACULTY/HOD EXPORT ========================
+
+export function exportJournalClubReviewToExcel(
+	entries: JournalClubReviewRow[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Date: e.date ?? "",
+		"Journal Article": stripMd(e.journalArticle),
+		"Type of Study": stripMd(e.typeOfStudy),
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 14, 40, 30, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Journal Clubs Review");
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Journal_Clubs_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}

@@ -955,3 +955,204 @@ export async function exportCasePresentationReviewToPdf(
 		`Case_Presentations_Review_${roleLabel}_${formatFileDate()}.pdf`,
 	);
 }
+
+// ======================== JOURNAL CLUB TYPES ========================
+
+interface JournalClubPdfEntry {
+	slNo: number;
+	date: string | null;
+	journalArticle: string | null;
+	typeOfStudy: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+interface JournalClubReviewPdfEntry extends JournalClubPdfEntry {
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+// ======================== JOURNAL CLUB PDF DOCUMENTS ========================
+
+function JournalClubStudentPdf({
+	entries,
+	studentName,
+}: {
+	entries: JournalClubPdfEntry[];
+	studentName: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						JOURNAL CLUB DISCUSSION / CRITICAL APPRAISAL OF LITERATURE PRESENTED
+					</Text>
+					<Text style={styles.subtitle}>
+						AIIMS Patna — MD Emergency Medicine
+					</Text>
+					<Text style={styles.subtitle}>Student: {studentName}</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "6%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "34%" }]}>
+							Journal Article
+						</Text>
+						<Text style={[styles.tableCell, { width: "20%" }]}>
+							Type of Study
+						</Text>
+						<Text style={[styles.tableCell, { width: "18%" }]}>
+							Faculty Remark
+						</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Status</Text>
+					</View>
+
+					{entries.length === 0 ?
+						<Text style={styles.emptyText}>No entries yet</Text>
+					:	entries.map((e, i) => (
+							<View
+								key={i}
+								style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+							>
+								<Text style={[styles.tableCell, { width: "6%" }]}>
+									{e.slNo}
+								</Text>
+								<Text style={[styles.tableCell, { width: "12%" }]}>
+									{e.date ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "34%" }]}>
+									{stripMarkdown(e.journalArticle)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "20%" }]}>
+									{stripMarkdown(e.typeOfStudy)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "18%" }]}>
+									{stripMarkdown(e.facultyRemark)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "10%" }]}>
+									{e.status}
+								</Text>
+							</View>
+						))
+					}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+function JournalClubReviewPdf({
+	entries,
+	reviewerRole,
+}: {
+	entries: JournalClubReviewPdfEntry[];
+	reviewerRole: "faculty" | "hod";
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						JOURNAL CLUB DISCUSSION / CRITICAL APPRAISAL — Review
+					</Text>
+					<Text style={styles.subtitle}>
+						AIIMS Patna — MD Emergency Medicine
+					</Text>
+					<Text style={styles.subtitle}>
+						{reviewerRole === "hod" ? "HOD" : "Faculty"} Review Report
+					</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Student</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "28%" }]}>
+							Journal Article
+						</Text>
+						<Text style={[styles.tableCell, { width: "17%" }]}>
+							Type of Study
+						</Text>
+						<Text style={[styles.tableCell, { width: "17%" }]}>Remark</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Status</Text>
+					</View>
+
+					{entries.length === 0 ?
+						<Text style={styles.emptyText}>No submissions yet</Text>
+					:	entries.map((e, i) => (
+							<View
+								key={i}
+								style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+							>
+								<Text style={[styles.tableCell, { width: "5%" }]}>
+									{e.slNo}
+								</Text>
+								<Text style={[styles.tableCell, { width: "14%" }]}>
+									{e.studentName}
+								</Text>
+								<Text style={[styles.tableCell, { width: "10%" }]}>
+									{e.date ?? "—"}
+								</Text>
+								<Text style={[styles.tableCell, { width: "28%" }]}>
+									{stripMarkdown(e.journalArticle)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "17%" }]}>
+									{stripMarkdown(e.typeOfStudy)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "17%" }]}>
+									{stripMarkdown(e.facultyRemark)}
+								</Text>
+								<Text style={[styles.tableCell, { width: "9%" }]}>
+									{e.status}
+								</Text>
+							</View>
+						))
+					}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+// ======================== JOURNAL CLUB PUBLIC EXPORT FUNCTIONS ========================
+
+export async function exportJournalClubsToPdf(
+	entries: JournalClubPdfEntry[],
+	studentName: string,
+) {
+	const blob = await pdf(
+		<JournalClubStudentPdf entries={entries} studentName={studentName} />,
+	).toBlob();
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Journal_Clubs_${safeName}_${formatFileDate()}.pdf`);
+}
+
+export async function exportJournalClubReviewToPdf(
+	entries: JournalClubReviewPdfEntry[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const blob = await pdf(
+		<JournalClubReviewPdf entries={entries} reviewerRole={reviewerRole} />,
+	).toBlob();
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(blob, `Journal_Clubs_Review_${roleLabel}_${formatFileDate()}.pdf`);
+}

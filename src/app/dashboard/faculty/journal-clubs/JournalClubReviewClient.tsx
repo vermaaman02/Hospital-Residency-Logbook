@@ -1,11 +1,11 @@
 /**
- * @module CasePresentationReviewClient
- * @description Faculty/HOD review page for student case presentation submissions.
- * Features: search, status filter, bulk select, detail sheet, sign/reject dialogs,
- * pagination, MD preview.
+ * @module JournalClubReviewClient
+ * @description Faculty/HOD review page for student journal club submissions.
+ * Features: search, status/batch filters, bulk select, detail sheet, sign/reject
+ * dialogs, pagination, auto-review toggle, student filter, PDF/Excel export.
  *
- * @see PG Logbook .md — "ACADEMIC CASE PRESENTATION AND DISCUSSION"
- * @see actions/case-presentations.ts — signCasePresentation, rejectCasePresentation
+ * @see PG Logbook .md — "JOURNAL CLUB DISCUSSION/CRITICAL APRAISAL OF LITERATURE PRESENTED"
+ * @see actions/journal-clubs.ts — signJournalClub, rejectJournalClub, bulkSignJournalClubs
  */
 
 "use client";
@@ -77,12 +77,13 @@ import {
 	ChevronsUpDown,
 	ChevronLeft,
 	ChevronRight,
-	Stethoscope,
+	FlaskConical,
 	User,
 	FileText,
 	CalendarDays,
 	Tag,
 	MessageSquare,
+	BookOpen,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -90,26 +91,21 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-	signCasePresentation,
-	rejectCasePresentation,
-	bulkSignCasePresentations,
-} from "@/actions/case-presentations";
+	signJournalClub,
+	rejectJournalClub,
+	bulkSignJournalClubs,
+} from "@/actions/journal-clubs";
 import { toggleAutoReview } from "@/actions/auto-review";
-import { PATIENT_CATEGORY_OPTIONS } from "@/lib/constants/academic-fields";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-export interface CasePresentationSubmission {
+export interface JournalClubSubmission {
 	id: string;
 	slNo: number;
 	date: string | null;
-	patientName: string | null;
-	patientAge: string | null;
-	patientSex: string | null;
-	uhid: string | null;
-	completeDiagnosis: string | null;
-	category: string | null;
+	journalArticle: string | null;
+	typeOfStudy: string | null;
 	facultyRemark: string | null;
 	facultyId: string | null;
 	status: string;
@@ -118,28 +114,29 @@ export interface CasePresentationSubmission {
 		id: string;
 		firstName: string;
 		lastName: string;
-		batchRelation: { name: string } | null;
+		email: string;
 		currentSemester: number | null;
+		batchRelation: { name: string } | null;
 	};
 }
 
-interface CasePresentationReviewClientProps {
-	submissions: CasePresentationSubmission[];
+interface JournalClubReviewClientProps {
+	submissions: JournalClubSubmission[];
 	role: "faculty" | "hod";
 	autoReviewEnabled?: boolean;
 }
 
-type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION";
+type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION" | "DRAFT";
 
 const PAGE_SIZE = 10;
 
 // ======================== MAIN COMPONENT ========================
 
-export function CasePresentationReviewClient({
+export function JournalClubReviewClient({
 	submissions,
 	role,
 	autoReviewEnabled,
-}: CasePresentationReviewClientProps) {
+}: JournalClubReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
@@ -148,7 +145,7 @@ export function CasePresentationReviewClient({
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 	const [batchFilter, setBatchFilter] = useState("ALL");
 
-	// Available batches (derived from submissions)
+	// Available batches
 	const batches = useMemo(() => {
 		const set = new Set<string>();
 		submissions.forEach((s) => {
@@ -161,16 +158,18 @@ export function CasePresentationReviewClient({
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
 	// Detail sheet
-	const [detailEntry, setDetailEntry] =
-		useState<CasePresentationSubmission | null>(null);
+	const [detailEntry, setDetailEntry] = useState<JournalClubSubmission | null>(
+		null,
+	);
 
 	// Reject dialog
-	const [rejectEntry, setRejectEntry] =
-		useState<CasePresentationSubmission | null>(null);
+	const [rejectEntry, setRejectEntry] = useState<JournalClubSubmission | null>(
+		null,
+	);
 	const [rejectRemark, setRejectRemark] = useState("");
 
 	// Sign dialog
-	const [signEntry, setSignEntry] = useState<CasePresentationSubmission | null>(
+	const [signEntry, setSignEntry] = useState<JournalClubSubmission | null>(
 		null,
 	);
 	const [signRemark, setSignRemark] = useState("");
@@ -201,12 +200,6 @@ export function CasePresentationReviewClient({
 			.sort((a, b) => a.name.localeCompare(b.name));
 	}, [submissions, batchFilter]);
 
-	// ---- Category helper ----
-	const getCategoryLabel = useCallback((val: string | null) => {
-		if (!val) return "—";
-		return PATIENT_CATEGORY_OPTIONS.find((o) => o.value === val)?.label ?? val;
-	}, []);
-
 	// ---- Filtering ----
 	const filtered = useMemo(() => {
 		let result = submissions;
@@ -224,9 +217,8 @@ export function CasePresentationReviewClient({
 			result = result.filter(
 				(s) =>
 					`${s.user.firstName} ${s.user.lastName}`.toLowerCase().includes(q) ||
-					(s.patientName ?? "").toLowerCase().includes(q) ||
-					(s.uhid ?? "").toLowerCase().includes(q) ||
-					(s.completeDiagnosis ?? "").toLowerCase().includes(q) ||
+					(s.journalArticle ?? "").toLowerCase().includes(q) ||
+					(s.typeOfStudy ?? "").toLowerCase().includes(q) ||
 					(s.user.batchRelation?.name ?? "").toLowerCase().includes(q),
 			);
 		}
@@ -256,7 +248,7 @@ export function CasePresentationReviewClient({
 
 	// ---- Counts ----
 	const counts = useMemo(() => {
-		const c = { ALL: 0, SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0 };
+		const c = { ALL: 0, SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
 		for (const s of submissions) {
 			c.ALL++;
 			if (s.status in c) c[s.status as keyof typeof c]++;
@@ -288,7 +280,7 @@ export function CasePresentationReviewClient({
 	}
 
 	// ---- Actions ----
-	const handleSign = useCallback((entry: CasePresentationSubmission) => {
+	const handleSign = useCallback((entry: JournalClubSubmission) => {
 		setSignEntry(entry);
 		setSignRemark("");
 	}, []);
@@ -297,9 +289,9 @@ export function CasePresentationReviewClient({
 		if (!signEntry) return;
 		startTransition(async () => {
 			try {
-				await signCasePresentation(signEntry.id, signRemark || undefined);
+				await signJournalClub(signEntry.id, signRemark || undefined);
 				toast.success(
-					`Signed: ${signEntry.patientName ?? "Entry"} (${signEntry.user.firstName})`,
+					`Signed: ${signEntry.journalArticle ?? "Entry"} (${signEntry.user.firstName})`,
 				);
 				setSignEntry(null);
 				setDetailEntry(null);
@@ -315,7 +307,7 @@ export function CasePresentationReviewClient({
 		});
 	}
 
-	function openReject(entry: CasePresentationSubmission) {
+	function openReject(entry: JournalClubSubmission) {
 		setRejectEntry(entry);
 		setRejectRemark("");
 	}
@@ -328,7 +320,7 @@ export function CasePresentationReviewClient({
 		}
 		startTransition(async () => {
 			try {
-				await rejectCasePresentation(rejectEntry.id, rejectRemark);
+				await rejectJournalClub(rejectEntry.id, rejectRemark);
 				toast.success("Sent back for revision");
 				setRejectEntry(null);
 				setDetailEntry(null);
@@ -351,9 +343,9 @@ export function CasePresentationReviewClient({
 		if (ids.length === 0) return;
 		startTransition(async () => {
 			try {
-				const result = await bulkSignCasePresentations(ids);
+				await bulkSignJournalClubs(ids);
 				setSelectedIds(new Set());
-				toast.success(`Signed ${result.signedCount} entries`);
+				toast.success(`Signed ${ids.length} entries`);
 				router.refresh();
 			} catch {
 				toast.error("Bulk sign failed");
@@ -367,9 +359,9 @@ export function CasePresentationReviewClient({
 		setAutoReview(enabled);
 		startTransition(async () => {
 			try {
-				await toggleAutoReview("casePresentations", enabled);
+				await toggleAutoReview("journalClubs", enabled);
 				toast.success(
-					`Auto review ${enabled ? "enabled" : "disabled"} for Case Presentations`,
+					`Auto review ${enabled ? "enabled" : "disabled"} for Journal Clubs`,
 				);
 				router.refresh();
 			} catch {
@@ -398,12 +390,8 @@ export function CasePresentationReviewClient({
 		return exportData.map((e) => ({
 			slNo: e.slNo,
 			date: e.date,
-			patientName: e.patientName,
-			patientAge: e.patientAge,
-			patientSex: e.patientSex,
-			uhid: e.uhid,
-			completeDiagnosis: e.completeDiagnosis,
-			category: e.category,
+			journalArticle: e.journalArticle,
+			typeOfStudy: e.typeOfStudy,
 			facultyRemark: e.facultyRemark,
 			status: e.status,
 			studentName: `${e.user.firstName} ${e.user.lastName}`.trim(),
@@ -413,15 +401,15 @@ export function CasePresentationReviewClient({
 	}, [submissions, selectedStudentId, batchFilter, exportStatusFilter]);
 
 	const handleExportPdf = useCallback(async () => {
-		const { exportCasePresentationReviewToPdf } =
+		const { exportJournalClubReviewToPdf } =
 			await import("@/lib/export/export-pdf");
-		await exportCasePresentationReviewToPdf(buildExportData(), role);
+		await exportJournalClubReviewToPdf(buildExportData(), role);
 	}, [buildExportData, role]);
 
 	const handleExportExcel = useCallback(async () => {
-		const { exportCasePresentationReviewToExcel } =
+		const { exportJournalClubReviewToExcel } =
 			await import("@/lib/export/export-excel");
-		exportCasePresentationReviewToExcel(buildExportData(), role);
+		exportJournalClubReviewToExcel(buildExportData(), role);
 	}, [buildExportData, role]);
 
 	// ======================== RENDER ========================
@@ -437,13 +425,13 @@ export function CasePresentationReviewClient({
 							<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
 						)}
 						<label
-							htmlFor="cp-auto-review"
+							htmlFor="jc-auto-review"
 							className="text-xs font-medium text-muted-foreground cursor-pointer"
 						>
-							Auto Review (Case Presentations)
+							Auto Review (Journal Clubs)
 						</label>
 						<Switch
-							id="cp-auto-review"
+							id="jc-auto-review"
 							checked={autoReview}
 							onCheckedChange={handleAutoReviewToggle}
 							disabled={isPending}
@@ -576,8 +564,9 @@ export function CasePresentationReviewClient({
 			</div>
 
 			{/* Stats Cards */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			<div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
 				<StatMini label="Total" count={counts.ALL} color="default" />
+				<StatMini label="Drafts" count={counts.DRAFT} color="slate" />
 				<StatMini
 					label="Pending Review"
 					count={counts.SUBMITTED}
@@ -599,7 +588,7 @@ export function CasePresentationReviewClient({
 						<div className="relative flex-1 w-full">
 							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
-								placeholder="Search by student, patient, diagnosis, or batch..."
+								placeholder="Search by student, journal article, study type, or batch..."
 								value={searchQuery}
 								onChange={(e) => handleSearchChange(e.target.value)}
 								className="pl-9"
@@ -617,6 +606,7 @@ export function CasePresentationReviewClient({
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="ALL">All ({counts.ALL})</SelectItem>
+								<SelectItem value="DRAFT">Drafts ({counts.DRAFT})</SelectItem>
 								<SelectItem value="SUBMITTED">
 									Pending ({counts.SUBMITTED})
 								</SelectItem>
@@ -646,7 +636,7 @@ export function CasePresentationReviewClient({
 			{/* Table */}
 			<Card>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-200">
+					<div className="border rounded-lg min-w-[700px]">
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">
@@ -660,21 +650,18 @@ export function CasePresentationReviewClient({
 										Sl.
 									</TableHead>
 									<TableHead className="w-36 font-bold">Student</TableHead>
-									<TableHead className="w-22 text-center font-bold">
+									<TableHead className="w-24 text-center font-bold">
 										Date
 									</TableHead>
-									<TableHead className="w-28 font-bold">Patient</TableHead>
-									<TableHead className="w-14 text-center font-bold">
-										Age
+									<TableHead className="min-w-44 font-bold">
+										Journal Article
 									</TableHead>
-									<TableHead className="w-14 text-center font-bold">
-										Sex
+									<TableHead className="w-36 font-bold">
+										Type of Study
 									</TableHead>
-									<TableHead className="w-24 font-bold">UHID</TableHead>
-									<TableHead className="min-w-36 font-bold">
-										Diagnosis
+									<TableHead className="w-36 font-bold">
+										Faculty Remark
 									</TableHead>
-									<TableHead className="w-32 font-bold">Category</TableHead>
 									<TableHead className="w-20 text-center font-bold">
 										Status
 									</TableHead>
@@ -691,8 +678,10 @@ export function CasePresentationReviewClient({
 											"transition-colors hover:bg-muted/30 cursor-pointer",
 											entry.status === "SIGNED" && "bg-green-50/50",
 											entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
+											entry.status === "DRAFT" && "bg-gray-50/30",
 											selectedIds.has(entry.id) && "bg-blue-50/60",
 										)}
+										onClick={() => setDetailEntry(entry)}
 									>
 										<TableCell
 											className="text-center"
@@ -710,7 +699,7 @@ export function CasePresentationReviewClient({
 										</TableCell>
 										<TableCell onClick={(e) => e.stopPropagation()}>
 											<Link
-												href={`/dashboard/${role}/case-presentations/student/${entry.user.id}`}
+												href={`/dashboard/${role}/journal-clubs/student/${entry.user.id}`}
 												className="group"
 											>
 												<div className="text-sm font-medium text-hospital-primary group-hover:underline">
@@ -727,30 +716,30 @@ export function CasePresentationReviewClient({
 												format(new Date(entry.date), "dd/MM/yy")
 											:	"—"}
 										</TableCell>
-										<TableCell className="text-sm">
-											{entry.patientName || "—"}
-										</TableCell>
-										<TableCell className="text-center text-sm">
-											{entry.patientAge || "—"}
-										</TableCell>
-										<TableCell className="text-center text-sm">
-											{entry.patientSex || "—"}
-										</TableCell>
-										<TableCell className="text-sm font-mono">
-											{entry.uhid || "—"}
-										</TableCell>
-										<TableCell className="text-sm max-w-36">
-											{entry.completeDiagnosis ?
+										<TableCell className="text-sm max-w-52">
+											{entry.journalArticle ?
 												<div
 													className="prose prose-xs max-w-none line-clamp-2"
 													dangerouslySetInnerHTML={{
-														__html: renderMarkdown(entry.completeDiagnosis),
+														__html: renderMarkdown(entry.journalArticle),
 													}}
 												/>
 											:	<span className="text-muted-foreground">—</span>}
 										</TableCell>
-										<TableCell className="text-sm">
-											{getCategoryLabel(entry.category)}
+										<TableCell className="text-sm max-w-36">
+											{entry.typeOfStudy ?
+												<div className="line-clamp-2">{entry.typeOfStudy}</div>
+											:	<span className="text-muted-foreground">—</span>}
+										</TableCell>
+										<TableCell className="text-sm max-w-36">
+											{entry.facultyRemark ?
+												<div
+													className="prose prose-xs max-w-none line-clamp-2"
+													dangerouslySetInnerHTML={{
+														__html: renderMarkdown(entry.facultyRemark),
+													}}
+												/>
+											:	<span className="text-muted-foreground">—</span>}
 										</TableCell>
 										<TableCell className="text-center">
 											<StatusBadge
@@ -804,12 +793,12 @@ export function CasePresentationReviewClient({
 								{paginated.length === 0 && (
 									<TableRow>
 										<TableCell
-											colSpan={12}
+											colSpan={9}
 											className="text-center py-10 text-muted-foreground"
 										>
 											{searchQuery || statusFilter !== "ALL" ?
 												"No matching entries found."
-											:	"No case presentation submissions yet."}
+											:	"No journal club submissions yet."}
 										</TableCell>
 									</TableRow>
 								)}
@@ -860,9 +849,9 @@ export function CasePresentationReviewClient({
 								<div className="flex items-start justify-between gap-3">
 									<SheetTitle className="flex items-center gap-2.5">
 										<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hospital-primary/10">
-											<Stethoscope className="h-4.5 w-4.5 text-hospital-primary" />
+											<FlaskConical className="h-4.5 w-4.5 text-hospital-primary" />
 										</div>
-										Case Presentation #{detailEntry.slNo}
+										Journal Club #{detailEntry.slNo}
 									</SheetTitle>
 									<StatusBadge
 										status={detailEntry.status as EntryStatus}
@@ -879,27 +868,30 @@ export function CasePresentationReviewClient({
 							</SheetHeader>
 
 							<div className="mt-6 space-y-6">
-								{/* Patient Information */}
-								<DetailSection title="Patient Information" icon={User}>
+								{/* Student Information */}
+								<DetailSection title="Student Information" icon={User}>
 									<DetailRow
 										label="Name"
-										value={detailEntry.patientName ?? "—"}
+										value={`${detailEntry.user.firstName} ${detailEntry.user.lastName}`}
 									/>
-									<div className="grid grid-cols-3 gap-x-4">
+									<div className="grid grid-cols-2 gap-x-4">
 										<DetailRow
-											label="Age"
-											value={detailEntry.patientAge ?? "—"}
+											label="Batch"
+											value={detailEntry.user.batchRelation?.name ?? "—"}
 										/>
 										<DetailRow
-											label="Sex"
-											value={detailEntry.patientSex ?? "—"}
+											label="Semester"
+											value={
+												detailEntry.user.currentSemester ?
+													`Semester ${detailEntry.user.currentSemester}`
+												:	"—"
+											}
 										/>
-										<DetailRow label="UHID" value={detailEntry.uhid ?? "—"} />
 									</div>
 								</DetailSection>
 
-								{/* Case Details */}
-								<DetailSection title="Case Details" icon={CalendarDays}>
+								{/* Presentation Details */}
+								<DetailSection title="Presentation Details" icon={CalendarDays}>
 									<DetailRow
 										label="Date"
 										value={
@@ -908,21 +900,26 @@ export function CasePresentationReviewClient({
 											:	"—"
 										}
 									/>
-									<DetailRow
-										label="Category"
-										value={getCategoryLabel(detailEntry.category)}
-									/>
 								</DetailSection>
 
-								{/* Diagnosis */}
-								<DetailSection title="Complete Diagnosis" icon={FileText}>
-									{detailEntry.completeDiagnosis ?
+								{/* Journal Article */}
+								<DetailSection title="Journal Article" icon={BookOpen}>
+									{detailEntry.journalArticle ?
 										<div
 											className="prose prose-sm max-w-none bg-muted/30 rounded-lg p-3 text-sm"
 											dangerouslySetInnerHTML={{
-												__html: renderMarkdown(detailEntry.completeDiagnosis),
+												__html: renderMarkdown(detailEntry.journalArticle),
 											}}
 										/>
+									:	<p className="text-sm text-muted-foreground pl-6">—</p>}
+								</DetailSection>
+
+								{/* Type of Study */}
+								<DetailSection title="Type of Study" icon={FileText}>
+									{detailEntry.typeOfStudy ?
+										<div className="bg-muted/30 rounded-lg p-3 text-sm">
+											{detailEntry.typeOfStudy}
+										</div>
 									:	<p className="text-sm text-muted-foreground pl-6">—</p>}
 								</DetailSection>
 
@@ -990,10 +987,13 @@ export function CasePresentationReviewClient({
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Sign Case Presentation</DialogTitle>
+						<DialogTitle>Sign Journal Club Entry</DialogTitle>
 						<DialogDescription>
 							Entry #{signEntry?.slNo} by {signEntry?.user.firstName}{" "}
-							{signEntry?.user.lastName} — {signEntry?.patientName ?? ""}
+							{signEntry?.user.lastName}
+							{signEntry?.journalArticle ?
+								` — ${signEntry.journalArticle.substring(0, 60)}${signEntry.journalArticle.length > 60 ? "..." : ""}`
+							:	""}
 						</DialogDescription>
 					</DialogHeader>
 
@@ -1092,13 +1092,14 @@ function StatMini({
 }: {
 	label: string;
 	count: number;
-	color: "default" | "amber" | "green" | "red";
+	color: "default" | "amber" | "green" | "red" | "slate";
 }) {
 	const colors = {
 		default: "bg-gray-50 border-gray-200 text-gray-700",
 		amber: "bg-amber-50 border-amber-200 text-amber-700",
 		green: "bg-green-50 border-green-200 text-green-700",
 		red: "bg-red-50 border-red-200 text-red-700",
+		slate: "bg-slate-50 border-slate-200 text-slate-700",
 	};
 
 	return (

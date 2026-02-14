@@ -313,12 +313,14 @@ model JournalClub {
   journalArticle  String?
   typeOfStudy     String?
   facultyRemark   String?
+  facultyId       String?
   status          EntryStatus @default(DRAFT)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 5: CLINICAL SKILL TRAINING ========================
