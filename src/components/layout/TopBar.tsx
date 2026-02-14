@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -40,6 +40,7 @@ import {
 	getStudentNotifications,
 	type StudentNotification,
 } from "@/actions/student-notifications";
+import { markNotificationsSeen } from "@/actions/mark-notifications-seen";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
@@ -53,7 +54,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 		null,
 	);
 	const [studentNotifs, setStudentNotifs] = useState<StudentNotification[]>([]);
+	const [unseenCount, setUnseenCount] = useState(0);
 	const [notifOpen, setNotifOpen] = useState(false);
+	const markedSeenRef = useRef(false);
 
 	useEffect(() => {
 		if (role === "faculty" || role === "hod") {
@@ -65,12 +68,28 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 		}
 		if (role === "student") {
 			getStudentNotifications()
-				.then(setStudentNotifs)
+				.then((result) => {
+					setStudentNotifs(result.notifications);
+					setUnseenCount(result.unseenCount);
+				})
 				.catch(() => {
 					/* silently ignore */
 				});
 		}
 	}, [role]);
+
+	// When the notification popover opens, mark all as seen
+	const handleNotifOpenChange = useCallback((open: boolean) => {
+		setNotifOpen(open);
+		if (open && !markedSeenRef.current) {
+			markedSeenRef.current = true;
+			// Optimistically clear the badge
+			setUnseenCount(0);
+			markNotificationsSeen().catch(() => {
+				/* ignore */
+			});
+		}
+	}, []);
 
 	const roleLabel =
 		role === "hod" ? "Head of Department"
@@ -134,7 +153,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
 				{/* Notification Bell */}
 				{role === "faculty" || role === "hod" ?
-					<Popover open={notifOpen} onOpenChange={setNotifOpen}>
+					<Popover open={notifOpen} onOpenChange={handleNotifOpenChange}>
 						<PopoverTrigger asChild>
 							<Button variant="ghost" size="icon" className="relative">
 								<Bell className="h-4 w-4" />
@@ -199,13 +218,13 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 							</div>
 						</PopoverContent>
 					</Popover>
-				:	<Popover open={notifOpen} onOpenChange={setNotifOpen}>
+				:	<Popover open={notifOpen} onOpenChange={handleNotifOpenChange}>
 						<PopoverTrigger asChild>
 							<Button variant="ghost" size="icon" className="relative">
 								<Bell className="h-4 w-4" />
-								{studentNotifs.length > 0 && (
+								{unseenCount > 0 && (
 									<span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-0.5">
-										{studentNotifs.length > 99 ? "99+" : studentNotifs.length}
+										{unseenCount > 99 ? "99+" : unseenCount}
 									</span>
 								)}
 								<span className="sr-only">Notifications</span>

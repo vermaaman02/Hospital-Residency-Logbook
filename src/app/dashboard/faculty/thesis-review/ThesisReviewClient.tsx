@@ -405,7 +405,7 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 								onChange={(e) => handleSearch(e.target.value)}
 							/>
 						</div>
-						{batches.length > 1 && (
+						{batches.length > 0 && (
 							<Select value={batchFilter} onValueChange={handleBatchFilter}>
 								<SelectTrigger className="w-40">
 									<SelectValue placeholder="Batch" />

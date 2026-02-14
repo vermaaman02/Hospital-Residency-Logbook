@@ -16,12 +16,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	RotateCcw,
 	BookOpen,
 	HeartHandshake,
 	Loader2,
 	ChevronsUpDown,
 	Check,
+	Filter,
 } from "lucide-react";
 import {
 	RotationReviewClient,
@@ -84,6 +92,37 @@ export function ReviewTabsClient({
 	const [activeTab, setActiveTab] = useState("rotations");
 	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
 	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+	const [batchFilter, setBatchFilter] = useState("ALL");
+	const [exportStatusFilter, setExportStatusFilter] = useState("ALL");
+
+	// Available batches (derived from all data sources)
+	const batches = useMemo(() => {
+		const set = new Set<string>();
+		for (const s of submissions) {
+			if (s.user.batchRelation?.name) set.add(s.user.batchRelation.name);
+		}
+		for (const t of theses) {
+			if (
+				(t.user as { batchRelation?: { name: string } | null }).batchRelation
+					?.name
+			)
+				set.add(
+					(t.user as { batchRelation?: { name: string } | null }).batchRelation!
+						.name,
+				);
+		}
+		for (const s of trainingStudents) {
+			if (
+				(s as { batchRelation?: { name: string } | null }).batchRelation?.name
+			)
+				set.add(
+					(s as { batchRelation?: { name: string } | null }).batchRelation!
+						.name,
+				);
+		}
+		return Array.from(set).sort();
+	}, [submissions, theses, trainingStudents]);
+
 	const [settings, setSettings] = useState<AutoReviewSettings>(
 		autoReviewSettings ?? {
 			rotationPostings: false,
@@ -92,48 +131,99 @@ export function ReviewTabsClient({
 		},
 	);
 
-	// Build unique student list from all data sources
+	// Build unique student list from all data sources (filtered by batch)
 	const studentOptions = useMemo(() => {
 		const map = new Map<string, string>();
 		for (const s of submissions) {
+			if (batchFilter !== "ALL" && s.user.batchRelation?.name !== batchFilter)
+				continue;
 			map.set(s.user.id, `${s.user.firstName} ${s.user.lastName}`.trim());
 		}
 		for (const t of theses) {
+			const bn = (t.user as { batchRelation?: { name: string } | null })
+				.batchRelation?.name;
+			if (batchFilter !== "ALL" && bn !== batchFilter) continue;
 			map.set(
 				t.user.id,
 				`${t.user.firstName ?? ""} ${t.user.lastName ?? ""}`.trim(),
 			);
 		}
 		for (const s of trainingStudents) {
+			const bn = (s as { batchRelation?: { name: string } | null })
+				.batchRelation?.name;
+			if (batchFilter !== "ALL" && bn !== batchFilter) continue;
 			map.set(s.id, `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim());
 		}
 		return Array.from(map.entries())
 			.map(([id, name]) => ({ id, name: name || "Unknown" }))
 			.sort((a, b) => a.name.localeCompare(b.name));
-	}, [submissions, theses, trainingStudents]);
+	}, [submissions, theses, trainingStudents, batchFilter]);
 
 	// ======================== EXPORT HANDLERS ========================
 
 	const buildReviewExportData = useCallback(() => {
-		// Filter by selected student
-		const filteredSubmissions =
-			selectedStudentId === "all" ? submissions : (
-				submissions.filter((s) => s.user.id === selectedStudentId)
+		// Filter by batch + status + selected student
+		let filteredSubmissions = submissions;
+		if (batchFilter !== "ALL") {
+			filteredSubmissions = filteredSubmissions.filter(
+				(s) => s.user.batchRelation?.name === batchFilter,
 			);
-		const filteredTheses =
-			selectedStudentId === "all" ? theses : (
-				theses.filter((t) => t.user.id === selectedStudentId)
+		}
+		if (exportStatusFilter !== "ALL") {
+			filteredSubmissions = filteredSubmissions.filter(
+				(s) => s.status === exportStatusFilter,
 			);
-		const filteredTraining =
-			selectedStudentId === "all" ? trainingRecords : (
-				trainingRecords.filter((r) => {
-					// Match training records to students by userId
-					const student = trainingStudents.find(
-						(s) => s.id === selectedStudentId,
-					);
-					return student ? r.userId === student.id : false;
-				})
+		}
+		if (selectedStudentId !== "all") {
+			filteredSubmissions = filteredSubmissions.filter(
+				(s) => s.user.id === selectedStudentId,
 			);
+		}
+
+		let filteredTheses = theses;
+		if (batchFilter !== "ALL") {
+			filteredTheses = filteredTheses.filter(
+				(t) =>
+					(t.user as { batchRelation?: { name: string } | null }).batchRelation
+						?.name === batchFilter,
+			);
+		}
+		if (exportStatusFilter !== "ALL") {
+			filteredTheses = filteredTheses.filter(
+				(t) => t.status === exportStatusFilter,
+			);
+		}
+		if (selectedStudentId !== "all") {
+			filteredTheses = filteredTheses.filter(
+				(t) => t.user.id === selectedStudentId,
+			);
+		}
+
+		let filteredTraining = trainingRecords;
+		if (batchFilter !== "ALL") {
+			const batchStudentIds = new Set(
+				trainingStudents
+					.filter(
+						(s) =>
+							(s as { batchRelation?: { name: string } | null }).batchRelation
+								?.name === batchFilter,
+					)
+					.map((s) => s.id),
+			);
+			filteredTraining = filteredTraining.filter((r) =>
+				batchStudentIds.has(r.userId),
+			);
+		}
+		if (selectedStudentId !== "all") {
+			filteredTraining = filteredTraining.filter(
+				(r) => r.userId === selectedStudentId,
+			);
+		}
+		if (exportStatusFilter !== "ALL") {
+			filteredTraining = filteredTraining.filter(
+				(r) => r.status === exportStatusFilter,
+			);
+		}
 
 		const rotationExportRows = filteredSubmissions.map((s) => ({
 			slNo: s.slNo,
@@ -194,6 +284,8 @@ export function ReviewTabsClient({
 		trainingStudents,
 		role,
 		selectedStudentId,
+		batchFilter,
+		exportStatusFilter,
 	]);
 
 	const handleExportPdf = useCallback(async () => {
@@ -312,6 +404,46 @@ export function ReviewTabsClient({
 				)}
 
 				<div className="flex items-center gap-2">
+					{/* Batch Filter */}
+					{batches.length > 0 && (
+						<Select
+							value={batchFilter}
+							onValueChange={(val) => {
+								setBatchFilter(val);
+								setSelectedStudentId("all");
+							}}
+						>
+							<SelectTrigger className="w-40 text-xs">
+								<SelectValue placeholder="Batch" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="ALL">All Batches</SelectItem>
+								{batches.map((b) => (
+									<SelectItem key={b} value={b}>
+										{b}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
+
+					{/* Status Filter for Export */}
+					<Select
+						value={exportStatusFilter}
+						onValueChange={setExportStatusFilter}
+					>
+						<SelectTrigger className="w-40 text-xs">
+							<Filter className="h-3.5 w-3.5 mr-1" />
+							<SelectValue placeholder="Status" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="ALL">All Status</SelectItem>
+							<SelectItem value="SUBMITTED">Pending</SelectItem>
+							<SelectItem value="SIGNED">Signed</SelectItem>
+							<SelectItem value="NEEDS_REVISION">Needs Revision</SelectItem>
+						</SelectContent>
+					</Select>
+
 					{/* Searchable Student Selector for Export */}
 					<Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
 						<PopoverTrigger asChild>
@@ -382,7 +514,15 @@ export function ReviewTabsClient({
 					<ExportDropdown
 						onExportPdf={handleExportPdf}
 						onExportExcel={handleExportExcel}
-						label={selectedStudentId === "all" ? "Download All" : "Download"}
+						label={
+							(
+								selectedStudentId !== "all" ||
+								batchFilter !== "ALL" ||
+								exportStatusFilter !== "ALL"
+							) ?
+								"Download (Filtered)"
+							:	"Download All"
+						}
 					/>
 				</div>
 			</div>

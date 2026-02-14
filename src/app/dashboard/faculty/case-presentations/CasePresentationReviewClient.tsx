@@ -146,6 +146,16 @@ export function CasePresentationReviewClient({
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+	const [batchFilter, setBatchFilter] = useState("ALL");
+
+	// Available batches (derived from submissions)
+	const batches = useMemo(() => {
+		const set = new Set<string>();
+		submissions.forEach((s) => {
+			if (s.user.batchRelation?.name) set.add(s.user.batchRelation.name);
+		});
+		return Array.from(set).sort();
+	}, [submissions]);
 
 	// Bulk selection
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -200,6 +210,10 @@ export function CasePresentationReviewClient({
 			result = result.filter((s) => s.status === statusFilter);
 		}
 
+		if (batchFilter !== "ALL") {
+			result = result.filter((s) => s.user.batchRelation?.name === batchFilter);
+		}
+
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase();
 			result = result.filter(
@@ -213,7 +227,7 @@ export function CasePresentationReviewClient({
 		}
 
 		return result;
-	}, [submissions, statusFilter, searchQuery]);
+	}, [submissions, statusFilter, batchFilter, searchQuery]);
 
 	// Pagination
 	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -228,6 +242,10 @@ export function CasePresentationReviewClient({
 	}, []);
 	const handleStatusChange = useCallback((val: StatusFilter) => {
 		setStatusFilter(val);
+		setCurrentPage(1);
+	}, []);
+	const handleBatchChange = useCallback((val: string) => {
+		setBatchFilter(val);
 		setCurrentPage(1);
 	}, []);
 
@@ -359,12 +377,20 @@ export function CasePresentationReviewClient({
 	// ======================== EXPORT ========================
 
 	const buildExportData = useCallback(() => {
-		const filtered =
-			selectedStudentId === "all" ? submissions : (
-				submissions.filter((s) => s.user.id === selectedStudentId)
+		let exportData = submissions;
+		if (batchFilter !== "ALL") {
+			exportData = exportData.filter(
+				(s) => s.user.batchRelation?.name === batchFilter,
 			);
+		}
+		if (statusFilter !== "ALL") {
+			exportData = exportData.filter((s) => s.status === statusFilter);
+		}
+		if (selectedStudentId !== "all") {
+			exportData = exportData.filter((s) => s.user.id === selectedStudentId);
+		}
 
-		return filtered.map((e) => ({
+		return exportData.map((e) => ({
 			slNo: e.slNo,
 			date: e.date,
 			patientName: e.patientName,
@@ -379,7 +405,7 @@ export function CasePresentationReviewClient({
 			batch: e.user.batchRelation?.name ?? "—",
 			semester: e.user.currentSemester ?? 0,
 		}));
-	}, [submissions, selectedStudentId]);
+	}, [submissions, selectedStudentId, batchFilter, statusFilter]);
 
 	const handleExportPdf = useCallback(async () => {
 		const { exportCasePresentationReviewToPdf } =
@@ -490,7 +516,15 @@ export function CasePresentationReviewClient({
 					<ExportDropdown
 						onExportPdf={handleExportPdf}
 						onExportExcel={handleExportExcel}
-						label={selectedStudentId === "all" ? "Download All" : "Download"}
+						label={
+							(
+								selectedStudentId !== "all" ||
+								batchFilter !== "ALL" ||
+								statusFilter !== "ALL"
+							) ?
+								"Download (Filtered)"
+							:	"Download All"
+						}
 					/>
 				</div>
 			</div>
@@ -546,6 +580,23 @@ export function CasePresentationReviewClient({
 								</SelectItem>
 							</SelectContent>
 						</Select>
+
+						{/* Batch Filter */}
+						{batches.length > 0 && (
+							<Select value={batchFilter} onValueChange={handleBatchChange}>
+								<SelectTrigger className="w-44 shrink-0">
+									<SelectValue placeholder="Batch" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="ALL">All Batches</SelectItem>
+									{batches.map((b) => (
+										<SelectItem key={b} value={b}>
+											{b}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
 
 						{/* Bulk Sign */}
 						{selectedIds.size > 0 && (

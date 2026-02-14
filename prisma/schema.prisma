@@ -32,6 +32,7 @@ model User {
   currentSemester Int?       @default(1)
   department      String?    @default("Emergency Medicine")
   profileImage    String?
+  notificationsLastSeenAt DateTime? // tracks when user last opened notification popover
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

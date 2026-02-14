@@ -57,7 +57,10 @@ import {
 } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { MarkdownEditor } from "@/components/shared/MarkdownEditor";
+import {
+	MarkdownEditor,
+	renderMarkdown,
+} from "@/components/shared/MarkdownEditor";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
 import {
 	CalendarIcon,
@@ -919,13 +922,25 @@ function ReadRow({
 				{entry.uhid || "—"}
 			</TableCell>
 			<TableCell className="text-sm max-w-48 truncate">
-				{entry.completeDiagnosis || "—"}
+				{entry.completeDiagnosis ?
+					<span
+						dangerouslySetInnerHTML={{
+							__html: renderMarkdown(entry.completeDiagnosis),
+						}}
+					/>
+				:	"—"}
 			</TableCell>
 			<TableCell className="text-center text-sm">
 				{getCategoryLabel(entry.category)}
 			</TableCell>
 			<TableCell className="text-sm max-w-36 truncate">
-				{entry.facultyRemark || "—"}
+				{entry.facultyRemark ?
+					<span
+						dangerouslySetInnerHTML={{
+							__html: renderMarkdown(entry.facultyRemark),
+						}}
+					/>
+				:	"—"}
 			</TableCell>
 			<TableCell className="text-center text-sm">
 				{getFacultyName(entry.facultyId)}

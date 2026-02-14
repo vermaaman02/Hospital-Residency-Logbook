@@ -23,17 +23,24 @@ export interface StudentNotification {
 	href: string;
 }
 
+/** Count of unseen notifications (updatedAt > lastSeenAt). */
+export interface StudentNotificationResult {
+	notifications: StudentNotification[];
+	unseenCount: number;
+}
+
 /**
  * Get computed notifications for a student based on their entry statuses.
  * Returns entries that have been signed or sent back for revision,
- * sorted by most recent first.
+ * sorted by most recent first. Also returns unseenCount based on
+ * user.notificationsLastSeenAt.
  */
-export async function getStudentNotifications(): Promise<
-	StudentNotification[]
-> {
+export async function getStudentNotifications(): Promise<StudentNotificationResult> {
 	const clerkId = await requireAuth();
 	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) return [];
+	if (!user) return { notifications: [], unseenCount: 0 };
+
+	const lastSeen = user.notificationsLastSeenAt;
 
 	const notifications: StudentNotification[] = [];
 
@@ -185,5 +192,13 @@ export async function getStudentNotifications(): Promise<
 		(a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
 	);
 
-	return notifications.slice(0, 15);
+	const topNotifs = notifications.slice(0, 15);
+
+	// Count unseen: notifications whose updatedAt > lastSeen
+	const unseenCount =
+		lastSeen ?
+			topNotifs.filter((n) => new Date(n.updatedAt) > lastSeen).length
+		:	topNotifs.length;
+
+	return { notifications: topNotifs, unseenCount };
 }
