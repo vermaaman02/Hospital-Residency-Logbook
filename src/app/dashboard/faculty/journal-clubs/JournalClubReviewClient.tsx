@@ -636,7 +636,7 @@ export function JournalClubReviewClient({
 			{/* Table */}
 			<Card>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-[700px]">
+					<div className="border rounded-lg min-w-175">
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">

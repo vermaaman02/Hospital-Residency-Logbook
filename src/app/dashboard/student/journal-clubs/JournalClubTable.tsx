@@ -341,7 +341,7 @@ export function JournalClubTable({
 				</CardHeader>
 				<CardContent className="px-0 sm:px-6 pb-4 sm:pb-6 pt-0">
 					<div className="border rounded-lg overflow-x-auto">
-						<div className="min-w-[900px]">
+						<div className="min-w-225">
 							<Table>
 								<TableHeader>
 									<TableRow className="bg-muted/50">
