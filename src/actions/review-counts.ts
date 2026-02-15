@@ -28,6 +28,9 @@ export interface PendingCounts {
 	lifeSupportCourses: number;
 	conferences: number;
 	researchActivities: number;
+	disasterDrills: number;
+	qualityImprovement: number;
+	logbookReviews: number;
 	total: number;
 }
 
@@ -53,6 +56,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			lifeSupportCourses: 0,
 			conferences: 0,
 			researchActivities: 0,
+			disasterDrills: 0,
+			qualityImprovement: 0,
+			logbookReviews: 0,
 			total: 0,
 		};
 
@@ -80,6 +86,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				lifeSupportCourses: 0,
 				conferences: 0,
 				researchActivities: 0,
+				disasterDrills: 0,
+				qualityImprovement: 0,
+				logbookReviews: 0,
 				total: 0,
 			};
 
@@ -109,6 +118,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		lifeSupportCourses,
 		conferences,
 		researchActivities,
+		disasterDrills,
+		qualityImprovement,
+		logbookReviews,
 	] = await Promise.all([
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
@@ -158,6 +170,15 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		prisma.researchActivity.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
 		}),
+		prisma.disasterDrill.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.qualityImprovement.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.logbookFacultyReview.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
 	]);
 
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
@@ -176,7 +197,10 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		badNewsLogs +
 		lifeSupportCourses +
 		conferences +
-		researchActivities;
+		researchActivities +
+		disasterDrills +
+		qualityImprovement +
+		logbookReviews;
 
 	return {
 		rotationPostings,
@@ -193,6 +217,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		lifeSupportCourses,
 		conferences,
 		researchActivities,
+		disasterDrills,
+		qualityImprovement,
+		logbookReviews,
 		total,
 	};
 }

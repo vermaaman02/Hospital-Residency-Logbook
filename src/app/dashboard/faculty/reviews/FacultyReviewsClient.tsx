@@ -69,11 +69,13 @@ import {
 	rejectResearchActivity,
 } from "@/actions/courses-conferences";
 import {
-	signDisasterDrill,
-	rejectDisasterDrill,
-	signQualityImprovement,
-	rejectQualityImprovement,
-} from "@/actions/disaster-qi";
+	signDisasterDrillEntry as signDisasterDrill,
+	rejectDisasterDrillEntry as rejectDisasterDrill,
+} from "@/actions/disaster-drills";
+import {
+	signQualityImprovementEntry as signQualityImprovement,
+	rejectQualityImprovementEntry as rejectQualityImprovement,
+} from "@/actions/quality-improvement";
 import {
 	signTransportLog,
 	rejectTransportLog,

@@ -28,7 +28,10 @@ export type AutoReviewCategory =
 	| "badNewsLogs"
 	| "lifeSupportCourses"
 	| "conferences"
-	| "researchActivities";
+	| "researchActivities"
+	| "disasterDrills"
+	| "qualityImprovement"
+	| "logbookReviews";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -47,6 +50,9 @@ export interface AutoReviewSettings {
 	lifeSupportCourses: boolean;
 	conferences: boolean;
 	researchActivities: boolean;
+	disasterDrills: boolean;
+	qualityImprovement: boolean;
+	logbookReviews: boolean;
 }
 
 /**
@@ -78,6 +84,9 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		lifeSupportCourses: map["lifeSupportCourses"] ?? false,
 		conferences: map["conferences"] ?? false,
 		researchActivities: map["researchActivities"] ?? false,
+		disasterDrills: map["disasterDrills"] ?? false,
+		qualityImprovement: map["qualityImprovement"] ?? false,
+		logbookReviews: map["logbookReviews"] ?? false,
 	};
 }
 
@@ -125,6 +134,12 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/conferences");
 	revalidatePath("/dashboard/faculty/research-activities");
 	revalidatePath("/dashboard/hod/research-activities");
+	revalidatePath("/dashboard/faculty/disaster-drills");
+	revalidatePath("/dashboard/hod/disaster-drills");
+	revalidatePath("/dashboard/faculty/quality-improvement");
+	revalidatePath("/dashboard/hod/quality-improvement");
+	revalidatePath("/dashboard/faculty/logbook-reviews");
+	revalidatePath("/dashboard/hod/logbook-reviews");
 	return { success: true, category, enabled };
 }
 

@@ -762,3 +762,39 @@ export function exportProcedureLogReviewToExcel(
 		`Procedure_Log_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
 	);
 }
+
+// ======================== SIMPLE LOG EXPORT (Disaster Drills, QI, Logbook Reviews) ========================
+
+/**
+ * Generic Excel export for simple log tables without complex patient/procedure data.
+ * @param rows - Array of objects where keys become column headers
+ * @param studentName - Student name for filename
+ * @param sheetLabel - Sheet name and filename label
+ */
+export function exportSimpleLogToExcel(
+	rows: Record<string, unknown>[],
+	studentName: string,
+	sheetLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const ws = XLSX.utils.json_to_sheet(
+		rows.length > 0 ? rows : [{ "Sl. No.": "", Status: "No entries" }],
+	);
+
+	// Auto-fit columns based on header count
+	const columnCount = rows.length > 0 ? Object.keys(rows[0]).length : 2;
+	const defaultWidths = Array(columnCount).fill(16);
+	setColumnWidths(ws, defaultWidths);
+
+	XLSX.utils.book_append_sheet(wb, ws, sheetLabel.slice(0, 30));
+
+	const safeStudentName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeLabel = sheetLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`${safeLabel}_${safeStudentName}_${formatDateForFile()}.xlsx`,
+	);
+}

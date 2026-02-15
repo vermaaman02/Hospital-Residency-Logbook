@@ -1834,3 +1834,98 @@ export async function exportProcedureLogReviewToPdf(
 		`Procedure_Log_Review_${label}_${roleLabel}_${formatFileDate()}.pdf`,
 	);
 }
+
+// ======================== SIMPLE LOG EXPORT (Disaster Drills, QI, Logbook Reviews) ========================
+
+/**
+ * Generic PDF export for simple log tables without complex patient/procedure data.
+ * @param _data - Original row data (used for count)
+ * @param headers - Table header labels
+ * @param rows - 2D array of cell values
+ * @param title - Document title
+ * @param studentName - Student name for filename
+ */
+function SimpleLogPdf({
+	headers,
+	rows,
+	title,
+	studentName,
+}: {
+	headers: string[];
+	rows: string[][];
+	title: string;
+	studentName: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>AIIMS Patna — PG Residency Logbook</Text>
+					<Text style={styles.subtitle}>{title}</Text>
+					<Text style={styles.subtitle}>Student: {studentName}</Text>
+				</View>
+				<View style={styles.divider} />
+
+				{/* Table */}
+				<View style={styles.table}>
+					{/* Header Row */}
+					<View style={styles.tableHeader}>
+						{headers.map((h, i) => (
+							<Text
+								key={i}
+								style={[
+									styles.tableCellBold,
+									{ width: `${100 / headers.length}%` },
+								]}
+							>
+								{h}
+							</Text>
+						))}
+					</View>
+					{/* Data Rows */}
+					{rows.map((row, i) => (
+						<View key={i} style={styles.tableRow}>
+							{row.map((cell, j) => (
+								<Text
+									key={j}
+									style={[
+										styles.tableCell,
+										{ width: `${100 / headers.length}%` },
+									]}
+								>
+									{cell ?? "—"}
+								</Text>
+							))}
+						</View>
+					))}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {rows.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+export async function exportSimpleLogToPdf(
+	_data: unknown[],
+	headers: string[],
+	rows: string[][],
+	title: string,
+	studentName: string,
+) {
+	const blob = await pdf(
+		<SimpleLogPdf
+			headers={headers}
+			rows={rows}
+			title={title}
+			studentName={studentName}
+		/>,
+	).toBlob();
+	const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `${safeTitle}_${formatFileDate()}.pdf`);
+}

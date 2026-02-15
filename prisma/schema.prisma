@@ -53,6 +53,7 @@ model User {
   researchActivities        ResearchActivity[]
   disasterDrills            DisasterDrill[]
   qualityImprovement        QualityImprovement[]
+  logbookFacultyReviews     LogbookFacultyReview[]
   evaluations               ResidentEvaluation[]
   thesis                    Thesis?
   transportLogs             TransportLog[]
@@ -745,12 +746,15 @@ model DisasterDrill {
   date           DateTime?
   description    String?
   roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
   status         EntryStatus @default(DRAFT)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model QualityImprovement {
@@ -761,12 +765,36 @@ model QualityImprovement {
   date           DateTime?
   description    String?
   roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
   status         EntryStatus @default(DRAFT)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
+}
+
+// Periodic Logbook Faculty Review (SEM 1-6, 2 reviews per semester)
+model LogbookFacultyReview {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  slNo           Int
+  reviewNo       String?     // "SEM 1", "SEM 2", etc.
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 13: RESIDENT EVALUATION ========================
