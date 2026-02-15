@@ -273,7 +273,7 @@ const facultyNavSections: NavSection[] = [
 			},
 			{
 				title: "Procedures",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=procedureLogs",
+				href: "/dashboard/faculty/procedures",
 				icon: <Syringe className="h-4 w-4" />,
 				roles: ["faculty"],
 			},
@@ -453,7 +453,7 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Procedures",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=procedureLogs",
+				href: "/dashboard/hod/procedures",
 				icon: <Syringe className="h-4 w-4" />,
 				roles: ["hod"],
 			},

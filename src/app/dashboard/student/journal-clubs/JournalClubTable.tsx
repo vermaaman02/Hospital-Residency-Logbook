@@ -65,6 +65,8 @@ import {
 	Plus,
 	FileText,
 	ChevronsUpDown,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -120,6 +122,8 @@ const emptyForm: InlineForm = {
 
 // ======================== MAIN COMPONENT ========================
 
+const PAGE_SIZE = 15;
+
 export function JournalClubTable({
 	entries,
 	facultyList,
@@ -133,6 +137,14 @@ export function JournalClubTable({
 	const [validationErrors, setValidationErrors] = useState<
 		Record<string, string>
 	>({});
+	const [currentPage, setCurrentPage] = useState(1);
+
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
 
 	// Clear validation errors when form changes
 	useEffect(() => {
@@ -181,6 +193,7 @@ export function JournalClubTable({
 		setEditingId(null);
 		setIsAddingNew(true);
 		setForm(emptyForm);
+		setCurrentPage(Math.max(1, Math.ceil((entries.length + 1) / PAGE_SIZE)));
 	}
 
 	function cancelEdit() {
@@ -372,7 +385,7 @@ export function JournalClubTable({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{entries.map((entry) => {
+									{paginatedEntries.map((entry) => {
 										const isEditing = editingId === entry.id;
 										const canEdit =
 											entry.status === "DRAFT" ||
@@ -454,6 +467,69 @@ export function JournalClubTable({
 							</Table>
 						</div>
 					</div>
+
+					{/* Pagination */}
+					{totalPages > 1 && (
+						<div className="flex items-center justify-between mt-4 px-2">
+							<p className="text-sm text-muted-foreground">
+								Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+								{Math.min(currentPage * PAGE_SIZE, entries.length)} of{" "}
+								{entries.length} entries
+							</p>
+							<div className="flex items-center gap-1">
+								<Button
+									variant="outline"
+									size="icon"
+									className="h-8 w-8"
+									onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+									disabled={currentPage === 1}
+								>
+									<ChevronLeft className="h-4 w-4" />
+								</Button>
+								{Array.from({ length: totalPages }, (_, i) => i + 1)
+									.filter(
+										(p) =>
+											p === 1 ||
+											p === totalPages ||
+											Math.abs(p - currentPage) <= 1,
+									)
+									.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+										if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1) acc.push("...");
+										acc.push(p);
+										return acc;
+									}, [])
+									.map((p, idx) =>
+										p === "..." ?
+											<span
+												key={`dot-${idx}`}
+												className="px-1 text-muted-foreground"
+											>
+												…
+											</span>
+										:	<Button
+												key={p}
+												variant={currentPage === p ? "default" : "outline"}
+												size="icon"
+												className="h-8 w-8"
+												onClick={() => setCurrentPage(p)}
+											>
+												{p}
+											</Button>,
+									)}
+								<Button
+									variant="outline"
+									size="icon"
+									className="h-8 w-8"
+									onClick={() =>
+										setCurrentPage((p) => Math.min(totalPages, p + 1))
+									}
+									disabled={currentPage === totalPages}
+								>
+									<ChevronRight className="h-4 w-4" />
+								</Button>
+							</div>
+						</div>
+					)}
 
 					{/* Summary */}
 					<div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground px-2 sm:px-0">

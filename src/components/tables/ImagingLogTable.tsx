@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Table,
@@ -27,12 +27,22 @@ import {
 	CardTitle,
 	CardDescription,
 } from "@/components/ui/card";
-import { Edit, Send, Trash2, Loader2, Plus } from "lucide-react";
+import {
+	Edit,
+	Send,
+	Trash2,
+	Loader2,
+	Plus,
+	ChevronLeft,
+	ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ENTRY_STATUS_COLORS } from "@/lib/constants/entry-status";
 import { IMAGING_SKILL_LEVEL_LABELS } from "@/lib/constants/imaging-log-fields";
 import { format } from "date-fns";
+
+const PAGE_SIZE = 15;
 
 interface ImagingLogEntry {
 	id: string;
@@ -102,6 +112,13 @@ export function ImagingLogTable({
 		});
 	}
 
+	const [currentPage, setCurrentPage] = useState(1);
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
+
 	const progressPercent =
 		maxEntries > 0 ?
 			Math.min(100, Math.round((entries.length / maxEntries) * 100))
@@ -137,58 +154,95 @@ export function ImagingLogTable({
 					<div className="text-center py-8 text-muted-foreground">
 						No imaging entries logged yet. Add your first entry.
 					</div>
-				:	<div className="overflow-x-auto">
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead className="w-16">Sl. No.</TableHead>
-									<TableHead className="w-24">Date</TableHead>
-									<TableHead>Patient Info</TableHead>
-									<TableHead>Diagnosis</TableHead>
-									<TableHead className="w-28">Skill Level</TableHead>
-									<TableHead className="w-24">Status</TableHead>
-									<TableHead className="w-32">Actions</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) => (
-									<TableRow key={entry.id}>
-										<TableCell className="font-medium">{entry.slNo}</TableCell>
-										<TableCell>
-											{entry.date ?
-												format(new Date(entry.date), "dd MMM yyyy")
-											:	"—"}
-										</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.patientInfo || "—"}
-										</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.completeDiagnosis || "—"}
-										</TableCell>
-										<TableCell>
-											{entry.skillLevel ?
-												<Badge variant="outline">
-													{IMAGING_SKILL_LEVEL_LABELS[entry.skillLevel] ??
-														entry.skillLevel}
+				:	<>
+						<div className="overflow-x-auto">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-16">Sl. No.</TableHead>
+										<TableHead className="w-24">Date</TableHead>
+										<TableHead>Patient Info</TableHead>
+										<TableHead>Diagnosis</TableHead>
+										<TableHead className="w-28">Skill Level</TableHead>
+										<TableHead className="w-24">Status</TableHead>
+										<TableHead className="w-32">Actions</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) => (
+										<TableRow key={entry.id}>
+											<TableCell className="font-medium">
+												{entry.slNo}
+											</TableCell>
+											<TableCell>
+												{entry.date ?
+													format(new Date(entry.date), "dd MMM yyyy")
+												:	"—"}
+											</TableCell>
+											<TableCell className="max-w-50 truncate">
+												{entry.patientInfo || "—"}
+											</TableCell>
+											<TableCell className="max-w-50 truncate">
+												{entry.completeDiagnosis || "—"}
+											</TableCell>
+											<TableCell>
+												{entry.skillLevel ?
+													<Badge variant="outline">
+														{IMAGING_SKILL_LEVEL_LABELS[entry.skillLevel] ??
+															entry.skillLevel}
+													</Badge>
+												:	"—"}
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className={
+														ENTRY_STATUS_COLORS[
+															entry.status as keyof typeof ENTRY_STATUS_COLORS
+														] ?? ""
+													}
+												>
+													{entry.status}
 												</Badge>
-											:	"—"}
-										</TableCell>
-										<TableCell>
-											<Badge
-												variant="outline"
-												className={
-													ENTRY_STATUS_COLORS[
-														entry.status as keyof typeof ENTRY_STATUS_COLORS
-													] ?? ""
-												}
-											>
-												{entry.status}
-											</Badge>
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center gap-1">
-												{entry.status === "DRAFT" && (
-													<>
+											</TableCell>
+											<TableCell>
+												<div className="flex items-center gap-1">
+													{entry.status === "DRAFT" && (
+														<>
+															<Link
+																href={`/dashboard/student/imaging/${categorySlug}/${entry.id}/edit`}
+															>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-8 w-8"
+																>
+																	<Edit className="h-4 w-4" />
+																</Button>
+															</Link>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-8 w-8"
+																onClick={() => handleSubmit(entry.id)}
+																disabled={isPending && actionId === entry.id}
+															>
+																{isPending && actionId === entry.id ?
+																	<Loader2 className="h-4 w-4 animate-spin" />
+																:	<Send className="h-4 w-4" />}
+															</Button>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-8 w-8 text-red-600"
+																onClick={() => handleDelete(entry.id)}
+																disabled={isPending && actionId === entry.id}
+															>
+																<Trash2 className="h-4 w-4" />
+															</Button>
+														</>
+													)}
+													{entry.status === "NEEDS_REVISION" && (
 														<Link
 															href={`/dashboard/student/imaging/${categorySlug}/${entry.id}/edit`}
 														>
@@ -200,48 +254,74 @@ export function ImagingLogTable({
 																<Edit className="h-4 w-4" />
 															</Button>
 														</Link>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8"
-															onClick={() => handleSubmit(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															{isPending && actionId === entry.id ?
-																<Loader2 className="h-4 w-4 animate-spin" />
-															:	<Send className="h-4 w-4" />}
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8 text-red-600"
-															onClick={() => handleDelete(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															<Trash2 className="h-4 w-4" />
-														</Button>
-													</>
-												)}
-												{entry.status === "NEEDS_REVISION" && (
-													<Link
-														href={`/dashboard/student/imaging/${categorySlug}/${entry.id}/edit`}
+													)}
+												</div>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Pagination Controls */}
+						{totalPages > 1 && (
+							<div className="flex items-center justify-between pt-4 border-t mt-4">
+								<p className="text-sm text-muted-foreground">
+									Page {currentPage} of {totalPages} ({entries.length} entries)
+								</p>
+								<div className="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									{Array.from({ length: totalPages }, (_, i) => i + 1)
+										.filter((page) => {
+											if (totalPages <= 5) return true;
+											if (page === 1 || page === totalPages) return true;
+											return Math.abs(page - currentPage) <= 1;
+										})
+										.map((page, idx, arr) => {
+											const showEllipsis = idx > 0 && page - arr[idx - 1] > 1;
+											return (
+												<span key={page} className="flex items-center">
+													{showEllipsis && (
+														<span className="px-1 text-muted-foreground">
+															…
+														</span>
+													)}
+													<Button
+														variant={
+															currentPage === page ? "default" : "outline"
+														}
+														size="icon"
+														className="h-8 w-8"
+														onClick={() => setCurrentPage(page)}
 													>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8"
-														>
-															<Edit className="h-4 w-4" />
-														</Button>
-													</Link>
-												)}
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</div>
+														{page}
+													</Button>
+												</span>
+											);
+										})}
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={currentPage === totalPages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						)}
+					</>
 				}
 			</CardContent>
 		</Card>

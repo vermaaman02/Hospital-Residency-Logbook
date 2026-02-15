@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Table,
@@ -27,7 +27,15 @@ import {
 	CardTitle,
 	CardDescription,
 } from "@/components/ui/card";
-import { Edit, Send, Trash2, Loader2, Plus } from "lucide-react";
+import {
+	Edit,
+	Send,
+	Trash2,
+	Loader2,
+	Plus,
+	ChevronLeft,
+	ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ENTRY_STATUS_COLORS } from "@/lib/constants/entry-status";
@@ -60,6 +68,8 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 	NC: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
+const PAGE_SIZE = 15;
+
 export function DiagnosticSkillTable({
 	entries,
 	categoryLabel,
@@ -71,6 +81,14 @@ export function DiagnosticSkillTable({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [actionId, setActionId] = useState<string | null>(null);
+	const [currentPage, setCurrentPage] = useState(1);
+
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
 
 	function handleSubmit(id: string) {
 		setActionId(id);
@@ -142,61 +160,98 @@ export function DiagnosticSkillTable({
 					<div className="text-center py-8 text-muted-foreground">
 						No diagnostic skills logged yet. Add your first entry.
 					</div>
-				:	<div className="overflow-x-auto">
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead className="w-16">Sl. No.</TableHead>
-									<TableHead>Skill / Investigation</TableHead>
-									<TableHead>Representative Diagnosis</TableHead>
-									<TableHead className="w-32">Confidence</TableHead>
-									<TableHead className="w-20">Tally</TableHead>
-									<TableHead className="w-24">Status</TableHead>
-									<TableHead className="w-32">Actions</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) => (
-									<TableRow key={entry.id}>
-										<TableCell className="font-medium">{entry.slNo}</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.skillName}
-										</TableCell>
-										<TableCell className="max-w-50 truncate">
-											{entry.representativeDiagnosis || "—"}
-										</TableCell>
-										<TableCell>
-											{entry.confidenceLevel ?
+				:	<>
+						<div className="overflow-x-auto">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-16">Sl. No.</TableHead>
+										<TableHead>Skill / Investigation</TableHead>
+										<TableHead>Representative Diagnosis</TableHead>
+										<TableHead className="w-32">Confidence</TableHead>
+										<TableHead className="w-20">Tally</TableHead>
+										<TableHead className="w-24">Status</TableHead>
+										<TableHead className="w-32">Actions</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) => (
+										<TableRow key={entry.id}>
+											<TableCell className="font-medium">
+												{entry.slNo}
+											</TableCell>
+											<TableCell className="max-w-50 truncate">
+												{entry.skillName}
+											</TableCell>
+											<TableCell className="max-w-50 truncate">
+												{entry.representativeDiagnosis || "—"}
+											</TableCell>
+											<TableCell>
+												{entry.confidenceLevel ?
+													<Badge
+														variant="outline"
+														className={
+															CONFIDENCE_COLORS[entry.confidenceLevel] ?? ""
+														}
+													>
+														{CONFIDENCE_LEVEL_LABELS[entry.confidenceLevel] ??
+															entry.confidenceLevel}
+													</Badge>
+												:	"—"}
+											</TableCell>
+											<TableCell className="text-center font-medium">
+												{entry.totalTimesPerformed}
+											</TableCell>
+											<TableCell>
 												<Badge
 													variant="outline"
 													className={
-														CONFIDENCE_COLORS[entry.confidenceLevel] ?? ""
+														ENTRY_STATUS_COLORS[
+															entry.status as keyof typeof ENTRY_STATUS_COLORS
+														] ?? ""
 													}
 												>
-													{CONFIDENCE_LEVEL_LABELS[entry.confidenceLevel] ??
-														entry.confidenceLevel}
+													{entry.status}
 												</Badge>
-											:	"—"}
-										</TableCell>
-										<TableCell className="text-center font-medium">
-											{entry.totalTimesPerformed}
-										</TableCell>
-										<TableCell>
-											<Badge
-												variant="outline"
-												className={
-													ENTRY_STATUS_COLORS[
-														entry.status as keyof typeof ENTRY_STATUS_COLORS
-													] ?? ""
-												}
-											>
-												{entry.status}
-											</Badge>
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center gap-1">
-												{entry.status === "DRAFT" && (
-													<>
+											</TableCell>
+											<TableCell>
+												<div className="flex items-center gap-1">
+													{entry.status === "DRAFT" && (
+														<>
+															<Link
+																href={`/dashboard/student/diagnostics/${categorySlug}/${entry.id}/edit`}
+															>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-8 w-8"
+																>
+																	<Edit className="h-4 w-4" />
+																</Button>
+															</Link>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-8 w-8"
+																onClick={() => handleSubmit(entry.id)}
+																disabled={isPending && actionId === entry.id}
+															>
+																{isPending && actionId === entry.id ?
+																	<Loader2 className="h-4 w-4 animate-spin" />
+																:	<Send className="h-4 w-4" />}
+															</Button>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-8 w-8 text-red-600"
+																onClick={() => handleDelete(entry.id)}
+																disabled={isPending && actionId === entry.id}
+															>
+																<Trash2 className="h-4 w-4" />
+															</Button>
+														</>
+													)}
+													{entry.status === "NEEDS_REVISION" && (
 														<Link
 															href={`/dashboard/student/diagnostics/${categorySlug}/${entry.id}/edit`}
 														>
@@ -208,48 +263,79 @@ export function DiagnosticSkillTable({
 																<Edit className="h-4 w-4" />
 															</Button>
 														</Link>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8"
-															onClick={() => handleSubmit(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															{isPending && actionId === entry.id ?
-																<Loader2 className="h-4 w-4 animate-spin" />
-															:	<Send className="h-4 w-4" />}
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8 text-red-600"
-															onClick={() => handleDelete(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															<Trash2 className="h-4 w-4" />
-														</Button>
-													</>
-												)}
-												{entry.status === "NEEDS_REVISION" && (
-													<Link
-														href={`/dashboard/student/diagnostics/${categorySlug}/${entry.id}/edit`}
-													>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-8 w-8"
-														>
-															<Edit className="h-4 w-4" />
-														</Button>
-													</Link>
-												)}
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</div>
+													)}
+												</div>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Pagination */}
+						{totalPages > 1 && (
+							<div className="flex items-center justify-between mt-4 px-2">
+								<p className="text-sm text-muted-foreground">
+									Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+									{Math.min(currentPage * PAGE_SIZE, entries.length)} of{" "}
+									{entries.length}
+								</p>
+								<div className="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									{Array.from({ length: totalPages }, (_, i) => i + 1)
+										.filter(
+											(p) =>
+												p === 1 ||
+												p === totalPages ||
+												Math.abs(p - currentPage) <= 1,
+										)
+										.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+											if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1)
+												acc.push("...");
+											acc.push(p);
+											return acc;
+										}, [])
+										.map((p, idx) =>
+											p === "..." ?
+												<span
+													key={`dot-${idx}`}
+													className="px-1 text-muted-foreground"
+												>
+													…
+												</span>
+											:	<Button
+													key={p}
+													variant={currentPage === p ? "default" : "outline"}
+													size="icon"
+													className="h-8 w-8"
+													onClick={() => setCurrentPage(p)}
+												>
+													{p}
+												</Button>,
+										)}
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={currentPage === totalPages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						)}
+					</>
 				}
 			</CardContent>
 		</Card>
