@@ -829,7 +829,7 @@ model ResidentEvaluation {
   @@index([status])
 }
 
-// ======================== MODULE 14: TRAINING & MENTORING ========================
+// ======================== MODULE 14: TRAINING & MENTORING / EVALUATION GRAPH ========================
 
 model TrainingMentoringRecord {
   id                   String      @id @default(cuid())
@@ -843,6 +843,11 @@ model TrainingMentoringRecord {
   softSkillScore       Int?        // Soft Skills domain
   researchScore        Int?        // Research domain
   overallScore         Float?      // Auto-calculated average
+  
+  // End Semester Assessment
+  theoryMarks          String?     // e.g. "Pass", "Fail", "72%"
+  practicalMarks       String?     // e.g. "Pass", "Fail", "85%"
+  
   evaluatedById        String?     // Faculty who evaluated
   remarks              String?
   status               EntryStatus @default(DRAFT)

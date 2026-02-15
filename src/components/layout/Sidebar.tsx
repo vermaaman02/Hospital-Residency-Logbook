@@ -229,6 +229,12 @@ const studentNavSections: NavSection[] = [
 				roles: ["student"],
 			},
 			{
+				title: "Evaluation Graph",
+				href: "/dashboard/student/evaluation-graph",
+				icon: <BarChart3 className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
 				title: "Evaluations",
 				href: "/dashboard/student/evaluations",
 				icon: <Star className="h-4 w-4" />,
@@ -412,6 +418,13 @@ const facultyNavSections: NavSection[] = [
 				href: "/dashboard/faculty/training-mentoring",
 				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["faculty"],
+			},
+			{
+				title: "Evaluation Graph",
+				href: "/dashboard/faculty/evaluation-graph",
+				icon: <BarChart3 className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "evaluationGraph",
 			},
 			{
 				title: "Evaluations",
@@ -632,6 +645,13 @@ const hodNavSections: NavSection[] = [
 				href: "/dashboard/faculty/training-mentoring",
 				icon: <HeartHandshake className="h-4 w-4" />,
 				roles: ["hod"],
+			},
+			{
+				title: "Evaluation Graph",
+				href: "/dashboard/hod/evaluation-graph",
+				icon: <BarChart3 className="h-4 w-4" />,
+				roles: ["hod"],
+				badgeKey: "evaluationGraph",
 			},
 			{
 				title: "Evaluations",

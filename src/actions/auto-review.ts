@@ -31,7 +31,8 @@ export type AutoReviewCategory =
 	| "researchActivities"
 	| "disasterDrills"
 	| "qualityImprovement"
-	| "logbookReviews";
+	| "logbookReviews"
+	| "evaluationGraphFacultyEnabled";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -53,6 +54,7 @@ export interface AutoReviewSettings {
 	disasterDrills: boolean;
 	qualityImprovement: boolean;
 	logbookReviews: boolean;
+	evaluationGraphFacultyEnabled: boolean;
 }
 
 /**
@@ -87,6 +89,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		disasterDrills: map["disasterDrills"] ?? false,
 		qualityImprovement: map["qualityImprovement"] ?? false,
 		logbookReviews: map["logbookReviews"] ?? false,
+		evaluationGraphFacultyEnabled: map["evaluationGraphFacultyEnabled"] ?? true,
 	};
 }
 
@@ -140,6 +143,8 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/quality-improvement");
 	revalidatePath("/dashboard/faculty/logbook-reviews");
 	revalidatePath("/dashboard/hod/logbook-reviews");
+	revalidatePath("/dashboard/faculty/evaluation-graph");
+	revalidatePath("/dashboard/hod/evaluation-graph");
 	return { success: true, category, enabled };
 }
 

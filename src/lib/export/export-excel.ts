@@ -254,6 +254,112 @@ function formatDateForFile(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// ======================== EVALUATION GRAPH TYPES ========================
+
+export interface EvaluationGraphExportRow {
+	semester: number;
+	knowledgeScore: number | null;
+	clinicalSkillScore: number | null;
+	proceduralSkillScore: number | null;
+	softSkillScore: number | null;
+	researchScore: number | null;
+	overallScore: number | null;
+	theoryMarks: string | null;
+	practicalMarks: string | null;
+	remarks: string | null;
+	status: string;
+}
+
+export interface EvaluationGraphReviewRow extends EvaluationGraphExportRow {
+	studentName: string;
+	batch: string;
+}
+
+// ======================== EVALUATION GRAPH — STUDENT EXPORT ========================
+
+/**
+ * Export a student's own evaluation graph records to Excel.
+ */
+export function exportEvaluationGraphToExcel(
+	rows: EvaluationGraphExportRow[],
+	studentName: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = rows.map((r) => ({
+		Semester: r.semester,
+		Knowledge: r.knowledgeScore ?? "",
+		"Clinical Skills": r.clinicalSkillScore ?? "",
+		"Procedural Skills": r.proceduralSkillScore ?? "",
+		"Soft Skills": r.softSkillScore ?? "",
+		Research: r.researchScore ?? "",
+		"Overall Score":
+			r.overallScore != null ? Number(r.overallScore.toFixed(1)) : "",
+		"Theory Marks": r.theoryMarks ?? "",
+		"Practical Marks": r.practicalMarks ?? "",
+		Remarks: stripMd(r.remarks),
+		Status: r.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ Semester: "", Knowledge: "No entries" }],
+	);
+	setColumnWidths(ws, [10, 12, 16, 18, 14, 12, 14, 14, 16, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Evaluation Graph");
+
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Evaluation_Graph_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== EVALUATION GRAPH — FACULTY / HOD EXPORT ========================
+
+/**
+ * Export evaluation graph records for review (faculty/HOD).
+ * Can export for a single student or all students.
+ */
+export function exportEvaluationGraphReviewToExcel(
+	rows: EvaluationGraphReviewRow[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = rows.map((r) => ({
+		"Student Name": r.studentName,
+		Batch: r.batch,
+		Semester: r.semester,
+		Knowledge: r.knowledgeScore ?? "",
+		"Clinical Skills": r.clinicalSkillScore ?? "",
+		"Procedural Skills": r.proceduralSkillScore ?? "",
+		"Soft Skills": r.softSkillScore ?? "",
+		Research: r.researchScore ?? "",
+		"Overall Score":
+			r.overallScore != null ? Number(r.overallScore.toFixed(1)) : "",
+		"Theory Marks": r.theoryMarks ?? "",
+		"Practical Marks": r.practicalMarks ?? "",
+		Remarks: stripMd(r.remarks),
+		Status: r.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Student Name": "", Semester: "No entries" }],
+	);
+	setColumnWidths(ws, [22, 16, 10, 12, 16, 18, 14, 12, 14, 14, 16, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Evaluation Graph Review");
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Evaluation_Graph_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
 // ======================== CASE PRESENTATION TYPES ========================
 
 export interface CasePresentationExportRow {
