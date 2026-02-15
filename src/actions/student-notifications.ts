@@ -20,7 +20,8 @@ export interface StudentNotification {
 		| "seminar"
 		| "thesis"
 		| "clinical-skill"
-		| "case-management";
+		| "case-management"
+		| "procedure-log";
 	title: string;
 	message: string;
 	status: "SIGNED" | "NEEDS_REVISION";
@@ -59,6 +60,7 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 		clinicalSkillsAdult,
 		clinicalSkillsPediatric,
 		caseManagementLogs,
+		procedureLogs,
 	] = await Promise.all([
 		prisma.rotationPosting.findMany({
 			where: {
@@ -155,6 +157,22 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 				id: true,
 				caseSubCategory: true,
 				category: true,
+				status: true,
+				facultyRemark: true,
+				updatedAt: true,
+			},
+		}),
+		prisma.procedureLog.findMany({
+			where: {
+				userId: user.id,
+				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				procedureCategory: true,
+				procedureDescription: true,
 				status: true,
 				facultyRemark: true,
 				updatedAt: true,
@@ -285,6 +303,30 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			remark: cm.facultyRemark,
 			updatedAt: cm.updatedAt.toISOString(),
 			href: "/dashboard/student/case-management",
+		});
+	}
+
+	// Map procedure logs
+	for (const pl of procedureLogs) {
+		const categoryLabel =
+			pl.procedureCategory ?
+				pl.procedureCategory
+					.replace(/_/g, " ")
+					.toLowerCase()
+					.replace(/\b\w/g, (ch: string) => ch.toUpperCase())
+			:	"Procedure";
+		notifications.push({
+			id: pl.id,
+			type: "procedure-log",
+			title: pl.procedureDescription || categoryLabel,
+			message:
+				pl.status === "SIGNED" ?
+					"Procedure entry approved"
+				:	"Revision needed for procedure entry",
+			status: pl.status as "SIGNED" | "NEEDS_REVISION",
+			remark: pl.facultyRemark,
+			updatedAt: pl.updatedAt.toISOString(),
+			href: "/dashboard/student/procedures",
 		});
 	}
 

@@ -1,11 +1,11 @@
 /**
- * @module CaseManagementReviewClient
- * @description Faculty/HOD review page for student case management submissions.
+ * @module ProcedureLogsReviewClient
+ * @description Faculty/HOD review page for student procedure log submissions.
  * Features: search, status/batch/category filters, bulk select, detail sheet,
  * sign/reject dialogs, pagination, auto-review toggle, student filter, PDF/Excel export.
- * 24-category tab switcher (or "All" view).
+ * 49-category filter (or "All" view).
  *
- * @see PG Logbook .md — "LOG OF CASE MANAGEMENT"
+ * @see PG Logbook .md — "LOG OF PROCEDURES"
  */
 
 "use client";
@@ -78,46 +78,45 @@ import {
 	ChevronsUpDown,
 	ChevronLeft,
 	ChevronRight,
-	ClipboardList,
+	Syringe,
 	User,
 	Tag,
 	MessageSquare,
 	Activity,
 	Calendar,
 	Stethoscope,
+	MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-	signCaseManagementEntry,
-	rejectCaseManagementEntry,
-	bulkSignCaseManagementEntries,
-} from "@/actions/case-management";
+	signProcedureLogEntry,
+	rejectProcedureLogEntry,
+	bulkSignProcedureLogEntries,
+} from "@/actions/procedure-logs";
 import { toggleAutoReview } from "@/actions/auto-review";
-import {
-	CASE_CATEGORIES,
-	CASE_CATEGORY_LABELS,
-} from "@/lib/constants/case-categories";
-import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
+import { PROCEDURE_CATEGORIES } from "@/lib/constants/procedure-categories";
+import { SKILL_LEVEL_LABELS } from "@/lib/constants/procedure-log-fields";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-export interface CaseManagementSubmission {
+export interface ProcedureLogSubmission {
 	id: string;
 	slNo: number;
-	category: string;
-	caseSubCategory: string;
+	procedureCategory: string;
 	date: string | null;
 	patientName: string | null;
 	patientAge: number | null;
 	patientSex: string | null;
 	uhid: string | null;
 	completeDiagnosis: string | null;
-	competencyLevel: string | null;
-	totalCaseTally: number;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
 	facultyId: string | null;
 	facultyRemark: string | null;
 	status: string;
@@ -132,8 +131,8 @@ export interface CaseManagementSubmission {
 	};
 }
 
-interface CaseManagementReviewClientProps {
-	submissions: CaseManagementSubmission[];
+interface ProcedureLogsReviewClientProps {
+	submissions: ProcedureLogSubmission[];
 	role: "faculty" | "hod";
 	autoReviewEnabled?: boolean;
 }
@@ -142,13 +141,17 @@ type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION" | "DRAFT";
 
 const PAGE_SIZE = 15;
 
+const PROCEDURE_CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
+	PROCEDURE_CATEGORIES.map((c) => [c.enumValue, c.label]),
+);
+
 // ======================== MAIN COMPONENT ========================
 
-export function CaseManagementReviewClient({
+export function ProcedureLogsReviewClient({
 	submissions,
 	role,
 	autoReviewEnabled,
-}: CaseManagementReviewClientProps) {
+}: ProcedureLogsReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
@@ -164,16 +167,18 @@ export function CaseManagementReviewClient({
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
 	// Detail sheet
-	const [detailEntry, setDetailEntry] =
-		useState<CaseManagementSubmission | null>(null);
+	const [detailEntry, setDetailEntry] = useState<ProcedureLogSubmission | null>(
+		null,
+	);
 
 	// Sign/Reject dialogs
-	const [signEntry, setSignEntry] = useState<CaseManagementSubmission | null>(
+	const [signEntry, setSignEntry] = useState<ProcedureLogSubmission | null>(
 		null,
 	);
 	const [signRemark, setSignRemark] = useState("");
-	const [rejectEntry, setRejectEntry] =
-		useState<CaseManagementSubmission | null>(null);
+	const [rejectEntry, setRejectEntry] = useState<ProcedureLogSubmission | null>(
+		null,
+	);
 	const [rejectRemark, setRejectRemark] = useState("");
 
 	// Pagination
@@ -201,14 +206,14 @@ export function CaseManagementReviewClient({
 	// Available categories from submissions
 	const availableCategories = useMemo(() => {
 		const set = new Set<string>();
-		submissions.forEach((s) => set.add(s.category));
-		return CASE_CATEGORIES.filter((c) => set.has(c.enumValue));
+		submissions.forEach((s) => set.add(s.procedureCategory));
+		return PROCEDURE_CATEGORIES.filter((c) => set.has(c.enumValue));
 	}, [submissions]);
 
 	// Filter by category first
 	const categoryFiltered = useMemo(() => {
 		if (categoryFilter === "ALL") return submissions;
-		return submissions.filter((s) => s.category === categoryFilter);
+		return submissions.filter((s) => s.procedureCategory === categoryFilter);
 	}, [submissions, categoryFilter]);
 
 	// Student options (after category filter)
@@ -238,10 +243,11 @@ export function CaseManagementReviewClient({
 			result = result.filter(
 				(s) =>
 					`${s.user.firstName} ${s.user.lastName}`.toLowerCase().includes(q) ||
-					s.caseSubCategory.toLowerCase().includes(q) ||
+					(s.procedureDescription ?? "").toLowerCase().includes(q) ||
 					(s.completeDiagnosis ?? "").toLowerCase().includes(q) ||
 					(s.patientName ?? "").toLowerCase().includes(q) ||
-					(s.uhid ?? "").toLowerCase().includes(q),
+					(s.uhid ?? "").toLowerCase().includes(q) ||
+					(s.performedAtLocation ?? "").toLowerCase().includes(q),
 			);
 		}
 		return result;
@@ -262,7 +268,13 @@ export function CaseManagementReviewClient({
 
 	// Counts (based on category filtered)
 	const counts = useMemo(() => {
-		const c = { ALL: 0, SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
+		const c = {
+			ALL: 0,
+			SUBMITTED: 0,
+			SIGNED: 0,
+			NEEDS_REVISION: 0,
+			DRAFT: 0,
+		};
 		for (const s of categoryFiltered) {
 			c.ALL++;
 			if (s.status in c) c[s.status as keyof typeof c]++;
@@ -270,14 +282,12 @@ export function CaseManagementReviewClient({
 		return c;
 	}, [categoryFiltered]);
 
-	const competencyLabel = (val: string | null) => {
+	const skillLabel = (val: string | null) => {
 		if (!val) return "—";
-		return (
-			COMPETENCY_LEVEL_OPTIONS.find((cl) => cl.value === val)?.label ?? val
-		);
+		return SKILL_LEVEL_LABELS[val] ?? val;
 	};
 
-	const categoryLabel = (val: string) => CASE_CATEGORY_LABELS[val] ?? val;
+	const categoryLabel = (val: string) => PROCEDURE_CATEGORY_LABELS[val] ?? val;
 
 	const formatDate = (d: string | null) => {
 		if (!d) return "—";
@@ -328,7 +338,7 @@ export function CaseManagementReviewClient({
 	}
 
 	// ---- Actions ----
-	const handleSign = useCallback((entry: CaseManagementSubmission) => {
+	const handleSign = useCallback((entry: ProcedureLogSubmission) => {
 		setSignEntry(entry);
 		setSignRemark("");
 	}, []);
@@ -337,9 +347,9 @@ export function CaseManagementReviewClient({
 		if (!signEntry) return;
 		startTransition(async () => {
 			try {
-				await signCaseManagementEntry(signEntry.id, signRemark || undefined);
+				await signProcedureLogEntry(signEntry.id, signRemark || undefined);
 				toast.success(
-					`Signed: ${signEntry.caseSubCategory} (${signEntry.user.firstName})`,
+					`Signed procedure entry #${signEntry.slNo} (${signEntry.user.firstName})`,
 				);
 				setSignEntry(null);
 				setDetailEntry(null);
@@ -355,7 +365,7 @@ export function CaseManagementReviewClient({
 		});
 	}
 
-	function openReject(entry: CaseManagementSubmission) {
+	function openReject(entry: ProcedureLogSubmission) {
 		setRejectEntry(entry);
 		setRejectRemark("");
 	}
@@ -368,7 +378,7 @@ export function CaseManagementReviewClient({
 		}
 		startTransition(async () => {
 			try {
-				await rejectCaseManagementEntry(rejectEntry.id, rejectRemark);
+				await rejectProcedureLogEntry(rejectEntry.id, rejectRemark);
 				toast.success("Sent back for revision");
 				setRejectEntry(null);
 				setDetailEntry(null);
@@ -391,7 +401,7 @@ export function CaseManagementReviewClient({
 		if (ids.length === 0) return;
 		startTransition(async () => {
 			try {
-				await bulkSignCaseManagementEntries(ids);
+				await bulkSignProcedureLogEntries(ids);
 				setSelectedIds(new Set());
 				toast.success(`Signed ${ids.length} entries`);
 				router.refresh();
@@ -406,9 +416,9 @@ export function CaseManagementReviewClient({
 		setAutoReview(enabled);
 		startTransition(async () => {
 			try {
-				await toggleAutoReview("caseManagement", enabled);
+				await toggleAutoReview("procedureLogs", enabled);
 				toast.success(
-					`Auto review ${enabled ? "enabled" : "disabled"} for Case Management`,
+					`Auto review ${enabled ? "enabled" : "disabled"} for Procedures`,
 				);
 				router.refresh();
 			} catch {
@@ -432,16 +442,17 @@ export function CaseManagementReviewClient({
 
 		return exportData.map((e) => ({
 			slNo: e.slNo,
-			categoryLabel: categoryLabel(e.category),
-			caseSubCategory: e.caseSubCategory,
+			categoryLabel: categoryLabel(e.procedureCategory),
 			date: e.date,
 			patientName: e.patientName,
 			patientAge: e.patientAge,
 			patientSex: e.patientSex,
 			uhid: e.uhid,
 			completeDiagnosis: e.completeDiagnosis,
-			competencyLevel: e.competencyLevel,
-			totalCaseTally: e.totalCaseTally,
+			procedureDescription: e.procedureDescription,
+			performedAtLocation: e.performedAtLocation,
+			skillLevel: e.skillLevel,
+			totalProcedureTally: e.totalProcedureTally,
 			status: e.status,
 			studentName: `${e.user.firstName} ${e.user.lastName}`.trim(),
 			batch: e.user.batchRelation?.name ?? "—",
@@ -450,19 +461,19 @@ export function CaseManagementReviewClient({
 	}, [categoryFiltered, selectedStudentId, batchFilter, exportStatusFilter]);
 
 	const handleExportPdf = useCallback(async () => {
-		const { exportCaseManagementReviewToPdf } =
+		const { exportProcedureLogReviewToPdf } =
 			await import("@/lib/export/export-pdf");
 		const label =
 			categoryFilter !== "ALL" ? categoryLabel(categoryFilter) : "All";
-		await exportCaseManagementReviewToPdf(buildExportData(), role, label);
+		await exportProcedureLogReviewToPdf(buildExportData(), role, label);
 	}, [buildExportData, role, categoryFilter]);
 
 	const handleExportExcel = useCallback(async () => {
-		const { exportCaseManagementReviewToExcel } =
+		const { exportProcedureLogReviewToExcel } =
 			await import("@/lib/export/export-excel");
 		const label =
 			categoryFilter !== "ALL" ? categoryLabel(categoryFilter) : "All";
-		exportCaseManagementReviewToExcel(buildExportData(), role, label);
+		exportProcedureLogReviewToExcel(buildExportData(), role, label);
 	}, [buildExportData, role, categoryFilter]);
 
 	// ======================== RENDER ========================
@@ -477,13 +488,13 @@ export function CaseManagementReviewClient({
 							<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
 						)}
 						<label
-							htmlFor="cm-auto-review"
+							htmlFor="pl-auto-review"
 							className="text-xs font-medium text-muted-foreground cursor-pointer"
 						>
-							Auto Review (Case Management)
+							Auto Review (Procedures)
 						</label>
 						<Switch
-							id="cm-auto-review"
+							id="pl-auto-review"
 							checked={autoReview}
 							onCheckedChange={handleAutoReviewToggle}
 							disabled={isPending}
@@ -495,7 +506,7 @@ export function CaseManagementReviewClient({
 					{/* Category Filter */}
 					<Select value={categoryFilter} onValueChange={handleCategoryChange}>
 						<SelectTrigger className="w-52 text-xs">
-							<ClipboardList className="h-3.5 w-3.5 mr-1" />
+							<Syringe className="h-3.5 w-3.5 mr-1" />
 							<SelectValue placeholder="Category" />
 						</SelectTrigger>
 						<SelectContent>
@@ -647,7 +658,7 @@ export function CaseManagementReviewClient({
 						<div className="relative flex-1 w-full">
 							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
-								placeholder="Search by student, case type, diagnosis, patient, UHID…"
+								placeholder="Search by student, procedure, diagnosis, patient, UHID, location…"
 								value={searchQuery}
 								onChange={(e) => handleSearchChange(e.target.value)}
 								className="pl-9"
@@ -692,7 +703,7 @@ export function CaseManagementReviewClient({
 			{/* Table */}
 			<Card>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg" style={{ minWidth: "1300px" }}>
+					<div className="border rounded-lg" style={{ minWidth: "1400px" }}>
 						<Table>
 							<TableHeader>
 								<TableRow className="bg-muted/50">
@@ -707,15 +718,16 @@ export function CaseManagementReviewClient({
 									</TableHead>
 									<TableHead className="w-36 font-bold">Student</TableHead>
 									<TableHead className="min-w-36 font-bold">Category</TableHead>
-									<TableHead className="min-w-44 font-bold">
-										Case Type
-									</TableHead>
 									<TableHead className="w-24 font-bold">Date</TableHead>
-									<TableHead className="min-w-32 font-bold">Patient</TableHead>
-									<TableHead className="min-w-36 font-bold">
+									<TableHead className="min-w-28 font-bold">Patient</TableHead>
+									<TableHead className="min-w-28 font-bold">
 										Diagnosis
 									</TableHead>
-									<TableHead className="w-28 font-bold">Competency</TableHead>
+									<TableHead className="min-w-28 font-bold">
+										Procedure
+									</TableHead>
+									<TableHead className="w-24 font-bold">Location</TableHead>
+									<TableHead className="w-28 font-bold">Skill Level</TableHead>
 									<TableHead className="w-16 text-center font-bold">
 										Tally
 									</TableHead>
@@ -756,7 +768,7 @@ export function CaseManagementReviewClient({
 										</TableCell>
 										<TableCell onClick={(e) => e.stopPropagation()}>
 											<Link
-												href={`/dashboard/${role}/case-management/student/${entry.user.id}`}
+												href={`/dashboard/${role}/procedures/student/${entry.user.id}`}
 												className="group"
 											>
 												<div className="text-sm font-medium text-hospital-primary group-hover:underline">
@@ -770,18 +782,13 @@ export function CaseManagementReviewClient({
 										</TableCell>
 										<TableCell>
 											<Badge variant="outline" className="text-xs">
-												{categoryLabel(entry.category)}
+												{categoryLabel(entry.procedureCategory)}
 											</Badge>
-										</TableCell>
-										<TableCell className="text-sm font-medium max-w-44">
-											<span className="line-clamp-2">
-												{entry.caseSubCategory}
-											</span>
 										</TableCell>
 										<TableCell className="text-sm">
 											{formatDate(entry.date)}
 										</TableCell>
-										<TableCell className="text-sm max-w-32">
+										<TableCell className="text-sm max-w-28">
 											{entry.patientName ?
 												<div>
 													<div className="font-medium line-clamp-1">
@@ -795,22 +802,34 @@ export function CaseManagementReviewClient({
 												</div>
 											:	<span className="text-muted-foreground">—</span>}
 										</TableCell>
-										<TableCell className="text-sm max-w-36">
+										<TableCell className="text-sm max-w-28">
 											{entry.completeDiagnosis ?
 												<span className="line-clamp-2">
 													{entry.completeDiagnosis}
 												</span>
 											:	<span className="text-muted-foreground">—</span>}
 										</TableCell>
+										<TableCell className="text-sm max-w-28">
+											{entry.procedureDescription ?
+												<span className="line-clamp-2">
+													{entry.procedureDescription}
+												</span>
+											:	<span className="text-muted-foreground">—</span>}
+										</TableCell>
+										<TableCell className="text-sm">
+											{entry.performedAtLocation || (
+												<span className="text-muted-foreground">—</span>
+											)}
+										</TableCell>
 										<TableCell>
-											{entry.competencyLevel ?
+											{entry.skillLevel ?
 												<Badge variant="outline" className="text-xs">
-													{entry.competencyLevel}
+													{entry.skillLevel}
 												</Badge>
 											:	<span className="text-muted-foreground">—</span>}
 										</TableCell>
 										<TableCell className="text-center font-mono">
-											{entry.totalCaseTally}
+											{entry.totalProcedureTally}
 										</TableCell>
 										<TableCell className="text-center">
 											<StatusBadge
@@ -864,12 +883,12 @@ export function CaseManagementReviewClient({
 								{paginated.length === 0 && (
 									<TableRow>
 										<TableCell
-											colSpan={12}
+											colSpan={13}
 											className="text-center py-10 text-muted-foreground"
 										>
 											{searchQuery || statusFilter !== "ALL" ?
 												"No matching entries found."
-											:	"No case management submissions yet."}
+											:	"No procedure log submissions yet."}
 										</TableCell>
 									</TableRow>
 								)}
@@ -920,9 +939,9 @@ export function CaseManagementReviewClient({
 								<div className="flex items-start justify-between gap-3">
 									<SheetTitle className="flex items-center gap-2.5">
 										<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hospital-primary/10">
-											<ClipboardList className="h-4.5 w-4.5 text-hospital-primary" />
+											<Syringe className="h-4.5 w-4.5 text-hospital-primary" />
 										</div>
-										Case #{detailEntry.slNo}
+										Procedure #{detailEntry.slNo}
 									</SheetTitle>
 									<StatusBadge
 										status={detailEntry.status as EntryStatus}
@@ -960,19 +979,30 @@ export function CaseManagementReviewClient({
 									</div>
 								</DetailSection>
 
-								<DetailSection title="Case Details" icon={Activity}>
+								<DetailSection title="Procedure Details" icon={Activity}>
 									<DetailRow
 										label="Category"
-										value={categoryLabel(detailEntry.category)}
-									/>
-									<DetailRow
-										label="Case Type"
-										value={detailEntry.caseSubCategory}
+										value={categoryLabel(detailEntry.procedureCategory)}
 									/>
 									<DetailRow
 										label="Date"
 										value={formatDate(detailEntry.date)}
 									/>
+									{detailEntry.procedureDescription && (
+										<div>
+											<p className="text-xs font-medium text-muted-foreground mb-1">
+												Procedure Description
+											</p>
+											<div
+												className="prose prose-sm max-w-none"
+												dangerouslySetInnerHTML={{
+													__html: renderMarkdown(
+														detailEntry.procedureDescription,
+													),
+												}}
+											/>
+										</div>
+									)}
 								</DetailSection>
 
 								<DetailSection title="Patient Information" icon={Stethoscope}>
@@ -1012,12 +1042,19 @@ export function CaseManagementReviewClient({
 										</div>
 									:	<DetailRow label="Diagnosis" value="—" />}
 									<DetailRow
-										label="Competency"
-										value={competencyLabel(detailEntry.competencyLevel)}
+										label="Skill Level"
+										value={skillLabel(detailEntry.skillLevel)}
 									/>
 									<DetailRow
 										label="Tally"
-										value={String(detailEntry.totalCaseTally)}
+										value={String(detailEntry.totalProcedureTally)}
+									/>
+								</DetailSection>
+
+								<DetailSection title="Location" icon={MapPin}>
+									<DetailRow
+										label="Performed at"
+										value={detailEntry.performedAtLocation || "—"}
 									/>
 								</DetailSection>
 
@@ -1075,9 +1112,10 @@ export function CaseManagementReviewClient({
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Sign Case Management Entry</DialogTitle>
+						<DialogTitle>Sign Procedure Log Entry</DialogTitle>
 						<DialogDescription>
-							Case #{signEntry?.slNo} — {signEntry?.caseSubCategory} by{" "}
+							Procedure #{signEntry?.slNo} —{" "}
+							{categoryLabel(signEntry?.procedureCategory ?? "")} by{" "}
 							{signEntry?.user.firstName} {signEntry?.user.lastName}
 						</DialogDescription>
 					</DialogHeader>
@@ -1122,7 +1160,8 @@ export function CaseManagementReviewClient({
 					<DialogHeader>
 						<DialogTitle>Request Revision</DialogTitle>
 						<DialogDescription>
-							Case #{rejectEntry?.slNo} — {rejectEntry?.caseSubCategory} by{" "}
+							Procedure #{rejectEntry?.slNo} —{" "}
+							{categoryLabel(rejectEntry?.procedureCategory ?? "")} by{" "}
 							{rejectEntry?.user.firstName} {rejectEntry?.user.lastName}
 						</DialogDescription>
 					</DialogHeader>

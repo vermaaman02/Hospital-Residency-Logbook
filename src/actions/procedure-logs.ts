@@ -30,37 +30,53 @@ function revalidateAll() {
 	revalidatePath("/dashboard/hod/procedures");
 }
 
-// ─── Initialize ─────────────────────────────────────────────
+// ─── Add Row ────────────────────────────────────────────────
 
 /**
- * Initialize rows for a given procedure category.
- * Creates maxEntries rows with sequential Sl. No values.
+ * Add a single new empty row for a given procedure category.
+ * Sl.No is auto-incremented based on existing rows.
  */
-export async function initializeProcedureLogs(
-	procedureCategory: string,
-	maxEntries: number,
-) {
+export async function addProcedureLogRow(procedureCategory: string) {
 	const clerkId = await requireAuth();
 	const user = await resolveUser(clerkId);
 
-	const existing = await prisma.procedureLog.count({
+	const lastEntry = await prisma.procedureLog.findFirst({
 		where: { userId: user.id, procedureCategory: procedureCategory as never },
+		orderBy: { slNo: "desc" },
+		select: { slNo: true },
 	});
 
-	if (existing > 0) return { initialized: false };
-	if (maxEntries <= 0) return { initialized: false };
+	const newSlNo = (lastEntry?.slNo ?? 0) + 1;
 
-	await prisma.procedureLog.createMany({
-		data: Array.from({ length: maxEntries }, (_, idx) => ({
+	const entry = await prisma.procedureLog.create({
+		data: {
 			userId: user.id,
 			procedureCategory: procedureCategory as never,
-			slNo: idx + 1,
+			slNo: newSlNo,
 			status: "DRAFT" as never,
-		})),
+		},
 	});
 
 	revalidateAll();
-	return { initialized: true };
+	return entry;
+}
+
+/**
+ * Delete a DRAFT procedure log row. Only the owner can delete, and only DRAFT entries.
+ */
+export async function deleteProcedureLogEntry(id: string) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
+
+	const entry = await prisma.procedureLog.findUnique({ where: { id } });
+	if (!entry) throw new Error("Entry not found");
+	if (entry.userId !== user.id) throw new Error("Not your entry");
+	if (entry.status !== "DRAFT")
+		throw new Error("Can only delete DRAFT entries");
+
+	await prisma.procedureLog.delete({ where: { id } });
+	revalidateAll();
+	return { success: true };
 }
 
 // ─── Read (Student) ─────────────────────────────────────────
@@ -240,28 +256,6 @@ export async function submitProcedureLogEntry(id: string) {
 			data: { status: "SUBMITTED" },
 		});
 	}
-
-	revalidateAll();
-	return { success: true };
-}
-
-// ─── Delete ─────────────────────────────────────────────────
-
-export async function deleteProcedureLogEntry(id: string) {
-	const clerkId = await requireAuth();
-	const user = await resolveUser(clerkId);
-
-	const existing = await prisma.procedureLog.findUnique({
-		where: { id },
-	});
-	if (!existing || existing.userId !== user.id) {
-		throw new Error("Entry not found or unauthorized");
-	}
-	if (existing.status !== "DRAFT") {
-		throw new Error("Can only delete draft entries");
-	}
-
-	await prisma.procedureLog.delete({ where: { id } });
 
 	revalidateAll();
 	return { success: true };

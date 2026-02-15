@@ -20,6 +20,7 @@ export interface PendingCounts {
 	journalClubs: number;
 	clinicalSkills: number;
 	caseManagement: number;
+	procedureLogs: number;
 	total: number;
 }
 
@@ -37,6 +38,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			journalClubs: 0,
 			clinicalSkills: 0,
 			caseManagement: 0,
+			procedureLogs: 0,
 			total: 0,
 		};
 
@@ -56,6 +58,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				journalClubs: 0,
 				clinicalSkills: 0,
 				caseManagement: 0,
+				procedureLogs: 0,
 				total: 0,
 			};
 
@@ -77,6 +80,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		clinicalSkillsAdult,
 		clinicalSkillsPediatric,
 		caseManagement,
+		procedureLogs,
 	] = await Promise.all([
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
@@ -102,6 +106,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		prisma.caseManagementLog.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
 		}),
+		prisma.procedureLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
 	]);
 
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
@@ -112,7 +119,8 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		casePresentations +
 		journalClubs +
 		clinicalSkills +
-		caseManagement;
+		caseManagement +
+		procedureLogs;
 
 	return {
 		rotationPostings,
@@ -121,6 +129,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		journalClubs,
 		clinicalSkills,
 		caseManagement,
+		procedureLogs,
 		total,
 	};
 }

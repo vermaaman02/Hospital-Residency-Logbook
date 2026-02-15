@@ -11,13 +11,7 @@
 
 "use client";
 
-import {
-	useState,
-	useTransition,
-	useCallback,
-	useMemo,
-	useEffect,
-} from "react";
+import { useState, useTransition, useCallback, useMemo } from "react";
 import {
 	Card,
 	CardContent,
@@ -71,6 +65,10 @@ import {
 	ChevronsUpDown,
 	Save,
 	AlertTriangle,
+	Plus,
+	Trash2,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -82,7 +80,8 @@ import {
 import {
 	updateProcedureLogEntry,
 	submitProcedureLogEntry,
-	initializeProcedureLogs,
+	addProcedureLogRow,
+	deleteProcedureLogEntry,
 } from "@/actions/procedure-logs";
 import {
 	STANDARD_SKILL_LEVEL_OPTIONS,
@@ -162,6 +161,8 @@ const SEX_OPTIONS = [
 
 // ======================== MAIN COMPONENT ========================
 
+const PAGE_SIZE = 15;
+
 export function ProcedureLogTable({
 	entries,
 	facultyList,
@@ -175,28 +176,10 @@ export function ProcedureLogTable({
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
+	const [currentPage, setCurrentPage] = useState(1);
 
 	const skillLevelOptions =
 		isCpr ? CPR_SKILL_LEVEL_OPTIONS : STANDARD_SKILL_LEVEL_OPTIONS;
-
-	// Auto-initialize if empty
-	useEffect(() => {
-		if (entries.length === 0) {
-			startTransition(async () => {
-				try {
-					const result = await initializeProcedureLogs(
-						procedureCategory,
-						maxEntries,
-					);
-					if (result.initialized) {
-						router.refresh();
-					}
-				} catch {
-					toast.error("Failed to initialize procedure entries");
-				}
-			});
-		}
-	}, [entries.length, procedureCategory, maxEntries, router]);
 
 	const stats = useMemo(() => {
 		const total = entries.length;
@@ -208,6 +191,18 @@ export function ProcedureLogTable({
 		).length;
 		return { total, signed, submitted, draft, needsRevision };
 	}, [entries]);
+
+	// Pagination
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
+
+	// Reset to last page if current page is now beyond  total
+	useMemo(() => {
+		if (currentPage > totalPages) setCurrentPage(totalPages);
+	}, [currentPage, totalPages]);
 
 	const getFacultyName = useCallback(
 		(facultyId: string | null) => {
@@ -222,6 +217,39 @@ export function ProcedureLogTable({
 		if (!val) return "—";
 		return SKILL_LEVEL_LABELS[val] ?? val;
 	}, []);
+
+	// ---- Add New Row ----
+	function handleAddRow() {
+		startTransition(async () => {
+			try {
+				await addProcedureLogRow(procedureCategory);
+				toast.success("New row added");
+				// Jump to last page to see the new entry
+				const newTotalPages = Math.ceil((entries.length + 1) / PAGE_SIZE);
+				setCurrentPage(newTotalPages);
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to add row",
+				);
+			}
+		});
+	}
+
+	// ---- Delete Row ----
+	function handleDelete(id: string) {
+		startTransition(async () => {
+			try {
+				await deleteProcedureLogEntry(id);
+				toast.success("Row deleted");
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to delete",
+				);
+			}
+		});
+	}
 
 	// ---- Editing ----
 
@@ -308,98 +336,193 @@ export function ProcedureLogTable({
 					<div>
 						<CardTitle className="text-lg">{categoryLabel}</CardTitle>
 						<CardDescription>
-							{stats.signed} of {stats.total} entries signed off
+							{stats.total > 0 ?
+								`${stats.signed} of ${stats.total} entries signed off`
+							:	"No entries yet — add your first row"}
 						</CardDescription>
 					</div>
-					<Badge variant="outline" className="text-sm">
-						{stats.signed}/{stats.total}
-					</Badge>
+					<div className="flex items-center gap-2">
+						<Badge variant="outline" className="text-sm">
+							{stats.signed}/{stats.total}
+						</Badge>
+						<Button
+							size="sm"
+							variant="default"
+							onClick={handleAddRow}
+							disabled={isPending}
+							className="gap-1"
+						>
+							{isPending ?
+								<Loader2 className="h-4 w-4 animate-spin" />
+							:	<Plus className="h-4 w-4" />}
+							Add Row
+						</Button>
+					</div>
 				</div>
 				{/* Progress bar */}
-				<div className="w-full bg-muted rounded-full h-2 mt-2">
-					<div
-						className="bg-hospital-secondary rounded-full h-2 transition-all"
-						style={{
-							width: `${stats.total > 0 ? (stats.signed / stats.total) * 100 : 0}%`,
-						}}
-					/>
-				</div>
+				{stats.total > 0 && (
+					<div className="w-full bg-muted rounded-full h-2 mt-2">
+						<div
+							className="bg-hospital-secondary rounded-full h-2 transition-all"
+							style={{
+								width: `${(stats.signed / stats.total) * 100}%`,
+							}}
+						/>
+					</div>
+				)}
 			</CardHeader>
 			<CardContent className="p-0 sm:p-6 overflow-x-auto">
 				{entries.length === 0 ?
 					<div className="text-center py-12 text-muted-foreground">
-						{isPending ?
-							"Initializing procedure entries…"
-						:	"No entries found. Refresh to initialize."}
+						<p className="mb-3">No entries yet.</p>
+						<Button
+							onClick={handleAddRow}
+							disabled={isPending}
+							className="gap-1"
+						>
+							{isPending ?
+								<Loader2 className="h-4 w-4 animate-spin" />
+							:	<Plus className="h-4 w-4" />}
+							Add Your First Entry
+						</Button>
 					</div>
-				:	<div className="border rounded-lg" style={{ minWidth: "1350px" }}>
-						<Table>
-							<TableHeader>
-								<TableRow className="bg-muted/50">
-									<TableHead className="w-12 text-center font-bold">
-										Sl.
-									</TableHead>
-									<TableHead className="w-24 font-bold">Date</TableHead>
-									<TableHead className="w-28 font-bold">Patient Name</TableHead>
-									<TableHead className="w-14 text-center font-bold">
-										Age
-									</TableHead>
-									<TableHead className="w-20 font-bold">Sex</TableHead>
-									<TableHead className="w-24 font-bold">UHID</TableHead>
-									<TableHead className="min-w-32 font-bold">
-										Complete Diagnosis
-									</TableHead>
-									<TableHead className="min-w-28 font-bold">
-										Procedure Description
-									</TableHead>
-									<TableHead className="w-24 font-bold">Location</TableHead>
-									<TableHead className="w-32 font-bold">
-										{isCpr ? "S / TM / TL" : "S/O/A/PS/PI"}
-									</TableHead>
-									<TableHead className="w-36 font-bold">
-										Faculty/SR Sign
-									</TableHead>
-									<TableHead className="w-16 text-center font-bold">
-										Tally
-									</TableHead>
-									<TableHead className="w-24 text-center font-bold">
-										Status
-									</TableHead>
-									<TableHead className="w-24 text-center font-bold">
-										Actions
-									</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) =>
-									editingId === entry.id ?
-										<EditRow
-											key={entry.id}
-											entry={entry}
-											form={form}
-											setForm={setForm}
-											facultyList={facultyList}
-											facultyPickerOpen={facultyPickerOpen}
-											setFacultyPickerOpen={setFacultyPickerOpen}
-											onSave={() => handleSave(entry.id)}
-											onCancel={cancelEdit}
-											isPending={isPending}
-											getFacultyName={getFacultyName}
-											skillLevelOptions={skillLevelOptions}
-										/>
-									:	<ReadRow
-											key={entry.id}
-											entry={entry}
-											onEdit={() => startEditing(entry)}
-											onSubmit={() => handleSubmit(entry.id)}
-											isPending={isPending}
-											getFacultyName={getFacultyName}
-											skillLabel={skillLabel}
-										/>,
-								)}
-							</TableBody>
-						</Table>
-					</div>
+				:	<>
+						<div className="border rounded-lg" style={{ minWidth: "1350px" }}>
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-muted/50">
+										<TableHead className="w-12 text-center font-bold">
+											Sl.
+										</TableHead>
+										<TableHead className="w-24 font-bold">Date</TableHead>
+										<TableHead className="w-28 font-bold">
+											Patient Name
+										</TableHead>
+										<TableHead className="w-14 text-center font-bold">
+											Age
+										</TableHead>
+										<TableHead className="w-20 font-bold">Sex</TableHead>
+										<TableHead className="w-24 font-bold">UHID</TableHead>
+										<TableHead className="min-w-32 font-bold">
+											Complete Diagnosis
+										</TableHead>
+										<TableHead className="min-w-28 font-bold">
+											Procedure Description
+										</TableHead>
+										<TableHead className="w-24 font-bold">Location</TableHead>
+										<TableHead className="w-32 font-bold">
+											{isCpr ? "S / TM / TL" : "S/O/A/PS/PI"}
+										</TableHead>
+										<TableHead className="w-36 font-bold">
+											Faculty/SR Sign
+										</TableHead>
+										<TableHead className="w-16 text-center font-bold">
+											Tally
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Status
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Actions
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) =>
+										editingId === entry.id ?
+											<EditRow
+												key={entry.id}
+												entry={entry}
+												form={form}
+												setForm={setForm}
+												facultyList={facultyList}
+												facultyPickerOpen={facultyPickerOpen}
+												setFacultyPickerOpen={setFacultyPickerOpen}
+												onSave={() => handleSave(entry.id)}
+												onCancel={cancelEdit}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+												skillLevelOptions={skillLevelOptions}
+											/>
+										:	<ReadRow
+												key={entry.id}
+												entry={entry}
+												onEdit={() => startEditing(entry)}
+												onSubmit={() => handleSubmit(entry.id)}
+												onDelete={() => handleDelete(entry.id)}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+												skillLabel={skillLabel}
+											/>,
+									)}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Pagination */}
+						{totalPages > 1 && (
+							<div className="flex items-center justify-between mt-4 px-2">
+								<p className="text-sm text-muted-foreground">
+									Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+									{Math.min(currentPage * PAGE_SIZE, entries.length)} of{" "}
+									{entries.length} entries
+								</p>
+								<div className="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									{Array.from({ length: totalPages }, (_, i) => i + 1)
+										.filter(
+											(p) =>
+												p === 1 ||
+												p === totalPages ||
+												Math.abs(p - currentPage) <= 1,
+										)
+										.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+											if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1)
+												acc.push("...");
+											acc.push(p);
+											return acc;
+										}, [])
+										.map((p, idx) =>
+											p === "..." ?
+												<span
+													key={`dot-${idx}`}
+													className="px-1 text-muted-foreground"
+												>
+													…
+												</span>
+											:	<Button
+													key={p}
+													variant={currentPage === p ? "default" : "outline"}
+													size="icon"
+													className="h-8 w-8"
+													onClick={() => setCurrentPage(p)}
+												>
+													{p}
+												</Button>,
+										)}
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={currentPage === totalPages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						)}
+					</>
 				}
 			</CardContent>
 		</Card>
@@ -679,6 +802,7 @@ function ReadRow({
 	entry,
 	onEdit,
 	onSubmit,
+	onDelete,
 	isPending,
 	getFacultyName,
 	skillLabel,
@@ -686,6 +810,7 @@ function ReadRow({
 	entry: ProcedureLogEntry;
 	onEdit: () => void;
 	onSubmit: () => void;
+	onDelete: () => void;
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
 	skillLabel: (val: string | null) => string;
@@ -835,6 +960,18 @@ function ReadRow({
 							{isPending ?
 								<Loader2 className="h-3.5 w-3.5 animate-spin" />
 							:	<Send className="h-3.5 w-3.5" />}
+						</Button>
+					)}
+					{entry.status === "DRAFT" && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+							title="Delete entry"
+							onClick={onDelete}
+							disabled={isPending}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
 					)}
 				</div>

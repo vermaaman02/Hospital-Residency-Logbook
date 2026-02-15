@@ -11,13 +11,7 @@
 
 "use client";
 
-import {
-	useState,
-	useTransition,
-	useCallback,
-	useMemo,
-	useEffect,
-} from "react";
+import { useState, useTransition, useCallback, useMemo } from "react";
 import {
 	Card,
 	CardContent,
@@ -71,6 +65,10 @@ import {
 	ChevronsUpDown,
 	Save,
 	AlertTriangle,
+	Plus,
+	Trash2,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -83,6 +81,8 @@ import {
 	updateCaseManagementEntry,
 	submitCaseManagementEntry,
 	initializeCaseManagement,
+	addCaseManagementRow,
+	deleteCaseManagementEntry,
 } from "@/actions/case-management";
 import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
 import type { EntryStatus } from "@/types";
@@ -151,6 +151,8 @@ const SEX_OPTIONS = [
 
 // ======================== MAIN COMPONENT ========================
 
+const PAGE_SIZE = 15;
+
 export function CaseManagementTable({
 	entries,
 	facultyList,
@@ -162,22 +164,14 @@ export function CaseManagementTable({
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
+	const [currentPage, setCurrentPage] = useState(1);
 
-	// Auto-initialize if empty
-	useEffect(() => {
-		if (entries.length === 0) {
-			startTransition(async () => {
-				try {
-					const result = await initializeCaseManagement(category);
-					if (result.initialized) {
-						router.refresh();
-					}
-				} catch {
-					toast.error("Failed to initialize case entries");
-				}
-			});
-		}
-	}, [entries.length, category, router]);
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
 
 	const stats = useMemo(() => {
 		const total = entries.length;
@@ -280,6 +274,46 @@ export function CaseManagementTable({
 		});
 	}
 
+	function handleInitialize() {
+		startTransition(async () => {
+			try {
+				const result = await initializeCaseManagement(category);
+				if (result.initialized) {
+					router.refresh();
+				}
+			} catch {
+				toast.error("Failed to initialize case entries");
+			}
+		});
+	}
+
+	function handleAddRow() {
+		startTransition(async () => {
+			try {
+				await addCaseManagementRow(category);
+				toast.success("Row added");
+				router.refresh();
+				// Jump to last page
+				const newTotal = entries.length + 1;
+				setCurrentPage(Math.ceil(newTotal / PAGE_SIZE));
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : "Failed to add row");
+			}
+		});
+	}
+
+	function handleDelete(id: string) {
+		startTransition(async () => {
+			try {
+				await deleteCaseManagementEntry(id);
+				toast.success("Entry deleted");
+				router.refresh();
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : "Cannot delete");
+			}
+		});
+	}
+
 	return (
 		<Card>
 			<CardHeader>
@@ -292,9 +326,19 @@ export function CaseManagementTable({
 							{stats.signed} of {stats.total} entries signed off
 						</CardDescription>
 					</div>
-					<Badge variant="outline" className="text-sm">
-						{stats.signed}/{stats.total}
-					</Badge>
+					<div className="flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={handleAddRow}
+							disabled={isPending}
+						>
+							<Plus className="h-4 w-4 mr-1" /> Add Row
+						</Button>
+						<Badge variant="outline" className="text-sm">
+							{stats.signed}/{stats.total}
+						</Badge>
+					</div>
 				</div>
 				{/* Progress bar */}
 				<div className="w-full bg-muted rounded-full h-2 mt-2">
@@ -308,77 +352,163 @@ export function CaseManagementTable({
 			</CardHeader>
 			<CardContent className="p-0 sm:p-6 overflow-x-auto">
 				{entries.length === 0 ?
-					<div className="text-center py-12 text-muted-foreground">
-						{isPending ?
-							"Initializing case entries…"
-						:	"No entries found. Refresh to initialize."}
+					<div className="text-center py-12 text-muted-foreground space-y-3">
+						<p>No entries yet for this category.</p>
+						<div className="flex items-center justify-center gap-3">
+							<Button
+								variant="outline"
+								onClick={handleInitialize}
+								disabled={isPending}
+							>
+								{isPending ?
+									<Loader2 className="h-4 w-4 animate-spin mr-1" />
+								:	null}
+								Initialize Sub-Categories
+							</Button>
+							<Button
+								variant="default"
+								onClick={handleAddRow}
+								disabled={isPending}
+							>
+								<Plus className="h-4 w-4 mr-1" /> Add Your First Entry
+							</Button>
+						</div>
 					</div>
-				:	<div className="border rounded-lg" style={{ minWidth: "1150px" }}>
-						<Table>
-							<TableHeader>
-								<TableRow className="bg-muted/50">
-									<TableHead className="w-12 text-center font-bold">
-										Sl.
-									</TableHead>
-									<TableHead className="min-w-36 font-bold">
-										Case Category
-									</TableHead>
-									<TableHead className="w-24 font-bold">Date</TableHead>
-									<TableHead className="w-28 font-bold">Patient Name</TableHead>
-									<TableHead className="w-14 text-center font-bold">
-										Age
-									</TableHead>
-									<TableHead className="w-20 font-bold">Sex</TableHead>
-									<TableHead className="w-24 font-bold">UHID</TableHead>
-									<TableHead className="min-w-36 font-bold">
-										Complete Diagnosis
-									</TableHead>
-									<TableHead className="w-32 font-bold">
-										CBD/S/O/MS/MI
-									</TableHead>
-									<TableHead className="w-36 font-bold">
-										Faculty/SR Sign
-									</TableHead>
-									<TableHead className="w-16 text-center font-bold">
-										Tally
-									</TableHead>
-									<TableHead className="w-24 text-center font-bold">
-										Status
-									</TableHead>
-									<TableHead className="w-24 text-center font-bold">
-										Actions
-									</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) =>
-									editingId === entry.id ?
-										<EditRow
-											key={entry.id}
-											entry={entry}
-											form={form}
-											setForm={setForm}
-											facultyList={facultyList}
-											facultyPickerOpen={facultyPickerOpen}
-											setFacultyPickerOpen={setFacultyPickerOpen}
-											onSave={() => handleSave(entry.id)}
-											onCancel={cancelEdit}
-											isPending={isPending}
-											getFacultyName={getFacultyName}
-										/>
-									:	<ReadRow
-											key={entry.id}
-											entry={entry}
-											onEdit={() => startEditing(entry)}
-											onSubmit={() => handleSubmit(entry.id)}
-											isPending={isPending}
-											getFacultyName={getFacultyName}
-											competencyLabel={competencyLabel}
-										/>,
-								)}
-							</TableBody>
-						</Table>
-					</div>
+				:	<>
+						<div className="border rounded-lg" style={{ minWidth: "1150px" }}>
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-muted/50">
+										<TableHead className="w-12 text-center font-bold">
+											Sl.
+										</TableHead>
+										<TableHead className="min-w-36 font-bold">
+											Case Category
+										</TableHead>
+										<TableHead className="w-24 font-bold">Date</TableHead>
+										<TableHead className="w-28 font-bold">
+											Patient Name
+										</TableHead>
+										<TableHead className="w-14 text-center font-bold">
+											Age
+										</TableHead>
+										<TableHead className="w-20 font-bold">Sex</TableHead>
+										<TableHead className="w-24 font-bold">UHID</TableHead>
+										<TableHead className="min-w-36 font-bold">
+											Complete Diagnosis
+										</TableHead>
+										<TableHead className="w-32 font-bold">
+											CBD/S/O/MS/MI
+										</TableHead>
+										<TableHead className="w-36 font-bold">
+											Faculty/SR Sign
+										</TableHead>
+										<TableHead className="w-16 text-center font-bold">
+											Tally
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Status
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Actions
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) =>
+										editingId === entry.id ?
+											<EditRow
+												key={entry.id}
+												entry={entry}
+												form={form}
+												setForm={setForm}
+												facultyList={facultyList}
+												facultyPickerOpen={facultyPickerOpen}
+												setFacultyPickerOpen={setFacultyPickerOpen}
+												onSave={() => handleSave(entry.id)}
+												onCancel={cancelEdit}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+											/>
+										:	<ReadRow
+												key={entry.id}
+												entry={entry}
+												onEdit={() => startEditing(entry)}
+												onSubmit={() => handleSubmit(entry.id)}
+												onDelete={() => handleDelete(entry.id)}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+												competencyLabel={competencyLabel}
+											/>,
+									)}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Pagination */}
+						{totalPages > 1 && (
+							<div className="flex items-center justify-between mt-4 px-2">
+								<p className="text-sm text-muted-foreground">
+									Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+									{Math.min(currentPage * PAGE_SIZE, entries.length)} of{" "}
+									{entries.length} entries
+								</p>
+								<div className="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									{Array.from({ length: totalPages }, (_, i) => i + 1)
+										.filter(
+											(p) =>
+												p === 1 ||
+												p === totalPages ||
+												Math.abs(p - currentPage) <= 1,
+										)
+										.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+											if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1)
+												acc.push("...");
+											acc.push(p);
+											return acc;
+										}, [])
+										.map((p, idx) =>
+											p === "..." ?
+												<span
+													key={`dot-${idx}`}
+													className="px-1 text-muted-foreground"
+												>
+													…
+												</span>
+											:	<Button
+													key={p}
+													variant={currentPage === p ? "default" : "outline"}
+													size="icon"
+													className="h-8 w-8"
+													onClick={() => setCurrentPage(p)}
+												>
+													{p}
+												</Button>,
+										)}
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={currentPage === totalPages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						)}
+					</>
 				}
 			</CardContent>
 		</Card>
@@ -626,6 +756,7 @@ function ReadRow({
 	entry,
 	onEdit,
 	onSubmit,
+	onDelete,
 	isPending,
 	getFacultyName,
 	competencyLabel,
@@ -633,6 +764,7 @@ function ReadRow({
 	entry: CaseManagementEntry;
 	onEdit: () => void;
 	onSubmit: () => void;
+	onDelete: () => void;
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
 	competencyLabel: (val: string | null) => string;
@@ -768,6 +900,18 @@ function ReadRow({
 							{isPending ?
 								<Loader2 className="h-3.5 w-3.5 animate-spin" />
 							:	<Send className="h-3.5 w-3.5" />}
+						</Button>
+					)}
+					{entry.status === "DRAFT" && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+							title="Delete entry"
+							onClick={onDelete}
+							disabled={isPending}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
 					)}
 				</div>

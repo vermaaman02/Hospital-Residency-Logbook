@@ -1373,7 +1373,7 @@ interface CaseManagementPdfEntry {
 	uhid: string | null;
 	completeDiagnosis: string | null;
 	competencyLevel: string | null;
-	tally: number;
+	totalCaseTally: number;
 	status: string;
 }
 
@@ -1432,7 +1432,9 @@ function CaseManagementStudentPdf({
 							<Text style={[styles.tableCell, { width: "10%" }]}>
 								{e.competencyLevel ?? "—"}
 							</Text>
-							<Text style={[styles.tableCell, { width: "7%" }]}>{e.tally}</Text>
+							<Text style={[styles.tableCell, { width: "7%" }]}>
+								{e.totalCaseTally}
+							</Text>
 							<Text style={[styles.tableCell, { width: "9%" }]}>
 								{e.status}
 							</Text>
@@ -1484,7 +1486,7 @@ interface CaseManagementReviewPdfEntry {
 	uhid: string | null;
 	completeDiagnosis: string | null;
 	competencyLevel: string | null;
-	tally: number;
+	totalCaseTally: number;
 	status: string;
 	studentName: string;
 	batch: string;
@@ -1552,7 +1554,9 @@ function CaseManagementReviewPdf({
 							<Text style={[styles.tableCell, { width: "10%" }]}>
 								{e.competencyLevel ?? "—"}
 							</Text>
-							<Text style={[styles.tableCell, { width: "5%" }]}>{e.tally}</Text>
+							<Text style={[styles.tableCell, { width: "5%" }]}>
+								{e.totalCaseTally}
+							</Text>
 							<Text style={[styles.tableCell, { width: "8%" }]}>
 								{e.status}
 							</Text>
@@ -1587,5 +1591,246 @@ export async function exportCaseManagementReviewToPdf(
 	saveAs(
 		blob,
 		`Case_Management_Review_${label}_${roleLabel}_${formatFileDate()}.pdf`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — STUDENT EXPORT ========================
+
+interface ProcedureLogPdfEntry {
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+}
+
+function ProcedureLogStudentPdf({
+	entries,
+	studentName,
+	categoryLabel,
+}: {
+	entries: ProcedureLogPdfEntry[];
+	studentName: string;
+	categoryLabel: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>Log of Procedures — {categoryLabel}</Text>
+					<Text style={styles.subtitle}>Student: {studentName}</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "4%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "11%" }]}>Patient</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>UHID</Text>
+						<Text style={[styles.tableCell, { width: "18%" }]}>Diagnosis</Text>
+						<Text style={[styles.tableCell, { width: "18%" }]}>Procedure</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Location</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Skill Level</Text>
+						<Text style={[styles.tableCell, { width: "6%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Status</Text>
+					</View>
+
+					{entries.map((e) => (
+						<View key={e.slNo} style={styles.tableRow}>
+							<Text style={[styles.tableCell, { width: "4%" }]}>{e.slNo}</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.date ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "11%" }]}>
+								{e.patientName ?
+									`${e.patientName}${e.patientAge ? `, ${e.patientAge}` : ""}${e.patientSex ? `/${e.patientSex}` : ""}`
+								:	"—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.uhid ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "18%" }]}>
+								{e.completeDiagnosis ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "18%" }]}>
+								{e.procedureDescription ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.performedAtLocation ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.skillLevel ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "6%" }]}>
+								{e.totalProcedureTally}
+							</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.status}
+							</Text>
+						</View>
+					))}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+export async function exportProcedureLogToPdf(
+	entries: ProcedureLogPdfEntry[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const blob = await pdf(
+		<ProcedureLogStudentPdf
+			entries={entries}
+			studentName={studentName}
+			categoryLabel={categoryLabel}
+		/>,
+	).toBlob();
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Procedure_Log_${safeCategory}_${safeName}_${formatFileDate()}.pdf`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface ProcedureLogReviewPdfEntry {
+	slNo: number;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+function ProcedureLogReviewPdf({
+	entries,
+	reviewerRole,
+	label,
+}: {
+	entries: ProcedureLogReviewPdfEntry[];
+	reviewerRole: "faculty" | "hod";
+	label: string;
+}) {
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						Procedure Log Review ({label}) — {roleLabel}
+					</Text>
+					<Text style={styles.subtitle}>{entries.length} submissions</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "3%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Student</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Category</Text>
+						<Text style={[styles.tableCell, { width: "7%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Patient</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Diagnosis</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Procedure</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Location</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Skill</Text>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Status</Text>
+					</View>
+
+					{entries.map((e, i) => (
+						<View key={i} style={styles.tableRow}>
+							<Text style={[styles.tableCell, { width: "3%" }]}>{e.slNo}</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.studentName}
+							</Text>
+							<Text style={[styles.tableCell, { width: "12%" }]}>
+								{e.categoryLabel}
+							</Text>
+							<Text style={[styles.tableCell, { width: "7%" }]}>
+								{e.date ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.patientName ?
+									`${e.patientName}${e.patientAge ? `, ${e.patientAge}` : ""}`
+								:	"—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "14%" }]}>
+								{e.completeDiagnosis ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "14%" }]}>
+								{e.procedureDescription ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.performedAtLocation ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.skillLevel ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "5%" }]}>
+								{e.totalProcedureTally}
+							</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.status}
+							</Text>
+						</View>
+					))}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+export async function exportProcedureLogReviewToPdf(
+	entries: ProcedureLogReviewPdfEntry[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const blob = await pdf(
+		<ProcedureLogReviewPdf
+			entries={entries}
+			reviewerRole={reviewerRole}
+			label={label}
+		/>,
+	).toBlob();
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		blob,
+		`Procedure_Log_Review_${label}_${roleLabel}_${formatFileDate()}.pdf`,
 	);
 }

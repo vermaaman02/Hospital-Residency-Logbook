@@ -63,6 +63,53 @@ export async function initializeCaseManagement(category: string) {
 	return { initialized: true };
 }
 
+// ─── Add / Delete Single Row ────────────────────────────────
+
+/**
+ * Add a single new case management row to a category (for extra entries beyond
+ * the initial sub-category set). Auto-increments slNo.
+ */
+export async function addCaseManagementRow(category: string) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
+
+	const maxSlNo = await prisma.caseManagementLog.aggregate({
+		where: { userId: user.id, category: category as never },
+		_max: { slNo: true },
+	});
+
+	const entry = await prisma.caseManagementLog.create({
+		data: {
+			userId: user.id,
+			category: category as never,
+			slNo: (maxSlNo._max.slNo ?? 0) + 1,
+			caseSubCategory: "",
+			status: "DRAFT" as never,
+		},
+	});
+
+	revalidateAll();
+	return entry;
+}
+
+/**
+ * Delete a DRAFT case management row. Only the owner can delete, and only DRAFT entries.
+ */
+export async function deleteCaseManagementEntry(id: string) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
+
+	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
+	if (!entry) throw new Error("Entry not found");
+	if (entry.userId !== user.id) throw new Error("Not your entry");
+	if (entry.status !== "DRAFT")
+		throw new Error("Can only delete DRAFT entries");
+
+	await prisma.caseManagementLog.delete({ where: { id } });
+	revalidateAll();
+	return { success: true };
+}
+
 // ─── Read (Student) ─────────────────────────────────────────
 
 export async function getMyCaseManagementEntries(category: string) {

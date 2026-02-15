@@ -538,7 +538,7 @@ interface CaseManagementExportRow {
 	uhid: string | null;
 	completeDiagnosis: string | null;
 	competencyLevel: string | null;
-	tally: number;
+	totalCaseTally: number;
 	status: string;
 }
 
@@ -559,7 +559,7 @@ export function exportCaseManagementToExcel(
 		UHID: e.uhid ?? "",
 		Diagnosis: e.completeDiagnosis ?? "",
 		Competency: e.competencyLevel ?? "",
-		Tally: e.tally,
+		Tally: e.totalCaseTally,
 		Status: e.status,
 	}));
 
@@ -594,7 +594,7 @@ interface CaseManagementReviewRow {
 	uhid: string | null;
 	completeDiagnosis: string | null;
 	competencyLevel: string | null;
-	tally: number;
+	totalCaseTally: number;
 	status: string;
 	studentName: string;
 	batch: string;
@@ -622,7 +622,7 @@ export function exportCaseManagementReviewToExcel(
 		UHID: e.uhid ?? "",
 		Diagnosis: e.completeDiagnosis ?? "",
 		Competency: e.competencyLevel ?? "",
-		Tally: e.tally,
+		Tally: e.totalCaseTally,
 		Status: e.status,
 	}));
 
@@ -638,5 +638,127 @@ export function exportCaseManagementReviewToExcel(
 			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		}),
 		`Case_Management_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — STUDENT EXPORT ========================
+
+interface ProcedureLogExportRow {
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+}
+
+export function exportProcedureLogToExcel(
+	entries: ProcedureLogExportRow[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Procedure: e.procedureDescription ?? "",
+		Location: e.performedAtLocation ?? "",
+		"Skill Level": e.skillLevel ?? "",
+		Tally: e.totalProcedureTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }],
+	);
+	setColumnWidths(ws, [8, 12, 20, 6, 8, 14, 30, 30, 16, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, categoryLabel.slice(0, 31));
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Procedure_Log_${safeCategory}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface ProcedureLogReviewRow {
+	slNo: number;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportProcedureLogReviewToExcel(
+	entries: ProcedureLogReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Category: e.categoryLabel,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Procedure: e.procedureDescription ?? "",
+		Location: e.performedAtLocation ?? "",
+		"Skill Level": e.skillLevel ?? "",
+		Tally: e.totalProcedureTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(
+		ws,
+		[8, 22, 16, 10, 20, 12, 18, 6, 8, 14, 28, 28, 14, 12, 8, 12],
+	);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Procedure_Log_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
 	);
 }
