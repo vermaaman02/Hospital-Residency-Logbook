@@ -16,7 +16,7 @@ import {
 	submitDiagnosticSkillEntry,
 	deleteDiagnosticSkillEntry,
 } from "@/actions/diagnostic-skills";
-import { DiagnosticSkillTable } from "@/components/tables/DiagnosticSkillTable";
+// import { DiagnosticSkillTable } from "@/components/tables/DiagnosticSkillTable";
 
 interface DiagnosticCategoryPageProps {
 	params: Promise<{ category: string }>;
@@ -49,14 +49,14 @@ export default async function DiagnosticCategoryPage({
 				</div>
 			</div>
 
-			<DiagnosticSkillTable
+			{/* <DiagnosticSkillTable
 				entries={entries}
 				categoryLabel={categoryInfo.label}
 				categorySlug={slug}
 				totalSkills={categoryInfo.skills.length}
 				onSubmit={submitDiagnosticSkillEntry as never}
 				onDelete={deleteDiagnosticSkillEntry as never}
-			/>
+			/> */}
 		</div>
 	);
 }

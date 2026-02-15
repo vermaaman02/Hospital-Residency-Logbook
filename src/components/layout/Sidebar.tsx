@@ -178,6 +178,12 @@ const studentNavSections: NavSection[] = [
 		title: "Professional",
 		items: [
 			{
+				title: "Life-Support Courses",
+				href: "/dashboard/student/life-support-courses",
+				icon: <GraduationCap className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
 				title: "Courses & Conferences",
 				href: "/dashboard/student/courses-conferences",
 				icon: <Award className="h-4 w-4" />,
@@ -315,6 +321,13 @@ const facultyNavSections: NavSection[] = [
 	{
 		title: "Professional",
 		items: [
+			{
+				title: "Life-Support Courses",
+				href: "/dashboard/faculty/life-support-courses",
+				icon: <GraduationCap className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "lifeSupportCourses",
+			},
 			{
 				title: "Courses & Conferences",
 				href: "/dashboard/faculty/reviews?category=professional&tab=courses",
@@ -499,6 +512,13 @@ const hodNavSections: NavSection[] = [
 	{
 		title: "Professional",
 		items: [
+			{
+				title: "Life-Support Courses",
+				href: "/dashboard/hod/life-support-courses",
+				icon: <GraduationCap className="h-4 w-4" />,
+				roles: ["hod"],
+				badgeKey: "lifeSupportCourses",
+			},
 			{
 				title: "Courses & Conferences",
 				href: "/dashboard/faculty/reviews?category=professional&tab=courses",

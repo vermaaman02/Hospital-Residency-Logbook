@@ -25,7 +25,8 @@ export type AutoReviewCategory =
 	| "imagingLogs"
 	| "transportLogs"
 	| "consentLogs"
-	| "badNewsLogs";
+	| "badNewsLogs"
+	| "lifeSupportCourses";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -41,6 +42,7 @@ export interface AutoReviewSettings {
 	transportLogs: boolean;
 	consentLogs: boolean;
 	badNewsLogs: boolean;
+	lifeSupportCourses: boolean;
 }
 
 /**
@@ -69,6 +71,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		transportLogs: map["transportLogs"] ?? false,
 		consentLogs: map["consentLogs"] ?? false,
 		badNewsLogs: map["badNewsLogs"] ?? false,
+		lifeSupportCourses: map["lifeSupportCourses"] ?? false,
 	};
 }
 
@@ -110,6 +113,8 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/transport");
 	revalidatePath("/dashboard/faculty/consent-bad-news");
 	revalidatePath("/dashboard/hod/consent-bad-news");
+	revalidatePath("/dashboard/faculty/life-support-courses");
+	revalidatePath("/dashboard/hod/life-support-courses");
 	return { success: true, category, enabled };
 }
 
