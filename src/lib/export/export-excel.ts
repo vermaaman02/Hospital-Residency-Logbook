@@ -460,7 +460,9 @@ export function exportClinicalSkillsToExcel(
 	}));
 
 	const ws = XLSX.utils.json_to_sheet(
-		data.length > 0 ? data : [{ "Sl. No.": "", "Clinical Skill": "No entries" }],
+		data.length > 0 ?
+			data
+		:	[{ "Sl. No.": "", "Clinical Skill": "No entries" }],
 	);
 	setColumnWidths(ws, [8, 30, 40, 20, 18, 12]);
 	XLSX.utils.book_append_sheet(wb, ws, `${label} Skills`);
@@ -470,7 +472,10 @@ export function exportClinicalSkillsToExcel(
 		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	});
 	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
-	saveAs(blob, `Clinical_Skills_${label}_${safeName}_${formatDateForFile()}.xlsx`);
+	saveAs(
+		blob,
+		`Clinical_Skills_${label}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
 }
 
 // ======================== CLINICAL SKILLS — FACULTY/HOD REVIEW EXPORT ========================
@@ -518,5 +523,120 @@ export function exportClinicalSkillReviewToExcel(
 			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		}),
 		`Clinical_Skills_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — STUDENT EXPORT ========================
+
+interface CaseManagementExportRow {
+	slNo: number;
+	caseSubCategory: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	tally: number;
+	status: string;
+}
+
+export function exportCaseManagementToExcel(
+	entries: CaseManagementExportRow[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Case Type": e.caseSubCategory,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Competency: e.competencyLevel ?? "",
+		Tally: e.tally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Case Type": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 30, 12, 20, 6, 8, 14, 35, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, categoryLabel.slice(0, 31));
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Case_Management_${safeCategory}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — FACULTY/HOD REVIEW EXPORT ========================
+
+interface CaseManagementReviewRow {
+	slNo: number;
+	caseSubCategory: string;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	tally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportCaseManagementReviewToExcel(
+	entries: CaseManagementReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Category: e.categoryLabel,
+		"Case Type": e.caseSubCategory,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Competency: e.competencyLevel ?? "",
+		Tally: e.tally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 18, 28, 12, 18, 6, 8, 14, 30, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Case_Management_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
 	);
 }

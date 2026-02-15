@@ -14,7 +14,13 @@ import { prisma } from "@/lib/prisma";
 
 export interface StudentNotification {
 	id: string;
-	type: "rotation" | "case-presentation" | "seminar" | "thesis" | "clinical-skill";
+	type:
+		| "rotation"
+		| "case-presentation"
+		| "seminar"
+		| "thesis"
+		| "clinical-skill"
+		| "case-management";
 	title: string;
 	message: string;
 	status: "SIGNED" | "NEEDS_REVISION";
@@ -45,7 +51,15 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 	const notifications: StudentNotification[] = [];
 
 	// Fetch signed/rejected entries from all modules in parallel
-	const [rotations, casePresentations, seminars, thesis, clinicalSkillsAdult, clinicalSkillsPediatric] = await Promise.all([
+	const [
+		rotations,
+		casePresentations,
+		seminars,
+		thesis,
+		clinicalSkillsAdult,
+		clinicalSkillsPediatric,
+		caseManagementLogs,
+	] = await Promise.all([
 		prisma.rotationPosting.findMany({
 			where: {
 				userId: user.id,
@@ -125,6 +139,22 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			select: {
 				id: true,
 				skillName: true,
+				status: true,
+				facultyRemark: true,
+				updatedAt: true,
+			},
+		}),
+		prisma.caseManagementLog.findMany({
+			where: {
+				userId: user.id,
+				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				caseSubCategory: true,
+				category: true,
 				status: true,
 				facultyRemark: true,
 				updatedAt: true,
@@ -224,13 +254,37 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			type: "clinical-skill",
 			title: cs.skillName,
 			message:
-				cs.status === "SIGNED"
-					? "Clinical skill approved"
-					: "Revision needed for clinical skill",
+				cs.status === "SIGNED" ?
+					"Clinical skill approved"
+				:	"Revision needed for clinical skill",
 			status: cs.status as "SIGNED" | "NEEDS_REVISION",
 			remark: cs.facultyRemark,
 			updatedAt: cs.updatedAt.toISOString(),
 			href: "/dashboard/student/clinical-skills",
+		});
+	}
+
+	// Map case management logs
+	for (const cm of caseManagementLogs) {
+		const categoryLabel =
+			cm.category ?
+				cm.category
+					.replace(/_/g, " ")
+					.toLowerCase()
+					.replace(/\b\w/g, (ch: string) => ch.toUpperCase())
+			:	"Case Management";
+		notifications.push({
+			id: cm.id,
+			type: "case-management",
+			title: cm.caseSubCategory || categoryLabel,
+			message:
+				cm.status === "SIGNED" ?
+					"Case management entry approved"
+				:	"Revision needed for case management entry",
+			status: cm.status as "SIGNED" | "NEEDS_REVISION",
+			remark: cm.facultyRemark,
+			updatedAt: cm.updatedAt.toISOString(),
+			href: "/dashboard/student/case-management",
 		});
 	}
 

@@ -19,6 +19,7 @@ export interface PendingCounts {
 	casePresentations: number;
 	journalClubs: number;
 	clinicalSkills: number;
+	caseManagement: number;
 	total: number;
 }
 
@@ -35,6 +36,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			casePresentations: 0,
 			journalClubs: 0,
 			clinicalSkills: 0,
+			caseManagement: 0,
 			total: 0,
 		};
 
@@ -53,6 +55,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				casePresentations: 0,
 				journalClubs: 0,
 				clinicalSkills: 0,
+				caseManagement: 0,
 				total: 0,
 			};
 
@@ -66,35 +69,50 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const studentFilter =
 		studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
-	const [rotationPostings, thesisRecords, casePresentations, journalClubs, clinicalSkillsAdult, clinicalSkillsPediatric] =
-		await Promise.all([
-			prisma.rotationPosting.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-			prisma.thesis.count({
-				where: {
-					...studentFilter,
-					status: "SUBMITTED" as never,
-				},
-			}),
-			prisma.casePresentation.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-			prisma.journalClub.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-			prisma.clinicalSkillAdult.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-			prisma.clinicalSkillPediatric.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-		]);
+	const [
+		rotationPostings,
+		thesisRecords,
+		casePresentations,
+		journalClubs,
+		clinicalSkillsAdult,
+		clinicalSkillsPediatric,
+		caseManagement,
+	] = await Promise.all([
+		prisma.rotationPosting.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.thesis.count({
+			where: {
+				...studentFilter,
+				status: "SUBMITTED" as never,
+			},
+		}),
+		prisma.casePresentation.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.journalClub.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.clinicalSkillAdult.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.clinicalSkillPediatric.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.caseManagementLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+	]);
 
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
 
 	const total =
-		rotationPostings + thesisRecords + casePresentations + journalClubs + clinicalSkills;
+		rotationPostings +
+		thesisRecords +
+		casePresentations +
+		journalClubs +
+		clinicalSkills +
+		caseManagement;
 
 	return {
 		rotationPostings,
@@ -102,6 +120,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		casePresentations,
 		journalClubs,
 		clinicalSkills,
+		caseManagement,
 		total,
 	};
 }

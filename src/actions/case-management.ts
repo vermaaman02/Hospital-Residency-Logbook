@@ -1,7 +1,8 @@
 /**
  * @module Case Management Actions
  * @description Server actions for all 24 case management categories (308 sub-types).
- * One set of actions serves ALL categories via the `category` parameter.
+ * Inline-editing pattern: rows are pre-initialized per category, edited inline,
+ * then submitted for faculty review.
  *
  * @see PG Logbook .md — "LOG OF CASE MANAGEMENT" (all sections)
  * @see prisma/schema.prisma — CaseManagementLog model
@@ -11,172 +12,108 @@
 
 import { requireAuth, requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-	caseManagementSchema,
-	type CaseManagementInput,
-} from "@/lib/validators/case-management";
 import { revalidatePath } from "next/cache";
+import { isAutoReviewEnabled } from "./auto-review";
+import { getSubCategories } from "@/lib/constants/case-categories";
 
-function revalidate(category: string) {
-	revalidatePath(`/dashboard/student/case-management/${category}`);
+// ─── Helpers ────────────────────────────────────────────────
+
+async function resolveUser(clerkId: string) {
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found in database");
+	return user;
+}
+
+function revalidateAll() {
 	revalidatePath("/dashboard/student/case-management");
+	revalidatePath("/dashboard/faculty/case-management");
+	revalidatePath("/dashboard/hod/case-management");
 }
 
-// ─── Create ─────────────────────────────────────────────────
+// ─── Initialize ─────────────────────────────────────────────
 
 /**
- * Create a new case management entry for any category.
- * Auto-calculates slNo per user+category and totalCaseTally per sub-category.
+ * Initialize rows for a given category. Creates one row per sub-category
+ * with default DRAFT status if not already present.
  */
-export async function createCaseManagementEntry(data: CaseManagementInput) {
-	const userId = await requireAuth();
-	const validated = caseManagementSchema.parse(data);
+export async function initializeCaseManagement(category: string) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 
-	// Auto slNo per user+category
-	const lastEntry = await prisma.caseManagementLog.findFirst({
-		where: { userId, category: validated.category as never },
-		orderBy: { slNo: "desc" },
-		select: { slNo: true },
-	});
-	const slNo = (lastEntry?.slNo ?? 0) + 1;
-
-	// Auto tally: count existing entries for this sub-category + 1
-	const existingTally = await prisma.caseManagementLog.count({
-		where: {
-			userId,
-			category: validated.category as never,
-			caseSubCategory: validated.caseSubCategory,
-		},
+	const existing = await prisma.caseManagementLog.count({
+		where: { userId: user.id, category: category as never },
 	});
 
-	const entry = await prisma.caseManagementLog.create({
-		data: {
-			userId,
-			category: validated.category as never,
-			slNo,
-			caseSubCategory: validated.caseSubCategory,
-			date: validated.date,
-			patientInfo: validated.patientInfo,
-			completeDiagnosis: validated.completeDiagnosis,
-			competencyLevel: validated.competencyLevel as never,
-			totalCaseTally: existingTally + 1,
-			status: "DRAFT",
-		},
+	if (existing > 0) return { initialized: false };
+
+	const subCategories = getSubCategories(category);
+	if (subCategories.length === 0) return { initialized: false };
+
+	await prisma.caseManagementLog.createMany({
+		data: subCategories.map((sc, idx) => ({
+			userId: user.id,
+			category: category as never,
+			slNo: idx + 1,
+			caseSubCategory: sc,
+			status: "DRAFT" as never,
+		})),
 	});
 
-	revalidate(validated.category);
-	return { success: true, data: entry };
+	revalidateAll();
+	return { initialized: true };
 }
 
-// ─── Update ─────────────────────────────────────────────────
+// ─── Read (Student) ─────────────────────────────────────────
 
-/**
- * Update an existing case management entry.
- */
-export async function updateCaseManagementEntry(
-	id: string,
-	data: CaseManagementInput,
-) {
-	const userId = await requireAuth();
-	const validated = caseManagementSchema.parse(data);
-
-	const existing = await prisma.caseManagementLog.findUnique({
-		where: { id },
-	});
-	if (!existing || existing.userId !== userId) {
-		throw new Error("Entry not found or unauthorized");
-	}
-	if (existing.status === "SIGNED") {
-		throw new Error("Cannot edit a signed entry");
-	}
-
-	const entry = await prisma.caseManagementLog.update({
-		where: { id },
-		data: {
-			caseSubCategory: validated.caseSubCategory,
-			date: validated.date,
-			patientInfo: validated.patientInfo,
-			completeDiagnosis: validated.completeDiagnosis,
-			competencyLevel: validated.competencyLevel as never,
-			status: "DRAFT",
-		},
-	});
-
-	revalidate(validated.category);
-	return { success: true, data: entry };
-}
-
-// ─── Submit ─────────────────────────────────────────────────
-
-export async function submitCaseManagementEntry(id: string) {
-	const userId = await requireAuth();
-
-	const existing = await prisma.caseManagementLog.findUnique({
-		where: { id },
-	});
-	if (!existing || existing.userId !== userId) {
-		throw new Error("Entry not found or unauthorized");
-	}
-
-	await prisma.caseManagementLog.update({
-		where: { id },
-		data: { status: "SUBMITTED" },
-	});
-
-	revalidate(existing.category);
-	return { success: true };
-}
-
-// ─── Delete ─────────────────────────────────────────────────
-
-export async function deleteCaseManagementEntry(id: string) {
-	const userId = await requireAuth();
-
-	const existing = await prisma.caseManagementLog.findUnique({
-		where: { id },
-	});
-	if (!existing || existing.userId !== userId) {
-		throw new Error("Entry not found or unauthorized");
-	}
-	if (existing.status !== "DRAFT") {
-		throw new Error("Can only delete draft entries");
-	}
-
-	await prisma.caseManagementLog.delete({ where: { id } });
-
-	revalidate(existing.category);
-	return { success: true };
-}
-
-// ─── Read ───────────────────────────────────────────────────
-
-/**
- * Get all case management entries for a specific category for the current student.
- */
 export async function getMyCaseManagementEntries(category: string) {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 
 	return prisma.caseManagementLog.findMany({
-		where: { userId, category: category as never },
+		where: { userId: user.id, category: category as never },
 		orderBy: { slNo: "asc" },
 	});
 }
 
-/**
- * Get summary counts per category for the current student (for landing page).
- */
 export async function getMyCaseManagementSummary() {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 
+	// Count only entries that have been actually filled (have at least completeDiagnosis or competencyLevel set)
 	const counts = await prisma.caseManagementLog.groupBy({
 		by: ["category"],
-		where: { userId },
+		where: {
+			userId: user.id,
+			OR: [
+				{ completeDiagnosis: { not: null } },
+				{ competencyLevel: { not: null } },
+				{ patientName: { not: null } },
+				{
+					status: { in: ["SUBMITTED", "SIGNED", "NEEDS_REVISION"] as never[] },
+				},
+			],
+		},
 		_count: { id: true },
 	});
 
 	const signedCounts = await prisma.caseManagementLog.groupBy({
 		by: ["category"],
-		where: { userId, status: "SIGNED" },
+		where: { userId: user.id, status: "SIGNED" },
+		_count: { id: true },
+	});
+
+	const submittedCounts = await prisma.caseManagementLog.groupBy({
+		by: ["category"],
+		where: {
+			userId: user.id,
+			status: { in: ["SUBMITTED", "SIGNED", "NEEDS_REVISION"] as never[] },
+		},
+		_count: { id: true },
+	});
+
+	const needsRevisionCounts = await prisma.caseManagementLog.groupBy({
+		by: ["category"],
+		where: { userId: user.id, status: "NEEDS_REVISION" },
 		_count: { id: true },
 	});
 
@@ -187,16 +124,175 @@ export async function getMyCaseManagementSummary() {
 		signedByCategory: Object.fromEntries(
 			signedCounts.map((c) => [c.category, c._count.id]),
 		),
+		submittedByCategory: Object.fromEntries(
+			submittedCounts.map((c) => [c.category, c._count.id]),
+		),
+		needsRevisionByCategory: Object.fromEntries(
+			needsRevisionCounts.map((c) => [c.category, c._count.id]),
+		),
 	};
 }
 
-// ─── Faculty Sign / Reject ──────────────────────────────────
+// ─── Faculty List ───────────────────────────────────────────
 
-/**
- * Faculty: Sign a case management entry.
- */
+export async function getAvailableCaseManagementFaculty() {
+	await requireAuth();
+
+	return prisma.user.findMany({
+		where: {
+			role: { in: ["FACULTY" as never, "HOD" as never] },
+			status: "ACTIVE" as never,
+		},
+		select: { id: true, firstName: true, lastName: true },
+		orderBy: { firstName: "asc" },
+	});
+}
+
+// ─── Update (Inline Edit) ──────────────────────────────────
+
+export async function updateCaseManagementEntry(
+	id: string,
+	data: {
+		date?: string | null;
+		patientName?: string | null;
+		patientAge?: number | null;
+		patientSex?: string | null;
+		uhid?: string | null;
+		completeDiagnosis?: string | null;
+		competencyLevel?: string | null;
+		totalCaseTally?: number;
+		facultyId?: string | null;
+	},
+) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
+
+	const existing = await prisma.caseManagementLog.findUnique({
+		where: { id },
+	});
+	if (!existing || existing.userId !== user.id) {
+		throw new Error("Entry not found or unauthorized");
+	}
+	if (existing.status === "SIGNED") {
+		throw new Error("Cannot edit a signed entry");
+	}
+
+	const entry = await prisma.caseManagementLog.update({
+		where: { id },
+		data: {
+			date: data.date ? new Date(data.date) : null,
+			patientName: data.patientName,
+			patientAge: data.patientAge,
+			patientSex: data.patientSex,
+			uhid: data.uhid,
+			completeDiagnosis: data.completeDiagnosis,
+			competencyLevel: data.competencyLevel as never,
+			totalCaseTally: data.totalCaseTally,
+			facultyId: data.facultyId,
+			status: existing.status === "NEEDS_REVISION" ? "DRAFT" : existing.status,
+		},
+	});
+
+	revalidateAll();
+	return { success: true, data: entry };
+}
+
+// ─── Submit ─────────────────────────────────────────────────
+
+export async function submitCaseManagementEntry(id: string) {
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
+
+	const existing = await prisma.caseManagementLog.findUnique({
+		where: { id },
+	});
+	if (!existing || existing.userId !== user.id) {
+		throw new Error("Entry not found or unauthorized");
+	}
+	if (existing.status === "SIGNED") {
+		throw new Error("Entry is already signed");
+	}
+
+	const autoReview = await isAutoReviewEnabled("caseManagement");
+
+	if (autoReview) {
+		await prisma.$transaction([
+			prisma.caseManagementLog.update({
+				where: { id },
+				data: { status: "SIGNED" },
+			}),
+			prisma.digitalSignature.create({
+				data: {
+					signedById: "auto-review",
+					entityType: "CaseManagementLog",
+					entityId: id,
+					remark: "Auto-reviewed by system",
+				},
+			}),
+		]);
+	} else {
+		await prisma.caseManagementLog.update({
+			where: { id },
+			data: { status: "SUBMITTED" },
+		});
+	}
+
+	revalidateAll();
+	return { success: true };
+}
+
+// ─── Faculty/HOD: Review ────────────────────────────────────
+
+export async function getCaseManagementForReview(category?: string) {
+	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) return [];
+
+	let studentIds: string[] = [];
+
+	if (role === "faculty") {
+		const batchAssignments = await prisma.facultyBatchAssignment.findMany({
+			where: { facultyId: user.id },
+			select: { batchId: true },
+		});
+		const batchIds = batchAssignments.map((b) => b.batchId);
+		if (batchIds.length === 0) return [];
+
+		const students = await prisma.user.findMany({
+			where: { batchId: { in: batchIds }, role: "STUDENT" as never },
+			select: { id: true },
+		});
+		studentIds = students.map((s) => s.id);
+		if (studentIds.length === 0) return [];
+	}
+
+	const where: Record<string, unknown> = {
+		status: { not: "DRAFT" as never },
+	};
+	if (studentIds.length > 0) where.userId = { in: studentIds };
+	if (category) where.category = category as never;
+
+	return prisma.caseManagementLog.findMany({
+		where,
+		orderBy: { createdAt: "desc" },
+		include: {
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					email: true,
+					currentSemester: true,
+					batchRelation: { select: { name: true } },
+				},
+			},
+		},
+	});
+}
+
 export async function signCaseManagementEntry(id: string, remark?: string) {
 	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -214,7 +310,7 @@ export async function signCaseManagementEntry(id: string, remark?: string) {
 		}),
 		prisma.digitalSignature.create({
 			data: {
-				signedById: userId,
+				signedById: user.id,
 				entityType: "CaseManagementLog",
 				entityId: id,
 				remark,
@@ -222,14 +318,10 @@ export async function signCaseManagementEntry(id: string, remark?: string) {
 		}),
 	]);
 
-	revalidate(entry.category);
-	revalidatePath("/dashboard/faculty/reviews");
+	revalidateAll();
 	return { success: true };
 }
 
-/**
- * Faculty: Reject a case management entry with remark.
- */
 export async function rejectCaseManagementEntry(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
 
@@ -244,7 +336,53 @@ export async function rejectCaseManagementEntry(id: string, remark: string) {
 		},
 	});
 
-	revalidate(entry.category);
-	revalidatePath("/dashboard/faculty/reviews");
+	revalidateAll();
 	return { success: true };
+}
+
+export async function bulkSignCaseManagementEntries(ids: string[]) {
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await resolveUser(userId);
+
+	const entries = await prisma.caseManagementLog.findMany({
+		where: { id: { in: ids }, status: "SUBMITTED" as never },
+	});
+
+	if (entries.length === 0) throw new Error("No valid entries to sign");
+
+	await prisma.$transaction([
+		prisma.caseManagementLog.updateMany({
+			where: { id: { in: entries.map((e) => e.id) } },
+			data: { status: "SIGNED" },
+		}),
+		...entries.map((entry) =>
+			prisma.digitalSignature.create({
+				data: {
+					signedById: user.id,
+					entityType: "CaseManagementLog",
+					entityId: entry.id,
+				},
+			}),
+		),
+	]);
+
+	revalidateAll();
+	return { success: true, signedCount: entries.length };
+}
+
+// ─── Student Detail (Faculty/HOD) ───────────────────────────
+
+export async function getStudentCaseManagement(
+	studentId: string,
+	category?: string,
+) {
+	await requireRole(["faculty", "hod"]);
+
+	const where: Record<string, unknown> = { userId: studentId };
+	if (category) where.category = category as never;
+
+	return prisma.caseManagementLog.findMany({
+		where,
+		orderBy: [{ category: "asc" }, { slNo: "asc" }],
+	});
 }

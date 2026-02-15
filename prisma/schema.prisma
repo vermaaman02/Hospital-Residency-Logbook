@@ -382,10 +382,14 @@ model CaseManagementLog {
   slNo              Int
   caseSubCategory   String          // e.g., "Acute Airway Obstruction"
   date              DateTime?
-  patientInfo       String?         // Name/Age/Sex/UHID
+  patientName       String?
+  patientAge        Int?
+  patientSex        String?         // Male / Female / Other
+  uhid              String?
   completeDiagnosis String?
   competencyLevel   CompetencyLevel?
   totalCaseTally    Int             @default(0)
+  facultyId         String?         // Selected faculty for sign-off
   status            EntryStatus     @default(DRAFT)
   facultyRemark     String?
   createdAt         DateTime        @default(now())
@@ -394,6 +398,7 @@ model CaseManagementLog {
   @@index([userId])
   @@index([category])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum CaseCategory {
@@ -440,11 +445,17 @@ model ProcedureLog {
   procedureCategory    ProcedureCategory
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int               @default(0)
   status               EntryStatus       @default(DRAFT)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
@@ -452,6 +463,7 @@ model ProcedureLog {
   @@index([userId])
   @@index([procedureCategory])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum ProcedureCategory {

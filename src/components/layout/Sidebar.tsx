@@ -266,9 +266,10 @@ const facultyNavSections: NavSection[] = [
 			},
 			{
 				title: "Case Management",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=caseManagement",
+				href: "/dashboard/faculty/case-management",
 				icon: <ClipboardList className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "caseManagement",
 			},
 			{
 				title: "Procedures",
@@ -445,9 +446,10 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Case Management",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=caseManagement",
+				href: "/dashboard/hod/case-management",
 				icon: <ClipboardList className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "caseManagement",
 			},
 			{
 				title: "Procedures",

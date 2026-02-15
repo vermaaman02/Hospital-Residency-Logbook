@@ -279,7 +279,9 @@ function StudentPdfDocument({ data }: { data: StudentPdfData }) {
 			<Page size="A4" style={styles.page}>
 				{/* Header */}
 				<View style={styles.header}>
-					<Text style={styles.title}>AIIMS Patna â€” MD Emergency Medicine</Text>
+					<Text style={styles.title}>
+						AIIMS Patna â€” MD Emergency Medicine
+					</Text>
 					<Text style={styles.subtitle}>
 						PG Residency Logbook â€” Rotation Postings Report
 					</Text>
@@ -461,8 +463,8 @@ function StudentPdfDocument({ data }: { data: StudentPdfData }) {
 
 				{/* Footer */}
 				<Text style={styles.footer}>
-					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency Digital
-					Logbook
+					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency
+					Digital Logbook
 				</Text>
 			</Page>
 		</Document>
@@ -479,7 +481,9 @@ function ReviewPdfDocument({ data }: { data: ReviewPdfData }) {
 			{/* Page 1: Rotation Postings Review */}
 			<Page size="A4" orientation="landscape" style={styles.page}>
 				<View style={styles.header}>
-					<Text style={styles.title}>AIIMS Patna â€” MD Emergency Medicine</Text>
+					<Text style={styles.title}>
+						AIIMS Patna â€” MD Emergency Medicine
+					</Text>
 					<Text style={styles.subtitle}>
 						Rotation Postings Review â€” {roleLabel} Report
 					</Text>
@@ -550,8 +554,8 @@ function ReviewPdfDocument({ data }: { data: ReviewPdfData }) {
 				}
 
 				<Text style={styles.footer}>
-					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency Digital
-					Logbook
+					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency
+					Digital Logbook
 				</Text>
 			</Page>
 
@@ -601,8 +605,8 @@ function ReviewPdfDocument({ data }: { data: ReviewPdfData }) {
 				}
 
 				<Text style={styles.footer}>
-					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency Digital
-					Logbook
+					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency
+					Digital Logbook
 				</Text>
 			</Page>
 
@@ -676,8 +680,8 @@ function ReviewPdfDocument({ data }: { data: ReviewPdfData }) {
 				}
 
 				<Text style={styles.footer}>
-					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency Digital
-					Logbook
+					AIIMS Patna â€” Department of Emergency Medicine â€” PG Residency
+					Digital Logbook
 				</Text>
 			</Page>
 		</Document>
@@ -1199,12 +1203,8 @@ function ClinicalSkillStudentPdf({
 						<Text style={[styles.tableCell, { width: "17%" }]}>
 							Level of Confidence
 						</Text>
-						<Text style={[styles.tableCell, { width: "10%" }]}>
-							Tally
-						</Text>
-						<Text style={[styles.tableCell, { width: "10%" }]}>
-							Status
-						</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Status</Text>
 					</View>
 
 					{entries.map((e) => (
@@ -1253,10 +1253,7 @@ export async function exportClinicalSkillsToPdf(
 		/>,
 	).toBlob();
 	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
-	saveAs(
-		blob,
-		`Clinical_Skills_${label}_${safeName}_${formatFileDate()}.pdf`,
-	);
+	saveAs(blob, `Clinical_Skills_${label}_${safeName}_${formatFileDate()}.pdf`);
 }
 
 // ======================== CLINICAL SKILLS â€” FACULTY/HOD REVIEW EXPORT ========================
@@ -1291,32 +1288,22 @@ function ClinicalSkillReviewPdf({
 					<Text style={styles.title}>
 						Clinical Skills Review ({label} Patient) â€” {roleLabel}
 					</Text>
-					<Text style={styles.subtitle}>
-						{entries.length} submissions
-					</Text>
+					<Text style={styles.subtitle}>{entries.length} submissions</Text>
 				</View>
 
 				<View style={styles.table}>
 					<View style={[styles.tableRow, styles.tableHeader]}>
 						<Text style={[styles.tableCell, { width: "5%" }]}>Sl.</Text>
-						<Text style={[styles.tableCell, { width: "14%" }]}>
-							Student
-						</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Student</Text>
 						<Text style={[styles.tableCell, { width: "22%" }]}>
 							Clinical Skill
 						</Text>
 						<Text style={[styles.tableCell, { width: "25%" }]}>
 							Representative Diagnosis
 						</Text>
-						<Text style={[styles.tableCell, { width: "13%" }]}>
-							Confidence
-						</Text>
-						<Text style={[styles.tableCell, { width: "8%" }]}>
-							Tally
-						</Text>
-						<Text style={[styles.tableCell, { width: "13%" }]}>
-							Status
-						</Text>
+						<Text style={[styles.tableCell, { width: "13%" }]}>Confidence</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "13%" }]}>Status</Text>
 					</View>
 
 					{entries.map((e, i) => (
@@ -1371,5 +1358,234 @@ export async function exportClinicalSkillReviewToPdf(
 	saveAs(
 		blob,
 		`Clinical_Skills_Review_${label}_${roleLabel}_${formatFileDate()}.pdf`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — STUDENT EXPORT ========================
+
+interface CaseManagementPdfEntry {
+	slNo: number;
+	caseSubCategory: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	tally: number;
+	status: string;
+}
+
+function CaseManagementStudentPdf({
+	entries,
+	studentName,
+	categoryLabel,
+}: {
+	entries: CaseManagementPdfEntry[];
+	studentName: string;
+	categoryLabel: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						Log of Case Management — {categoryLabel}
+					</Text>
+					<Text style={styles.subtitle}>Student: {studentName}</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "18%" }]}>Case Type</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Patient</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>UHID</Text>
+						<Text style={[styles.tableCell, { width: "20%" }]}>Diagnosis</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Competency</Text>
+						<Text style={[styles.tableCell, { width: "7%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "9%" }]}>Status</Text>
+					</View>
+
+					{entries.map((e) => (
+						<View key={e.slNo} style={styles.tableRow}>
+							<Text style={[styles.tableCell, { width: "5%" }]}>{e.slNo}</Text>
+							<Text style={[styles.tableCell, { width: "18%" }]}>
+								{e.caseSubCategory}
+							</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.date ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "12%" }]}>
+								{e.patientName ?
+									`${e.patientName}${e.patientAge ? `, ${e.patientAge}` : ""}${e.patientSex ? `/${e.patientSex}` : ""}`
+								:	"—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.uhid ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "20%" }]}>
+								{e.completeDiagnosis ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.competencyLevel ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "7%" }]}>{e.tally}</Text>
+							<Text style={[styles.tableCell, { width: "9%" }]}>
+								{e.status}
+							</Text>
+						</View>
+					))}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+export async function exportCaseManagementToPdf(
+	entries: CaseManagementPdfEntry[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const blob = await pdf(
+		<CaseManagementStudentPdf
+			entries={entries}
+			studentName={studentName}
+			categoryLabel={categoryLabel}
+		/>,
+	).toBlob();
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Case_Management_${safeCategory}_${safeName}_${formatFileDate()}.pdf`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — FACULTY/HOD REVIEW EXPORT ========================
+
+interface CaseManagementReviewPdfEntry {
+	slNo: number;
+	caseSubCategory: string;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	tally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+function CaseManagementReviewPdf({
+	entries,
+	reviewerRole,
+	label,
+}: {
+	entries: CaseManagementReviewPdfEntry[];
+	reviewerRole: "faculty" | "hod";
+	label: string;
+}) {
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+
+	return (
+		<Document>
+			<Page size="A4" orientation="landscape" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>
+						Case Management Review ({label}) — {roleLabel}
+					</Text>
+					<Text style={styles.subtitle}>{entries.length} submissions</Text>
+				</View>
+
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "4%" }]}>Sl.</Text>
+						<Text style={[styles.tableCell, { width: "11%" }]}>Student</Text>
+						<Text style={[styles.tableCell, { width: "13%" }]}>Category</Text>
+						<Text style={[styles.tableCell, { width: "15%" }]}>Case Type</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Patient</Text>
+						<Text style={[styles.tableCell, { width: "16%" }]}>Diagnosis</Text>
+						<Text style={[styles.tableCell, { width: "10%" }]}>Competency</Text>
+						<Text style={[styles.tableCell, { width: "5%" }]}>Tally</Text>
+						<Text style={[styles.tableCell, { width: "8%" }]}>Status</Text>
+					</View>
+
+					{entries.map((e, i) => (
+						<View key={i} style={styles.tableRow}>
+							<Text style={[styles.tableCell, { width: "4%" }]}>{e.slNo}</Text>
+							<Text style={[styles.tableCell, { width: "11%" }]}>
+								{e.studentName}
+							</Text>
+							<Text style={[styles.tableCell, { width: "13%" }]}>
+								{e.categoryLabel}
+							</Text>
+							<Text style={[styles.tableCell, { width: "15%" }]}>
+								{e.caseSubCategory}
+							</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.date ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.patientName ?
+									`${e.patientName}${e.patientAge ? `, ${e.patientAge}` : ""}`
+								:	"—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "16%" }]}>
+								{e.completeDiagnosis ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "10%" }]}>
+								{e.competencyLevel ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "5%" }]}>{e.tally}</Text>
+							<Text style={[styles.tableCell, { width: "8%" }]}>
+								{e.status}
+							</Text>
+						</View>
+					))}
+				</View>
+
+				<View style={styles.footer}>
+					<Text>
+						Generated on {new Date().toLocaleDateString()} — {entries.length}{" "}
+						entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+export async function exportCaseManagementReviewToPdf(
+	entries: CaseManagementReviewPdfEntry[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const blob = await pdf(
+		<CaseManagementReviewPdf
+			entries={entries}
+			reviewerRole={reviewerRole}
+			label={label}
+		/>,
+	).toBlob();
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		blob,
+		`Case_Management_Review_${label}_${roleLabel}_${formatFileDate()}.pdf`,
 	);
 }
