@@ -276,6 +276,7 @@ const facultyNavSections: NavSection[] = [
 				href: "/dashboard/faculty/procedures",
 				icon: <Syringe className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "procedureLogs",
 			},
 			{
 				title: "Diagnostics",
@@ -285,9 +286,10 @@ const facultyNavSections: NavSection[] = [
 			},
 			{
 				title: "Imaging",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=imagingLogs",
+				href: "/dashboard/faculty/imaging",
 				icon: <Scan className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "imagingLogs",
 			},
 		],
 	},
@@ -296,15 +298,17 @@ const facultyNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Transport",
-				href: "/dashboard/faculty/reviews?category=other&tab=transportLogs",
+				href: "/dashboard/faculty/transport",
 				icon: <Truck className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "transportLogs",
 			},
 			{
 				title: "Consent & Bad News",
-				href: "/dashboard/faculty/reviews?category=other&tab=consentLogs",
+				href: "/dashboard/faculty/consent-bad-news",
 				icon: <FileText className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "consentLogs",
 			},
 		],
 	},
@@ -456,6 +460,7 @@ const hodNavSections: NavSection[] = [
 				href: "/dashboard/hod/procedures",
 				icon: <Syringe className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "procedureLogs",
 			},
 			{
 				title: "Diagnostics",
@@ -465,9 +470,10 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Imaging",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=imagingLogs",
+				href: "/dashboard/hod/imaging",
 				icon: <Scan className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "imagingLogs",
 			},
 		],
 	},
@@ -476,15 +482,17 @@ const hodNavSections: NavSection[] = [
 		items: [
 			{
 				title: "Transport",
-				href: "/dashboard/faculty/reviews?category=other&tab=transportLogs",
+				href: "/dashboard/hod/transport",
 				icon: <Truck className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "transportLogs",
 			},
 			{
 				title: "Consent & Bad News",
-				href: "/dashboard/faculty/reviews?category=other&tab=consentLogs",
+				href: "/dashboard/hod/consent-bad-news",
 				icon: <FileText className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "consentLogs",
 			},
 		],
 	},

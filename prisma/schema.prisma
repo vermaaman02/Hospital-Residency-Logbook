@@ -564,11 +564,17 @@ model ImagingLog {
   imagingCategory      ImagingCategory
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int             @default(0)
   status               EntryStatus     @default(DRAFT)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
@@ -576,6 +582,7 @@ model ImagingLog {
   @@index([userId])
   @@index([imagingCategory])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum ImagingCategory {
@@ -594,17 +601,24 @@ model TransportLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ConsentLog {
@@ -613,17 +627,24 @@ model ConsentLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model BadNewsLog {
@@ -632,17 +653,24 @@ model BadNewsLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 11: COURSES & CONFERENCES ========================

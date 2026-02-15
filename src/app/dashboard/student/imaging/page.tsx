@@ -31,7 +31,7 @@ async function ImagingContent() {
 		<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 			{IMAGING_CATEGORIES.map((cat) => {
 				const slug = imagingEnumToSlug(cat.enumValue);
-				const entryCount = summary[cat.enumValue] ?? 0;
+				const entryCount = summary.totalByCategory[cat.enumValue] ?? 0;
 				const progressPercent =
 					cat.maxEntries > 0 ?
 						Math.min(100, Math.round((entryCount / cat.maxEntries) * 100))

@@ -21,6 +21,10 @@ export interface PendingCounts {
 	clinicalSkills: number;
 	caseManagement: number;
 	procedureLogs: number;
+	imagingLogs: number;
+	transportLogs: number;
+	consentLogs: number;
+	badNewsLogs: number;
 	total: number;
 }
 
@@ -39,6 +43,10 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			clinicalSkills: 0,
 			caseManagement: 0,
 			procedureLogs: 0,
+			imagingLogs: 0,
+			transportLogs: 0,
+			consentLogs: 0,
+			badNewsLogs: 0,
 			total: 0,
 		};
 
@@ -59,6 +67,10 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				clinicalSkills: 0,
 				caseManagement: 0,
 				procedureLogs: 0,
+				imagingLogs: 0,
+				transportLogs: 0,
+				consentLogs: 0,
+				badNewsLogs: 0,
 				total: 0,
 			};
 
@@ -81,6 +93,10 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		clinicalSkillsPediatric,
 		caseManagement,
 		procedureLogs,
+		imagingLogs,
+		transportLogs,
+		consentLogs,
+		badNewsLogs,
 	] = await Promise.all([
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
@@ -109,6 +125,18 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		prisma.procedureLog.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
 		}),
+		prisma.imagingLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.transportLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.consentLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.badNewsLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
 	]);
 
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
@@ -120,7 +148,11 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		journalClubs +
 		clinicalSkills +
 		caseManagement +
-		procedureLogs;
+		procedureLogs +
+		imagingLogs +
+		transportLogs +
+		consentLogs +
+		badNewsLogs;
 
 	return {
 		rotationPostings,
@@ -130,6 +162,10 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		clinicalSkills,
 		caseManagement,
 		procedureLogs,
+		imagingLogs,
+		transportLogs,
+		consentLogs,
+		badNewsLogs,
 		total,
 	};
 }

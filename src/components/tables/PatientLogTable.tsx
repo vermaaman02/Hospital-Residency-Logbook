@@ -1,12 +1,12 @@
 /**
- * @module ProcedureLogTable
- * @description Inline-editing table for Procedure Log entries (one category).
- * Click row to edit. Columns: Sl.No (auto), Date, Patient Name, Age (int),
- * Sex (select), UHID, Complete Diagnosis, Procedure Description,
- * Performed @ Location, S/O/A/PS/PI (or S/TM/TL for CPR), Faculty Sign,
- * Tally, Status, Actions.
+ * @module PatientLogTable
+ * @description Reusable inline-editing table for patient-based log entries.
+ * Used by Imaging (5 categories), Transport, Consent, and Bad News modules.
+ * Modeled identically after ProcedureLogTable with all the same features:
+ * inline editing, separate patient fields, faculty selector, tally, pagination,
+ * search/filter, markdown editor, status badges, export support.
  *
- * @see PG Logbook .md — "LOG OF PROCEDURES"
+ * @see PG Logbook .md — Imaging, Transport, Consent, Bad News sections
  */
 
 "use client";
@@ -77,22 +77,11 @@ import {
 	MarkdownEditor,
 	renderMarkdown,
 } from "@/components/shared/MarkdownEditor";
-import {
-	updateProcedureLogEntry,
-	submitProcedureLogEntry,
-	addProcedureLogRow,
-	deleteProcedureLogEntry,
-} from "@/actions/procedure-logs";
-import {
-	STANDARD_SKILL_LEVEL_OPTIONS,
-	CPR_SKILL_LEVEL_OPTIONS,
-	SKILL_LEVEL_LABELS,
-} from "@/lib/constants/procedure-log-fields";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-export interface ProcedureLogEntry {
+export interface PatientLogEntry {
 	id: string;
 	slNo: number;
 	date: string | null;
@@ -116,13 +105,32 @@ export interface FacultyOption {
 	lastName: string;
 }
 
-interface ProcedureLogTableProps {
-	entries: ProcedureLogEntry[];
+interface PatientLogTableProps {
+	entries: PatientLogEntry[];
 	facultyList: FacultyOption[];
-	procedureCategory: string;
 	categoryLabel: string;
 	maxEntries: number;
-	isCpr: boolean;
+	skillLevelOptions: { value: string; label: string }[];
+	skillLevelLabels: Record<string, string>;
+	onAddRow: () => Promise<unknown>;
+	onDeleteEntry: (id: string) => Promise<unknown>;
+	onUpdateEntry: (
+		id: string,
+		data: {
+			date?: string | null;
+			patientName?: string | null;
+			patientAge?: number | null;
+			patientSex?: string | null;
+			uhid?: string | null;
+			completeDiagnosis?: string | null;
+			procedureDescription?: string | null;
+			performedAtLocation?: string | null;
+			skillLevel?: string | null;
+			totalProcedureTally?: number;
+			facultyId?: string | null;
+		},
+	) => Promise<unknown>;
+	onSubmitEntry: (id: string) => Promise<unknown>;
 }
 
 interface InlineForm {
@@ -163,23 +171,24 @@ const SEX_OPTIONS = [
 
 const PAGE_SIZE = 15;
 
-export function ProcedureLogTable({
+export function PatientLogTable({
 	entries,
 	facultyList,
-	procedureCategory,
 	categoryLabel,
 	maxEntries: _maxEntries,
-	isCpr,
-}: ProcedureLogTableProps) {
+	skillLevelOptions,
+	skillLevelLabels,
+	onAddRow,
+	onDeleteEntry,
+	onUpdateEntry,
+	onSubmitEntry,
+}: PatientLogTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
 	const [currentPage, setCurrentPage] = useState(1);
-
-	const skillLevelOptions =
-		isCpr ? CPR_SKILL_LEVEL_OPTIONS : STANDARD_SKILL_LEVEL_OPTIONS;
 
 	const stats = useMemo(() => {
 		const total = entries.length;
@@ -209,18 +218,20 @@ export function ProcedureLogTable({
 		[facultyList],
 	);
 
-	const skillLabel = useCallback((val: string | null) => {
-		if (!val) return "—";
-		return SKILL_LEVEL_LABELS[val] ?? val;
-	}, []);
+	const skillLabel = useCallback(
+		(val: string | null) => {
+			if (!val) return "—";
+			return skillLevelLabels[val] ?? val;
+		},
+		[skillLevelLabels],
+	);
 
 	// ---- Add New Row ----
 	function handleAddRow() {
 		startTransition(async () => {
 			try {
-				await addProcedureLogRow(procedureCategory);
+				await onAddRow();
 				toast.success("New row added");
-				// Jump to last page to see the new entry
 				const newTotalPages = Math.ceil((entries.length + 1) / PAGE_SIZE);
 				setCurrentPage(newTotalPages);
 				router.refresh();
@@ -236,7 +247,7 @@ export function ProcedureLogTable({
 	function handleDelete(id: string) {
 		startTransition(async () => {
 			try {
-				await deleteProcedureLogEntry(id);
+				await onDeleteEntry(id);
 				toast.success("Row deleted");
 				router.refresh();
 			} catch (error) {
@@ -248,8 +259,7 @@ export function ProcedureLogTable({
 	}
 
 	// ---- Editing ----
-
-	function startEditing(entry: ProcedureLogEntry) {
+	function startEditing(entry: PatientLogEntry) {
 		if (entry.status === "SUBMITTED" || entry.status === "SIGNED") return;
 		setEditingId(entry.id);
 		setForm({
@@ -279,7 +289,7 @@ export function ProcedureLogTable({
 					toast.error("Age must be a valid positive integer");
 					return;
 				}
-				await updateProcedureLogEntry(id, {
+				await onUpdateEntry(id, {
 					date: form.date || null,
 					patientName: form.patientName || null,
 					patientAge: ageNum,
@@ -314,7 +324,7 @@ export function ProcedureLogTable({
 		}
 		startTransition(async () => {
 			try {
-				await submitProcedureLogEntry(id);
+				await onSubmitEntry(id);
 				toast.success("Submitted for review");
 				router.refresh();
 			} catch (error) {
@@ -407,7 +417,7 @@ export function ProcedureLogTable({
 										</TableHead>
 										<TableHead className="w-24 font-bold">Location</TableHead>
 										<TableHead className="w-32 font-bold">
-											{isCpr ? "S / TM / TL" : "S/O/A/PS/PI"}
+											S/O/A/PS/PI
 										</TableHead>
 										<TableHead className="w-36 font-bold">
 											Faculty/SR Sign
@@ -540,7 +550,7 @@ function EditRow({
 	getFacultyName,
 	skillLevelOptions,
 }: {
-	entry: ProcedureLogEntry;
+	entry: PatientLogEntry;
 	form: InlineForm;
 	setForm: React.Dispatch<React.SetStateAction<InlineForm>>;
 	facultyList: FacultyOption[];
@@ -554,12 +564,9 @@ function EditRow({
 }) {
 	return (
 		<TableRow className="bg-blue-50/40">
-			{/* Sl. No */}
 			<TableCell className="text-center font-medium text-muted-foreground">
 				{entry.slNo}
 			</TableCell>
-
-			{/* Date */}
 			<TableCell>
 				<Input
 					type="date"
@@ -568,23 +575,16 @@ function EditRow({
 					className="w-28 text-xs"
 				/>
 			</TableCell>
-
-			{/* Patient Name */}
 			<TableCell>
 				<Input
 					value={form.patientName}
 					onChange={(e) =>
-						setForm((f) => ({
-							...f,
-							patientName: e.target.value,
-						}))
+						setForm((f) => ({ ...f, patientName: e.target.value }))
 					}
 					placeholder="Name"
 					className="w-28 text-xs"
 				/>
 			</TableCell>
-
-			{/* Age */}
 			<TableCell className="text-center">
 				<Input
 					type="number"
@@ -600,8 +600,6 @@ function EditRow({
 					className="w-16 text-center text-xs"
 				/>
 			</TableCell>
-
-			{/* Sex */}
 			<TableCell>
 				<Select
 					value={form.patientSex}
@@ -619,8 +617,6 @@ function EditRow({
 					</SelectContent>
 				</Select>
 			</TableCell>
-
-			{/* UHID */}
 			<TableCell>
 				<Input
 					value={form.uhid}
@@ -629,8 +625,6 @@ function EditRow({
 					className="w-24 text-xs"
 				/>
 			</TableCell>
-
-			{/* Complete Diagnosis */}
 			<TableCell>
 				<MarkdownEditor
 					value={form.completeDiagnosis}
@@ -640,39 +634,27 @@ function EditRow({
 					compact
 				/>
 			</TableCell>
-
-			{/* Procedure Description */}
 			<TableCell>
 				<MarkdownEditor
 					value={form.procedureDescription}
 					onChange={(val) =>
-						setForm((f) => ({
-							...f,
-							procedureDescription: val,
-						}))
+						setForm((f) => ({ ...f, procedureDescription: val }))
 					}
 					placeholder="Procedure…"
 					minRows={2}
 					compact
 				/>
 			</TableCell>
-
-			{/* Performed @ Location */}
 			<TableCell>
 				<Input
 					value={form.performedAtLocation}
 					onChange={(e) =>
-						setForm((f) => ({
-							...f,
-							performedAtLocation: e.target.value,
-						}))
+						setForm((f) => ({ ...f, performedAtLocation: e.target.value }))
 					}
 					placeholder="ER, ICU…"
 					className="w-24 text-xs"
 				/>
 			</TableCell>
-
-			{/* Skill Level */}
 			<TableCell>
 				<Select
 					value={form.skillLevel}
@@ -690,8 +672,6 @@ function EditRow({
 					</SelectContent>
 				</Select>
 			</TableCell>
-
-			{/* Faculty Sign (searchable dropdown) */}
 			<TableCell>
 				<Popover open={facultyPickerOpen} onOpenChange={setFacultyPickerOpen}>
 					<PopoverTrigger asChild>
@@ -717,10 +697,7 @@ function EditRow({
 											key={f.id}
 											value={`${f.firstName} ${f.lastName}`}
 											onSelect={() => {
-												setForm((prev) => ({
-													...prev,
-													facultyId: f.id,
-												}));
+												setForm((prev) => ({ ...prev, facultyId: f.id }));
 												setFacultyPickerOpen(false);
 											}}
 										>
@@ -739,8 +716,6 @@ function EditRow({
 					</PopoverContent>
 				</Popover>
 			</TableCell>
-
-			{/* Total Procedure Tally */}
 			<TableCell className="text-center">
 				<Input
 					type="number"
@@ -755,13 +730,9 @@ function EditRow({
 					className="w-20 mx-auto text-center text-xs"
 				/>
 			</TableCell>
-
-			{/* Status */}
 			<TableCell className="text-center">
 				<StatusBadge status={entry.status as EntryStatus} size="sm" />
 			</TableCell>
-
-			{/* Actions */}
 			<TableCell className="text-center">
 				<div className="flex items-center justify-center gap-0.5">
 					<Button
@@ -803,7 +774,7 @@ function ReadRow({
 	getFacultyName,
 	skillLabel,
 }: {
-	entry: ProcedureLogEntry;
+	entry: PatientLogEntry;
 	onEdit: () => void;
 	onSubmit: () => void;
 	onDelete: () => void;
@@ -824,12 +795,9 @@ function ReadRow({
 			)}
 			onClick={isEditable ? onEdit : undefined}
 		>
-			{/* Sl. No */}
 			<TableCell className="text-center font-medium text-muted-foreground">
 				{entry.slNo}
 			</TableCell>
-
-			{/* Date */}
 			<TableCell className="text-sm">
 				{entry.date ?
 					new Date(entry.date).toLocaleDateString("en-IN", {
@@ -839,32 +807,22 @@ function ReadRow({
 					})
 				:	<span className="text-muted-foreground italic">—</span>}
 			</TableCell>
-
-			{/* Patient Name */}
 			<TableCell className="text-sm">
 				{entry.patientName || (
 					<span className="text-muted-foreground italic">—</span>
 				)}
 			</TableCell>
-
-			{/* Age */}
 			<TableCell className="text-center text-sm">
 				{entry.patientAge != null ?
 					entry.patientAge
 				:	<span className="text-muted-foreground">—</span>}
 			</TableCell>
-
-			{/* Sex */}
 			<TableCell className="text-sm">
 				{entry.patientSex || <span className="text-muted-foreground">—</span>}
 			</TableCell>
-
-			{/* UHID */}
 			<TableCell className="text-sm">
 				{entry.uhid || <span className="text-muted-foreground italic">—</span>}
 			</TableCell>
-
-			{/* Complete Diagnosis */}
 			<TableCell className="text-sm max-w-40">
 				{entry.completeDiagnosis ?
 					<div
@@ -875,8 +833,6 @@ function ReadRow({
 					/>
 				:	<span className="text-muted-foreground italic">Not filled</span>}
 			</TableCell>
-
-			{/* Procedure Description */}
 			<TableCell className="text-sm max-w-36">
 				{entry.procedureDescription ?
 					<div
@@ -887,15 +843,11 @@ function ReadRow({
 					/>
 				:	<span className="text-muted-foreground italic">—</span>}
 			</TableCell>
-
-			{/* Performed @ Location */}
 			<TableCell className="text-sm">
 				{entry.performedAtLocation || (
 					<span className="text-muted-foreground">—</span>
 				)}
 			</TableCell>
-
-			{/* Skill Level */}
 			<TableCell>
 				{entry.skillLevel ?
 					<Badge variant="outline" className="text-xs">
@@ -903,18 +855,12 @@ function ReadRow({
 					</Badge>
 				:	<span className="text-muted-foreground">—</span>}
 			</TableCell>
-
-			{/* Faculty Sign */}
 			<TableCell className="text-sm">
 				{getFacultyName(entry.facultyId)}
 			</TableCell>
-
-			{/* Total Procedure Tally */}
 			<TableCell className="text-center font-mono">
 				{entry.totalProcedureTally}
 			</TableCell>
-
-			{/* Status */}
 			<TableCell className="text-center">
 				<div>
 					<StatusBadge status={entry.status as EntryStatus} size="sm" />
@@ -940,8 +886,6 @@ function ReadRow({
 					)}
 				</div>
 			</TableCell>
-
-			{/* Actions */}
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				<div className="flex items-center justify-center gap-0.5">
 					{entry.status === "DRAFT" && entry.skillLevel && (

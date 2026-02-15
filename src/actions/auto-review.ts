@@ -21,7 +21,11 @@ export type AutoReviewCategory =
 	| "journalClubs"
 	| "clinicalSkills"
 	| "caseManagement"
-	| "procedureLogs";
+	| "procedureLogs"
+	| "imagingLogs"
+	| "transportLogs"
+	| "consentLogs"
+	| "badNewsLogs";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -33,6 +37,10 @@ export interface AutoReviewSettings {
 	clinicalSkills: boolean;
 	caseManagement: boolean;
 	procedureLogs: boolean;
+	imagingLogs: boolean;
+	transportLogs: boolean;
+	consentLogs: boolean;
+	badNewsLogs: boolean;
 }
 
 /**
@@ -57,6 +65,10 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		clinicalSkills: map["clinicalSkills"] ?? false,
 		caseManagement: map["caseManagement"] ?? false,
 		procedureLogs: map["procedureLogs"] ?? false,
+		imagingLogs: map["imagingLogs"] ?? false,
+		transportLogs: map["transportLogs"] ?? false,
+		consentLogs: map["consentLogs"] ?? false,
+		badNewsLogs: map["badNewsLogs"] ?? false,
 	};
 }
 
@@ -92,6 +104,12 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/case-management");
 	revalidatePath("/dashboard/faculty/procedures");
 	revalidatePath("/dashboard/hod/procedures");
+	revalidatePath("/dashboard/faculty/imaging");
+	revalidatePath("/dashboard/hod/imaging");
+	revalidatePath("/dashboard/faculty/transport");
+	revalidatePath("/dashboard/hod/transport");
+	revalidatePath("/dashboard/faculty/consent-bad-news");
+	revalidatePath("/dashboard/hod/consent-bad-news");
 	return { success: true, category, enabled };
 }
 
