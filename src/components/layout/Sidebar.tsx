@@ -190,9 +190,21 @@ const studentNavSections: NavSection[] = [
 				roles: ["student"],
 			},
 			{
+				title: "Conference Participation",
+				href: "/dashboard/student/conferences",
+				icon: <Award className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
 				title: "Research",
 				href: "/dashboard/student/research",
 				icon: <Globe className="h-4 w-4" />,
+				roles: ["student"],
+			},
+			{
+				title: "Research & Outreach",
+				href: "/dashboard/student/research-activities",
+				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["student"],
 			},
 			{
@@ -335,10 +347,24 @@ const facultyNavSections: NavSection[] = [
 				roles: ["faculty"],
 			},
 			{
+				title: "Conference Participation",
+				href: "/dashboard/faculty/conferences",
+				icon: <Award className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "conferences",
+			},
+			{
 				title: "Research",
 				href: "/dashboard/faculty/reviews?category=professional&tab=research",
 				icon: <Globe className="h-4 w-4" />,
 				roles: ["faculty"],
+			},
+			{
+				title: "Research & Outreach",
+				href: "/dashboard/faculty/research-activities",
+				icon: <FlaskConical className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "researchActivities",
 			},
 			{
 				title: "Disaster & QI",
@@ -526,10 +552,24 @@ const hodNavSections: NavSection[] = [
 				roles: ["hod"],
 			},
 			{
+				title: "Conference Participation",
+				href: "/dashboard/hod/conferences",
+				icon: <Award className="h-4 w-4" />,
+				roles: ["hod"],
+				badgeKey: "conferences",
+			},
+			{
 				title: "Research",
 				href: "/dashboard/faculty/reviews?category=professional&tab=research",
 				icon: <Globe className="h-4 w-4" />,
 				roles: ["hod"],
+			},
+			{
+				title: "Research & Outreach",
+				href: "/dashboard/hod/research-activities",
+				icon: <FlaskConical className="h-4 w-4" />,
+				roles: ["hod"],
+				badgeKey: "researchActivities",
 			},
 			{
 				title: "Disaster & QI",

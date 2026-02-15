@@ -704,12 +704,15 @@ model ConferenceParticipation {
   conferenceName    String?
   conductedAt       String?
   participationRole String?
+  facultyId         String?
+  facultyRemark     String?
   status            EntryStatus @default(DRAFT)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ResearchActivity {
@@ -721,12 +724,15 @@ model ResearchActivity {
   activity          String?
   conductedAt       String?
   participationRole String?
+  facultyId         String?
+  facultyRemark     String?
   status            EntryStatus @default(DRAFT)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 12: DISASTER & QUALITY ========================

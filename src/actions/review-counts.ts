@@ -26,6 +26,8 @@ export interface PendingCounts {
 	consentLogs: number;
 	badNewsLogs: number;
 	lifeSupportCourses: number;
+	conferences: number;
+	researchActivities: number;
 	total: number;
 }
 
@@ -49,6 +51,8 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			consentLogs: 0,
 			badNewsLogs: 0,
 			lifeSupportCourses: 0,
+			conferences: 0,
+			researchActivities: 0,
 			total: 0,
 		};
 
@@ -74,6 +78,8 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				consentLogs: 0,
 				badNewsLogs: 0,
 				lifeSupportCourses: 0,
+				conferences: 0,
+				researchActivities: 0,
 				total: 0,
 			};
 
@@ -101,6 +107,8 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		consentLogs,
 		badNewsLogs,
 		lifeSupportCourses,
+		conferences,
+		researchActivities,
 	] = await Promise.all([
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
@@ -144,6 +152,12 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		prisma.courseAttended.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
 		}),
+		prisma.conferenceParticipation.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.researchActivity.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
 	]);
 
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
@@ -160,7 +174,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		transportLogs +
 		consentLogs +
 		badNewsLogs +
-		lifeSupportCourses;
+		lifeSupportCourses +
+		conferences +
+		researchActivities;
 
 	return {
 		rotationPostings,
@@ -175,6 +191,8 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		consentLogs,
 		badNewsLogs,
 		lifeSupportCourses,
+		conferences,
+		researchActivities,
 		total,
 	};
 }
