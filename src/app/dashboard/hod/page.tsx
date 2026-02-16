@@ -1,186 +1,333 @@
 /**
  * @module HodDashboard
- * @description Main dashboard for HOD. Shows department overview,
- * all students, faculty assignments, and aggregate statistics.
+ * @description Main landing page for HOD. Shows department-wide overview
+ * with faculty workload, student leaderboard, module distribution, and activity.
  *
  * @see roadmap.md — Section 6, Module C
  */
 
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { ensureUserInDb } from "@/lib/auth";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { StatCard } from "@/components/cards/StatCard";
-import { Users, UserCheck, GraduationCap, BarChart3 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
+import {
+	HodDashboardClient,
+	type HodDashboardData,
+} from "./HodDashboardClient";
 
 export default async function HodDashboardPage() {
-	const { userId } = await auth();
-	if (!userId) redirect("/sign-in");
+	const { userId: clerkId } = await auth();
+	if (!clerkId) redirect("/sign-in");
 
+	const user = await ensureUserInDb();
+	if (!user) redirect("/sign-in");
+
+	/* ── 1. Department counts ── */
+	const [totalStudents, totalFaculty] = await Promise.all([
+		prisma.user.count({ where: { role: "STUDENT", status: "ACTIVE" } }),
+		prisma.user.count({ where: { role: "FACULTY", status: "ACTIVE" } }),
+	]);
+
+	/* ── 2. Global entry counts (main modules) ── */
 	const [
-		totalStudents,
-		totalFaculty,
-		totalCases,
-		totalProcedures,
-		totalDiagnostics,
+		cases,
+		procs,
+		diag,
+		img,
+		clinA,
+		clinP,
+		cp,
+		sem,
+		jc,
+		transport,
+		consent,
+		badNews,
 	] = await Promise.all([
-		prisma.user.count({ where: { role: "STUDENT" as never } }),
-		prisma.user.count({ where: { role: "FACULTY" as never } }),
 		prisma.caseManagementLog.count(),
 		prisma.procedureLog.count(),
 		prisma.diagnosticSkill.count(),
+		prisma.imagingLog.count(),
+		prisma.clinicalSkillAdult.count(),
+		prisma.clinicalSkillPediatric.count(),
+		prisma.casePresentation.count(),
+		prisma.seminar.count(),
+		prisma.journalClub.count(),
+		prisma.transportLog.count(),
+		prisma.consentLog.count(),
+		prisma.badNewsLog.count(),
+	]);
+	const totalEntries =
+		cases +
+		procs +
+		diag +
+		img +
+		clinA +
+		clinP +
+		cp +
+		sem +
+		jc +
+		transport +
+		consent +
+		badNews;
+
+	/* signed / pending / needs‑revision */
+	const [totalSigned, totalPending, totalNeedsRevision] = await Promise.all([
+		Promise.all([
+			prisma.caseManagementLog.count({ where: { status: "SIGNED" as never } }),
+			prisma.procedureLog.count({ where: { status: "SIGNED" as never } }),
+		]).then((a) => a.reduce((s, n) => s + n, 0)),
+
+		Promise.all([
+			prisma.caseManagementLog.count({
+				where: { status: "SUBMITTED" as never },
+			}),
+			prisma.procedureLog.count({ where: { status: "SUBMITTED" as never } }),
+			prisma.diagnosticSkill.count({ where: { status: "SUBMITTED" as never } }),
+			prisma.imagingLog.count({ where: { status: "SUBMITTED" as never } }),
+		]).then((a) => a.reduce((s, n) => s + n, 0)),
+
+		Promise.all([
+			prisma.caseManagementLog.count({
+				where: { status: "NEEDS_REVISION" as never },
+			}),
+			prisma.procedureLog.count({
+				where: { status: "NEEDS_REVISION" as never },
+			}),
+		]).then((a) => a.reduce((s, n) => s + n, 0)),
 	]);
 
-	const totalEntries = totalCases + totalProcedures + totalDiagnostics;
+	/* ── 3. Signed this month & growth ── */
+	const monthStart = new Date();
+	monthStart.setDate(1);
+	monthStart.setHours(0, 0, 0, 0);
+	const prevMonthStart = new Date(monthStart);
+	prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
 
-	// Recent students (up to 5)
-	const recentStudents = await prisma.user.findMany({
-		where: { role: "STUDENT" as never },
-		orderBy: { createdAt: "desc" },
-		take: 5,
+	const [thisMonthCases, thisMonthProcs, prevMonthCases, prevMonthProcs] =
+		await Promise.all([
+			prisma.caseManagementLog.count({
+				where: { status: "SIGNED" as never, updatedAt: { gte: monthStart } },
+			}),
+			prisma.procedureLog.count({
+				where: { status: "SIGNED" as never, updatedAt: { gte: monthStart } },
+			}),
+			prisma.caseManagementLog.count({
+				where: { createdAt: { gte: prevMonthStart, lt: monthStart } },
+			}),
+			prisma.procedureLog.count({
+				where: { createdAt: { gte: prevMonthStart, lt: monthStart } },
+			}),
+		]);
+	const signedThisMonth = thisMonthCases + thisMonthProcs;
+
+	const thisMonthEntries = await Promise.all([
+		prisma.caseManagementLog.count({
+			where: { createdAt: { gte: monthStart } },
+		}),
+		prisma.procedureLog.count({ where: { createdAt: { gte: monthStart } } }),
+	]).then((a) => a.reduce((s, n) => s + n, 0));
+
+	const prevMonthEntries = prevMonthCases + prevMonthProcs;
+	const entryGrowthPct =
+		prevMonthEntries > 0 ?
+			Math.round(
+				((thisMonthEntries - prevMonthEntries) / prevMonthEntries) * 100,
+			)
+		:	0;
+
+	/* ── 4. Faculty workload ── */
+	const facultyUsers = await prisma.user.findMany({
+		where: { role: "FACULTY", status: "ACTIVE" },
+		select: { id: true, firstName: true, lastName: true },
+	});
+
+	const faculty = await Promise.all(
+		facultyUsers.map(async (f) => {
+			const assignedStudents = await prisma.facultyStudentAssignment.count({
+				where: { facultyId: f.id },
+			});
+
+			const studentIds = (
+				await prisma.facultyStudentAssignment.findMany({
+					where: { facultyId: f.id },
+					select: { studentId: true },
+				})
+			).map((a) => a.studentId);
+
+			const [pendCases, pendProcs, signedCases, signedProcs] =
+				await Promise.all([
+					prisma.caseManagementLog.count({
+						where: {
+							userId: { in: studentIds.length > 0 ? studentIds : ["__none__"] },
+							status: "SUBMITTED" as never,
+						},
+					}),
+					prisma.procedureLog.count({
+						where: {
+							userId: { in: studentIds.length > 0 ? studentIds : ["__none__"] },
+							status: "SUBMITTED" as never,
+						},
+					}),
+					prisma.caseManagementLog.count({
+						where: {
+							userId: { in: studentIds.length > 0 ? studentIds : ["__none__"] },
+							status: "SIGNED" as never,
+							updatedAt: { gte: monthStart },
+						},
+					}),
+					prisma.procedureLog.count({
+						where: {
+							userId: { in: studentIds.length > 0 ? studentIds : ["__none__"] },
+							status: "SIGNED" as never,
+							updatedAt: { gte: monthStart },
+						},
+					}),
+				]);
+
+			return {
+				id: f.id,
+				name: `${f.firstName} ${f.lastName}`,
+				assignedStudents,
+				pendingReviews: pendCases + pendProcs,
+				signedThisMonth: signedCases + signedProcs,
+			};
+		}),
+	);
+
+	/* ── 5. Top students (by entry count) ── */
+	const allStudents = await prisma.user.findMany({
+		where: { role: "STUDENT", status: "ACTIVE" },
 		select: {
 			id: true,
 			firstName: true,
 			lastName: true,
 			batch: true,
 			currentSemester: true,
-			_count: {
-				select: {
-					caseManagementLogs: true,
-					procedureLogs: true,
-				},
-			},
 		},
 	});
 
-	const stats = {
+	const studentRows = await Promise.all(
+		allStudents.map(async (s) => {
+			const [eCases, eProcs, sDiag] = await Promise.all([
+				prisma.caseManagementLog.count({ where: { userId: s.id } }),
+				prisma.procedureLog.count({ where: { userId: s.id } }),
+				prisma.diagnosticSkill.count({ where: { userId: s.id } }),
+			]);
+			const entries = eCases + eProcs + sDiag;
+			const [sCases, sProcs] = await Promise.all([
+				prisma.caseManagementLog.count({
+					where: { userId: s.id, status: "SIGNED" as never },
+				}),
+				prisma.procedureLog.count({
+					where: { userId: s.id, status: "SIGNED" as never },
+				}),
+			]);
+			return {
+				id: s.id,
+				name: `${s.firstName} ${s.lastName}`,
+				batch: s.batch,
+				semester: s.currentSemester ?? 1,
+				entries,
+				signed: sCases + sProcs,
+			};
+		}),
+	);
+	const topStudents = studentRows
+		.sort((a, b) => b.entries - a.entries)
+		.slice(0, 10);
+
+	/* ── 6. Module distribution ── */
+	const moduleDistribution = [
+		{ module: "Cases", count: cases },
+		{ module: "Procedures", count: procs },
+		{ module: "Diagnostics", count: diag },
+		{ module: "Imaging", count: img },
+		{ module: "Clinical", count: clinA + clinP },
+		{ module: "Academics", count: cp + sem + jc },
+		{ module: "Other", count: transport + consent + badNews },
+	];
+
+	/* ── 7. Recent activity ── */
+	const fmt = (d: Date) =>
+		d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+	const [rCases, rProcs] = await Promise.all([
+		prisma.caseManagementLog.findMany({
+			orderBy: { updatedAt: "desc" },
+			take: 6,
+			select: {
+				id: true,
+				category: true,
+				caseSubCategory: true,
+				status: true,
+				updatedAt: true,
+				user: { select: { firstName: true, lastName: true } },
+			},
+		}),
+		prisma.procedureLog.findMany({
+			orderBy: { updatedAt: "desc" },
+			take: 6,
+			select: {
+				id: true,
+				procedureCategory: true,
+				procedureDescription: true,
+				status: true,
+				updatedAt: true,
+				user: { select: { firstName: true, lastName: true } },
+			},
+		}),
+	]);
+
+	const recentActivity = [
+		...rCases.map((c) => ({
+			id: c.id,
+			studentName: `${c.user.firstName} ${c.user.lastName}`,
+			module: "Case",
+			title: c.caseSubCategory || c.category,
+			status: c.status,
+			date: fmt(c.updatedAt),
+		})),
+		...rProcs.map((p) => ({
+			id: p.id,
+			studentName: `${p.user.firstName} ${p.user.lastName}`,
+			module: "Procedure",
+			title: p.procedureDescription || p.procedureCategory,
+			status: p.status,
+			date: fmt(p.updatedAt),
+		})),
+	]
+		.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+		.slice(0, 8);
+
+	/* ── Build payload ── */
+	const data: HodDashboardData = {
+		hodName: `${user.firstName} ${user.lastName}`,
 		totalStudents,
 		totalFaculty,
 		totalEntries,
-		completionRate: 0,
+		totalSigned,
+		totalPending,
+		totalNeedsRevision,
+		signedThisMonth,
+		entryGrowthPct,
+		faculty,
+		topStudents,
+		moduleDistribution,
+		recentActivity,
 	};
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="HOD Dashboard"
-				description="Department of Emergency Medicine — Overview"
+				title="Department Dashboard"
+				description="Department-wide overview — Emergency Medicine"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard" },
 					{ label: "HOD" },
 				]}
 			/>
-
-			{/* Stats Overview */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-				<StatCard
-					title="Total Students"
-					value={stats.totalStudents}
-					icon={GraduationCap}
-					description="Active PG residents"
-				/>
-				<StatCard
-					title="Total Faculty"
-					value={stats.totalFaculty}
-					icon={UserCheck}
-					description="Supervising faculty"
-				/>
-				<StatCard
-					title="Total Entries"
-					value={stats.totalEntries}
-					icon={BarChart3}
-					description="All logbook entries"
-				/>
-				<StatCard
-					title="Avg. Completion"
-					value={`${stats.completionRate}%`}
-					icon={Users}
-					description="Across all students"
-				/>
-			</div>
-
-			{/* Student Management */}
-			<div className="border rounded-lg p-6">
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-lg font-semibold">Student Overview</h2>
-					{stats.totalStudents > 0 && (
-						<Link
-							href="/dashboard/hod/students"
-							className="text-sm text-hospital-primary hover:underline"
-						>
-							View All
-						</Link>
-					)}
-				</div>
-				{recentStudents.length > 0 ?
-					<div className="space-y-3">
-						{recentStudents.map((s) => (
-							<div
-								key={s.id}
-								className="flex items-center justify-between border-b pb-2 last:border-0"
-							>
-								<div>
-									<p className="font-medium text-sm">
-										{s.firstName} {s.lastName}
-									</p>
-									<p className="text-xs text-muted-foreground">
-										{s.batch ?? "No batch"} · Semester {s.currentSemester ?? 1}
-									</p>
-								</div>
-								<span className="text-xs text-muted-foreground">
-									{s._count.caseManagementLogs + s._count.procedureLogs} entries
-								</span>
-							</div>
-						))}
-					</div>
-				:	<div className="text-center py-8 text-muted-foreground">
-						<GraduationCap className="h-12 w-12 mx-auto mb-3 opacity-50" />
-						<p>No students registered yet.</p>
-						<p className="text-sm mt-1">
-							Students will appear here once they sign up and are assigned
-							roles.
-						</p>
-					</div>
-				}
-			</div>
-
-			{/* Faculty Management */}
-			<div className="border rounded-lg p-6">
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-lg font-semibold">Faculty & Assignments</h2>
-					{stats.totalFaculty > 0 && (
-						<Link
-							href="/dashboard/hod/faculty"
-							className="text-sm text-hospital-primary hover:underline"
-						>
-							View Faculty
-						</Link>
-					)}
-				</div>
-				{stats.totalFaculty > 0 ?
-					<p className="text-muted-foreground text-sm">
-						<span className="font-semibold text-foreground">
-							{stats.totalFaculty}
-						</span>{" "}
-						faculty member(s) registered. Visit{" "}
-						<Link
-							href="/dashboard/hod/assignments"
-							className="text-hospital-primary hover:underline"
-						>
-							Assignments
-						</Link>{" "}
-						to manage student-faculty pairings.
-					</p>
-				:	<div className="text-center py-8 text-muted-foreground">
-						<UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
-						<p>No faculty-student assignments configured.</p>
-						<p className="text-sm mt-1">
-							Assign faculty members to students for logbook review.
-						</p>
-					</div>
-				}
-			</div>
+			<HodDashboardClient data={JSON.parse(JSON.stringify(data))} />
 		</div>
 	);
 }

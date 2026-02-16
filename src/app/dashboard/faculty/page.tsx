@@ -1,7 +1,7 @@
 /**
  * @module FacultyDashboard
  * @description Main dashboard for faculty members. Shows assigned students,
- * pending reviews, and recent submissions.
+ * pending reviews queue, sign-off statistics, and recent activity.
  *
  * @see roadmap.md — Section 6, Module B
  */
@@ -10,197 +10,407 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ensureUserInDb } from "@/lib/auth";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { StatCard } from "@/components/cards/StatCard";
-import { Users, FileCheck, Clock, AlertCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
+import {
+	FacultyDashboardClient,
+	type FacultyDashboardData,
+} from "./FacultyDashboardClient";
 
 export default async function FacultyDashboardPage() {
-	const { userId } = await auth();
-	if (!userId) redirect("/sign-in");
+	const { userId: clerkId } = await auth();
+	if (!clerkId) redirect("/sign-in");
 
 	const user = await ensureUserInDb();
 	if (!user) redirect("/sign-in");
 
-	// Get assigned student IDs
+	const fid = user.id;
+
+	/* ── 1. Find assigned student IDs ── */
 	const assignments = await prisma.facultyStudentAssignment.findMany({
-		where: { facultyId: user.id },
+		where: { facultyId: fid },
 		select: { studentId: true },
 	});
-	const studentIds = assignments.map((a) => a.studentId);
+	const studentIds = [...new Set(assignments.map((a) => a.studentId))];
 
-	// Count stats in parallel
-	const [
-		assignedStudents,
-		pendingCases,
-		pendingProcs,
-		signedThisMonth,
-		revisionCases,
-		revisionProcs,
-	] = await Promise.all([
-		Promise.resolve(studentIds.length),
-		prisma.caseManagementLog.count({
-			where: { userId: { in: studentIds }, status: "SUBMITTED" as never },
+	/* ── 2. Get student profiles ── */
+	const studentProfiles = await prisma.user.findMany({
+		where: { id: { in: studentIds } },
+		select: {
+			id: true,
+			firstName: true,
+			lastName: true,
+			batch: true,
+			currentSemester: true,
+		},
+	});
+
+	/* ── 3. Count entries per student (all modules combined) ── */
+	const studentSummaries = await Promise.all(
+		studentProfiles.map(async (s) => {
+			const [
+				cases,
+				procs,
+				csA,
+				csP,
+				diag,
+				img,
+				cp,
+				sem,
+				jc,
+				transport,
+				consent,
+				badNews,
+			] = await Promise.all([
+				prisma.caseManagementLog.count({ where: { userId: s.id } }),
+				prisma.procedureLog.count({ where: { userId: s.id } }),
+				prisma.clinicalSkillAdult.count({ where: { userId: s.id } }),
+				prisma.clinicalSkillPediatric.count({ where: { userId: s.id } }),
+				prisma.diagnosticSkill.count({ where: { userId: s.id } }),
+				prisma.imagingLog.count({ where: { userId: s.id } }),
+				prisma.casePresentation.count({ where: { userId: s.id } }),
+				prisma.seminar.count({ where: { userId: s.id } }),
+				prisma.journalClub.count({ where: { userId: s.id } }),
+				prisma.transportLog.count({ where: { userId: s.id } }),
+				prisma.consentLog.count({ where: { userId: s.id } }),
+				prisma.badNewsLog.count({ where: { userId: s.id } }),
+			]);
+			const total =
+				cases +
+				procs +
+				csA +
+				csP +
+				diag +
+				img +
+				cp +
+				sem +
+				jc +
+				transport +
+				consent +
+				badNews;
+
+			const [signedCases, signedProcs] = await Promise.all([
+				prisma.caseManagementLog.count({
+					where: { userId: s.id, status: "SIGNED" as never },
+				}),
+				prisma.procedureLog.count({
+					where: { userId: s.id, status: "SIGNED" as never },
+				}),
+			]);
+			const signed = signedCases + signedProcs;
+
+			const [pendingCases, pendingProcs] = await Promise.all([
+				prisma.caseManagementLog.count({
+					where: { userId: s.id, status: "SUBMITTED" as never },
+				}),
+				prisma.procedureLog.count({
+					where: { userId: s.id, status: "SUBMITTED" as never },
+				}),
+			]);
+			const pending = pendingCases + pendingProcs;
+
+			return {
+				id: s.id,
+				name: `${s.firstName} ${s.lastName}`,
+				batch: s.batch,
+				semester: s.currentSemester ?? 1,
+				totalEntries: total,
+				signedEntries: signed,
+				pendingEntries: pending,
+			};
 		}),
-		prisma.procedureLog.count({
-			where: { userId: { in: studentIds }, status: "SUBMITTED" as never },
-		}),
-		prisma.digitalSignature.count({
-			where: {
-				signedById: user.id,
-				signedAt: {
-					gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+	);
+
+	/* ── 4. Collect pending entries across main modules ── */
+	const where = {
+		userId: { in: studentIds },
+		status: "SUBMITTED" as never,
+	};
+
+	const [pendCases, pendProcs, pendDiag, pendImg, pendClin, pendClinP] =
+		await Promise.all([
+			prisma.caseManagementLog.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 20,
+				select: {
+					id: true,
+					category: true,
+					caseSubCategory: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
 				},
+			}),
+			prisma.procedureLog.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 15,
+				select: {
+					id: true,
+					procedureCategory: true,
+					procedureDescription: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
+				},
+			}),
+			prisma.diagnosticSkill.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 10,
+				select: {
+					id: true,
+					diagnosticCategory: true,
+					skillName: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
+				},
+			}),
+			prisma.imagingLog.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 10,
+				select: {
+					id: true,
+					imagingCategory: true,
+					procedureDescription: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
+				},
+			}),
+			prisma.clinicalSkillAdult.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 10,
+				select: {
+					id: true,
+					skillName: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
+				},
+			}),
+			prisma.clinicalSkillPediatric.findMany({
+				where,
+				orderBy: { updatedAt: "desc" },
+				take: 10,
+				select: {
+					id: true,
+					skillName: true,
+					status: true,
+					updatedAt: true,
+					user: { select: { firstName: true, lastName: true } },
+				},
+			}),
+		]);
+
+	const fmt = (d: Date) =>
+		d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+	const pendingEntries = [
+		...pendCases.map((c) => ({
+			id: c.id,
+			studentName: `${c.user.firstName} ${c.user.lastName}`,
+			module: "Case Mgmt",
+			title: c.caseSubCategory || c.category,
+			status: c.status,
+			date: fmt(c.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...pendProcs.map((p) => ({
+			id: p.id,
+			studentName: `${p.user.firstName} ${p.user.lastName}`,
+			module: "Procedure",
+			title: p.procedureDescription || p.procedureCategory,
+			status: p.status,
+			date: fmt(p.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...pendDiag.map((d) => ({
+			id: d.id,
+			studentName: `${d.user.firstName} ${d.user.lastName}`,
+			module: "Diagnostics",
+			title: d.skillName || d.diagnosticCategory,
+			status: d.status,
+			date: fmt(d.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...pendImg.map((i) => ({
+			id: i.id,
+			studentName: `${i.user.firstName} ${i.user.lastName}`,
+			module: "Imaging",
+			title: i.procedureDescription || i.imagingCategory,
+			status: i.status,
+			date: fmt(i.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...pendClin.map((c) => ({
+			id: c.id,
+			studentName: `${c.user.firstName} ${c.user.lastName}`,
+			module: "Clinical (Adult)",
+			title: c.skillName,
+			status: c.status,
+			date: fmt(c.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...pendClinP.map((c) => ({
+			id: c.id,
+			studentName: `${c.user.firstName} ${c.user.lastName}`,
+			module: "Clinical (Ped.)",
+			title: c.skillName,
+			status: c.status,
+			date: fmt(c.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+	]
+		.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+		.slice(0, 15);
+
+	/* ── 5. Module-level pending counts ── */
+	const [mpCases, mpProcs, mpDiag, mpImg, mpClin, mpClinP] = await Promise.all([
+		prisma.caseManagementLog.count({ where }),
+		prisma.procedureLog.count({ where }),
+		prisma.diagnosticSkill.count({ where }),
+		prisma.imagingLog.count({ where }),
+		prisma.clinicalSkillAdult.count({ where }),
+		prisma.clinicalSkillPediatric.count({ where }),
+	]);
+
+	const modulePending = [
+		{ module: "Cases", count: mpCases },
+		{ module: "Procedures", count: mpProcs },
+		{ module: "Diagnostics", count: mpDiag },
+		{ module: "Imaging", count: mpImg },
+		{ module: "Clinical", count: mpClin + mpClinP },
+	];
+
+	const totalPending = modulePending.reduce((s, m) => s + m.count, 0);
+
+	/* ── 6. Signed this month ── */
+	const monthStart = new Date();
+	monthStart.setDate(1);
+	monthStart.setHours(0, 0, 0, 0);
+
+	const [signedCasesMonth, signedProcsMonth] = await Promise.all([
+		prisma.caseManagementLog.count({
+			where: {
+				userId: { in: studentIds },
+				status: "SIGNED" as never,
+				updatedAt: { gte: monthStart },
 			},
 		}),
+		prisma.procedureLog.count({
+			where: {
+				userId: { in: studentIds },
+				status: "SIGNED" as never,
+				updatedAt: { gte: monthStart },
+			},
+		}),
+	]);
+	const signedThisMonth = signedCasesMonth + signedProcsMonth;
+
+	/* ── 7. Needs revision count ── */
+	const [nrCases, nrProcs] = await Promise.all([
 		prisma.caseManagementLog.count({
-			where: { userId: { in: studentIds }, status: "NEEDS_REVISION" as never },
+			where: {
+				userId: { in: studentIds },
+				status: "NEEDS_REVISION" as never,
+			},
 		}),
 		prisma.procedureLog.count({
-			where: { userId: { in: studentIds }, status: "NEEDS_REVISION" as never },
+			where: {
+				userId: { in: studentIds },
+				status: "NEEDS_REVISION" as never,
+			},
+		}),
+	]);
+	const needsRevision = nrCases + nrProcs;
+
+	/* ── 8. Recent sign-offs ── */
+	const [recentSignedCases, recentSignedProcs] = await Promise.all([
+		prisma.caseManagementLog.findMany({
+			where: {
+				userId: { in: studentIds },
+				status: "SIGNED" as never,
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				category: true,
+				caseSubCategory: true,
+				status: true,
+				updatedAt: true,
+				user: { select: { firstName: true, lastName: true } },
+			},
+		}),
+		prisma.procedureLog.findMany({
+			where: {
+				userId: { in: studentIds },
+				status: "SIGNED" as never,
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				procedureCategory: true,
+				procedureDescription: true,
+				status: true,
+				updatedAt: true,
+				user: { select: { firstName: true, lastName: true } },
+			},
 		}),
 	]);
 
-	const stats = {
-		assignedStudents,
-		pendingReviews: pendingCases + pendingProcs,
-		signedThisMonth,
-		needsRevision: revisionCases + revisionProcs,
-	};
+	const recentSignoffs = [
+		...recentSignedCases.map((c) => ({
+			id: c.id,
+			studentName: `${c.user.firstName} ${c.user.lastName}`,
+			module: "Case",
+			title: c.caseSubCategory || c.category,
+			status: c.status,
+			date: fmt(c.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+		...recentSignedProcs.map((p) => ({
+			id: p.id,
+			studentName: `${p.user.firstName} ${p.user.lastName}`,
+			module: "Procedure",
+			title: p.procedureDescription || p.procedureCategory,
+			status: p.status,
+			date: fmt(p.updatedAt),
+			href: "/dashboard/faculty/students",
+		})),
+	]
+		.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+		.slice(0, 6);
 
-	// Fetch recent pending entries for the review section
-	const recentPending = await prisma.caseManagementLog.findMany({
-		where: { userId: { in: studentIds }, status: "SUBMITTED" as never },
-		orderBy: { createdAt: "desc" },
-		take: 5,
-		include: { user: { select: { firstName: true, lastName: true } } },
-	});
+	/* ── Build payload ── */
+	const data: FacultyDashboardData = {
+		facultyName: `${user.firstName} ${user.lastName}`,
+		assignedStudents: studentIds.length,
+		pendingReviews: totalPending,
+		signedThisMonth,
+		needsRevision,
+		pendingEntries,
+		students: studentSummaries,
+		modulePending,
+		recentSignoffs,
+	};
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				title="Faculty Dashboard"
-				description="Review and sign off on student logbook entries"
+				description="Review and sign-off student logbook entries"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard" },
 					{ label: "Faculty" },
 				]}
 			/>
-
-			{/* Stats Overview */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-				<StatCard
-					title="Assigned Students"
-					value={stats.assignedStudents}
-					icon={Users}
-					description="Students under your guidance"
-				/>
-				<StatCard
-					title="Pending Reviews"
-					value={stats.pendingReviews}
-					icon={Clock}
-					description="Entries awaiting your sign-off"
-					trend={
-						stats.pendingReviews > 0 ?
-							{ value: stats.pendingReviews, isPositive: false }
-						:	undefined
-					}
-				/>
-				<StatCard
-					title="Signed This Month"
-					value={stats.signedThisMonth}
-					icon={FileCheck}
-					description="Entries signed off"
-				/>
-				<StatCard
-					title="Needs Revision"
-					value={stats.needsRevision}
-					icon={AlertCircle}
-					description="Entries sent back for revision"
-				/>
-			</div>
-
-			{/* Pending Reviews Section */}
-			<div className="border rounded-lg p-6">
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-lg font-semibold">Pending Reviews</h2>
-					{stats.pendingReviews > 0 && (
-						<Link
-							href="/dashboard/faculty/students"
-							className="text-sm text-hospital-primary hover:underline"
-						>
-							View All
-						</Link>
-					)}
-				</div>
-				{recentPending.length > 0 ?
-					<div className="space-y-3">
-						{recentPending.map((entry) => (
-							<div
-								key={entry.id}
-								className="flex items-center justify-between border-b pb-2 last:border-0"
-							>
-								<div>
-									<p className="font-medium text-sm">
-										{entry.user.firstName} {entry.user.lastName}
-									</p>
-									<p className="text-xs text-muted-foreground">
-										{entry.category} — {entry.caseSubCategory}
-									</p>
-								</div>
-								<span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
-									Submitted
-								</span>
-							</div>
-						))}
-					</div>
-				:	<div className="text-center py-8 text-muted-foreground">
-						<Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-						<p>No pending reviews at the moment.</p>
-						<p className="text-sm mt-1">
-							Student submissions will appear here for your review.
-						</p>
-					</div>
-				}
-			</div>
-
-			{/* Assigned Students Section */}
-			<div className="border rounded-lg p-6">
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-lg font-semibold">Your Students</h2>
-					{stats.assignedStudents > 0 && (
-						<Link
-							href="/dashboard/faculty/students"
-							className="text-sm text-hospital-primary hover:underline"
-						>
-							View All
-						</Link>
-					)}
-				</div>
-				{stats.assignedStudents > 0 ?
-					<p className="text-muted-foreground text-sm">
-						You currently have{" "}
-						<span className="font-semibold text-foreground">
-							{stats.assignedStudents}
-						</span>{" "}
-						student(s) assigned. Visit the{" "}
-						<Link
-							href="/dashboard/faculty/students"
-							className="text-hospital-primary hover:underline"
-						>
-							Students page
-						</Link>{" "}
-						for details.
-					</p>
-				:	<div className="text-center py-8 text-muted-foreground">
-						<Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-						<p>No students assigned yet.</p>
-						<p className="text-sm mt-1">
-							Student assignments are managed by the HOD.
-						</p>
-					</div>
-				}
-			</div>
+			<FacultyDashboardClient data={JSON.parse(JSON.stringify(data))} />
 		</div>
 	);
 }
