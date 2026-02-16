@@ -1,81 +1,48 @@
 /**
- * @module HODAttendancePage
- * @description HOD view of department-wide attendance for all students.
+ * @module HOD Attendance Page
+ * @description Reuses faculty AttendanceReviewClient with role="hod".
+ * HOD sees all students, gets auto-review toggle.
  *
- * @see copilot-instructions.md — Section 8
- * @see roadmap.md — Section 11
+ * @see faculty/attendance/page.tsx — shared pattern
+ * @see actions/attendance.ts — getAttendanceForReview (HOD returns all)
  */
 
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { HodAttendanceClient } from "./HodAttendanceClient";
+import { getAttendanceForReview } from "@/actions/attendance";
+import { getAutoReviewSettings } from "@/actions/auto-review";
+import { AttendanceReviewClient } from "../../faculty/attendance/AttendanceReviewClient";
 
-export default async function HODAttendancePage() {
+export default async function HodAttendancePage() {
 	try {
 		await requireRole(["hod"]);
 	} catch {
 		redirect("/dashboard/student");
 	}
 
-	// Get all attendance sheets with student info
-	const sheets = await prisma.attendanceSheet.findMany({
-		include: {
-			user: {
-				select: {
-					firstName: true,
-					lastName: true,
-					batch: true,
-					currentSemester: true,
-				},
-			},
-			entries: {
-				select: { presentAbsent: true },
-			},
-		},
-		orderBy: { createdAt: "desc" },
-		take: 200,
-	});
+	const [rawSheets, autoReviewSettings] = await Promise.all([
+		getAttendanceForReview(),
+		getAutoReviewSettings(),
+	]);
 
-	const serializedSheets = sheets.map((s) => {
-		const totalDays = s.entries.length;
-		const presentDays = s.entries.filter(
-			(e) => e.presentAbsent?.toLowerCase() === "present",
-		).length;
-		const absentDays = s.entries.filter(
-			(e) => e.presentAbsent?.toLowerCase() === "absent",
-		).length;
-
-		return {
-			id: s.id,
-			studentName: `${s.user.firstName} ${s.user.lastName}`,
-			batch: s.user.batch ?? s.batch,
-			currentSemester: s.user.currentSemester,
-			weekStart: s.weekStartDate.toISOString().split("T")[0],
-			weekEnd: s.weekEndDate.toISOString().split("T")[0],
-			postedDepartment: s.postedDepartment,
-			totalDays,
-			presentDays,
-			absentDays,
-			otherDays: totalDays - presentDays - absentDays,
-			attendancePercentage:
-				totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0,
-			status: s.status as string,
-		};
-	});
+	const sheets = JSON.parse(JSON.stringify(rawSheets));
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Department Attendance"
-				description="View attendance records for all students in the department"
+				title="Attendance — Review"
+				description="Review all student attendance sheets across all batches"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/hod" },
 					{ label: "Attendance" },
 				]}
 			/>
-			<HodAttendanceClient sheets={serializedSheets} />
+			<AttendanceReviewClient
+				sheets={sheets}
+				role="hod"
+				autoReviewSettings={autoReviewSettings}
+			/>
 		</div>
 	);
 }

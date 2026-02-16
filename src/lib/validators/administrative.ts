@@ -37,17 +37,47 @@ export const attendanceEntrySchema = z.object({
 	hodName: z.string().optional(),
 });
 
-export const attendanceSheetSchema = z.object({
-	weekStartDate: z.coerce.date({
-		error: "Week start date is required",
-	}),
-	weekEndDate: z.coerce.date({ error: "Week end date is required" }),
-	batch: z.string().optional(),
-	postedDepartment: z.string().optional(),
-	entries: z
-		.array(attendanceEntrySchema)
-		.min(1, "At least one attendance entry is required"),
-});
+export const attendanceSheetSchema = z
+	.object({
+		weekStartDate: z.coerce.date({
+			error: "Week start date is required",
+		}),
+		weekEndDate: z.coerce.date({ error: "Week end date is required" }),
+		batch: z.string().optional(),
+		postedDepartment: z.string().optional(),
+		entries: z
+			.array(attendanceEntrySchema)
+			.min(1, "At least one attendance entry is required"),
+	})
+	.superRefine((data, ctx) => {
+		if (data.weekEndDate < data.weekStartDate) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Week end date must be on or after week start date",
+				path: ["weekEndDate"],
+			});
+		}
+
+		const seen = new Set<string>();
+		for (const entry of data.entries) {
+			if (!entry.date) continue;
+			const key =
+				entry.date.getFullYear() +
+				"-" +
+				String(entry.date.getMonth() + 1).padStart(2, "0") +
+				"-" +
+				String(entry.date.getDate()).padStart(2, "0");
+			if (seen.has(key)) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Duplicate attendance date in the same week",
+					path: ["entries"],
+				});
+				break;
+			}
+			seen.add(key);
+		}
+	});
 
 export type AttendanceSheetInput = z.infer<typeof attendanceSheetSchema>;
 

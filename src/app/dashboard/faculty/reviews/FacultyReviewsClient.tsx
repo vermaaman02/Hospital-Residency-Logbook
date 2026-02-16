@@ -30,7 +30,6 @@ import {
 	signRotationPosting,
 	rejectRotationPosting,
 } from "@/actions/rotation-postings";
-import { signAttendanceSheet } from "@/actions/attendance";
 import {
 	signCasePresentation,
 	rejectCasePresentation,
@@ -104,7 +103,6 @@ import {
 	X,
 	Loader2,
 	FileText,
-	Calendar,
 	Presentation,
 	BookOpen,
 	Newspaper,
@@ -137,22 +135,6 @@ interface PendingRotation {
 	user: UserInfo;
 }
 
-interface AttendanceEntry {
-	id: string;
-	day: string;
-	presentAbsent: string | null;
-}
-
-interface PendingAttendance {
-	id: string;
-	weekStartDate: Date;
-	weekEndDate: Date;
-	batch: string | null;
-	postedDepartment: string | null;
-	entries: AttendanceEntry[];
-	user: UserInfo;
-}
-
 interface AcademicEntry {
 	id: string;
 	slNo: number;
@@ -172,7 +154,6 @@ interface AcademicEntry {
 
 interface FacultyReviewsClientProps {
 	pendingRotations: PendingRotation[];
-	pendingAttendance: PendingAttendance[];
 	pendingCasePresentations: AcademicEntry[];
 	pendingSeminars: AcademicEntry[];
 	pendingJournalClubs: AcademicEntry[];
@@ -314,7 +295,6 @@ type RejectType =
 
 export function FacultyReviewsClient({
 	pendingRotations,
-	pendingAttendance,
 	pendingCasePresentations,
 	pendingSeminars,
 	pendingJournalClubs,
@@ -489,18 +469,6 @@ export function FacultyReviewsClient({
 		});
 	}
 
-	function handleSignAttendance(id: string) {
-		startTransition(async () => {
-			try {
-				await signAttendanceSheet(id);
-				toast.success("Attendance sheet signed");
-				router.refresh();
-			} catch {
-				toast.error("Failed to sign");
-			}
-		});
-	}
-
 	function openRejectDialog(id: string, type: RejectType) {
 		setRejectTarget({ id, type });
 		setRejectRemark("");
@@ -509,7 +477,6 @@ export function FacultyReviewsClient({
 
 	const totalPending =
 		pendingRotations.length +
-		pendingAttendance.length +
 		pendingCasePresentations.length +
 		pendingSeminars.length +
 		pendingJournalClubs.length +
@@ -540,16 +507,6 @@ export function FacultyReviewsClient({
 					icon: FileText,
 					count: pendingRotations.length,
 				},
-				...(isHod ?
-					[
-						{
-							value: "attendance",
-							label: "Attendance",
-							icon: Calendar,
-							count: pendingAttendance.length,
-						},
-					]
-				:	[]),
 			],
 		},
 		{
@@ -804,63 +761,6 @@ export function FacultyReviewsClient({
 						))
 					}
 				</TabsContent>
-
-				{/* Attendance Tab — HOD only */}
-				{isHod && (
-					<TabsContent value="attendance" className="mt-4 space-y-4">
-						{pendingAttendance.length === 0 ?
-							<div className="border rounded-lg p-8 text-center text-muted-foreground">
-								No pending attendance sheets to review
-							</div>
-						:	pendingAttendance.map((sheet) => {
-								const presentDays = sheet.entries.filter(
-									(e) => e.presentAbsent?.toLowerCase() === "present",
-								).length;
-								return (
-									<Card key={sheet.id}>
-										<CardHeader className="pb-3">
-											<div className="flex items-start justify-between">
-												<div>
-													<CardTitle className="text-base">
-														Week:{" "}
-														{format(new Date(sheet.weekStartDate), "dd MMM")} –{" "}
-														{format(new Date(sheet.weekEndDate), "dd MMM yyyy")}
-													</CardTitle>
-													<CardDescription>
-														{sheet.user.firstName} {sheet.user.lastName}
-														{sheet.postedDepartment &&
-															` — ${sheet.postedDepartment}`}
-														{` — ${presentDays}/${sheet.entries.length} days present`}
-													</CardDescription>
-												</div>
-												<Badge
-													variant="outline"
-													className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-												>
-													Submitted
-												</Badge>
-											</div>
-										</CardHeader>
-										<CardContent>
-											<div className="flex items-center gap-2">
-												<Button
-													size="sm"
-													onClick={() => handleSignAttendance(sheet.id)}
-													disabled={isPending}
-												>
-													{isPending ?
-														<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-													:	<Check className="h-3.5 w-3.5 mr-1" />}
-													Sign Off
-												</Button>
-											</div>
-										</CardContent>
-									</Card>
-								);
-							})
-						}
-					</TabsContent>
-				)}
 
 				{/* Case Presentations Tab */}
 				<TabsContent value="casePresentations" className="mt-4 space-y-4">

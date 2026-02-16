@@ -1003,3 +1003,123 @@ export function exportSimpleLogToExcel(
 		`${safeLabel}_${safeStudentName}_${formatDateForFile()}.xlsx`,
 	);
 }
+
+// ======================== ATTENDANCE — EXPORT ========================
+
+interface AttendanceEntryExport {
+	day: string;
+	date: string | null;
+	presentAbsent: string | null;
+	hodName: string | null;
+}
+
+interface AttendanceSheetExport {
+	id: string;
+	weekStartDate: string;
+	weekEndDate: string;
+	batch: string | null;
+	postedDepartment: string | null;
+	status: string;
+	facultyRemark: string | null;
+	entries: AttendanceEntryExport[];
+	user?: {
+		firstName: string;
+		lastName: string;
+		batchRelation?: { name: string } | null;
+	};
+}
+
+const DAY_LABELS_FULL: Record<string, string> = {
+	MONDAY: "Monday",
+	TUESDAY: "Tuesday",
+	WEDNESDAY: "Wednesday",
+	THURSDAY: "Thursday",
+	FRIDAY: "Friday",
+	SATURDAY: "Saturday",
+	SUNDAY: "Sunday",
+};
+
+function formatShortDate(d: string | null): string {
+	if (!d) return "—";
+	try {
+		const date = new Date(d);
+		return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
+	} catch {
+		return "—";
+	}
+}
+
+/**
+ * Export attendance sheets to Excel (student view — own sheets).
+ */
+export function exportAttendanceExcel(sheets: AttendanceSheetExport[]) {
+	const wb = XLSX.utils.book_new();
+
+	const rows = sheets.flatMap((sheet) => {
+		const weekLabel = `${formatShortDate(sheet.weekStartDate)} – ${formatShortDate(sheet.weekEndDate)}`;
+		return sheet.entries.map((entry) => ({
+			Week: weekLabel,
+			Department: sheet.postedDepartment ?? "—",
+			Batch: sheet.batch ?? "—",
+			Day: DAY_LABELS_FULL[entry.day] ?? entry.day,
+			Date: formatShortDate(entry.date),
+			"Present/Absent": entry.presentAbsent ?? "—",
+			"HoD Name": entry.hodName ?? "—",
+			Status: sheet.status,
+			Remark: sheet.facultyRemark ?? "",
+		}));
+	});
+
+	const ws = XLSX.utils.json_to_sheet(
+		rows.length > 0 ? rows : [{ Week: "", Status: "No entries" }],
+	);
+	setColumnWidths(ws, [22, 20, 14, 12, 12, 14, 20, 12, 20]);
+	XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Attendance_Sheets_${formatDateForFile()}.xlsx`,
+	);
+}
+
+/**
+ * Export attendance sheets to Excel (review view — with student names).
+ */
+export function exportAttendanceReviewExcel(sheets: AttendanceSheetExport[]) {
+	const wb = XLSX.utils.book_new();
+
+	const rows = sheets.flatMap((sheet) => {
+		const studentName =
+			sheet.user ? `${sheet.user.firstName} ${sheet.user.lastName}` : "Unknown";
+		const batch = sheet.user?.batchRelation?.name ?? sheet.batch ?? "—";
+		const weekLabel = `${formatShortDate(sheet.weekStartDate)} – ${formatShortDate(sheet.weekEndDate)}`;
+
+		return sheet.entries.map((entry) => ({
+			Student: studentName,
+			Batch: batch,
+			Week: weekLabel,
+			Department: sheet.postedDepartment ?? "—",
+			Day: DAY_LABELS_FULL[entry.day] ?? entry.day,
+			Date: formatShortDate(entry.date),
+			"Present/Absent": entry.presentAbsent ?? "—",
+			"HoD Name": entry.hodName ?? "—",
+			Status: sheet.status,
+			Remark: sheet.facultyRemark ?? "",
+		}));
+	});
+
+	const ws = XLSX.utils.json_to_sheet(
+		rows.length > 0 ? rows : [{ Student: "", Status: "No entries" }],
+	);
+	setColumnWidths(ws, [20, 14, 22, 20, 12, 12, 14, 20, 12, 20]);
+	XLSX.utils.book_append_sheet(wb, ws, "Attendance Review");
+
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Attendance_Review_${formatDateForFile()}.xlsx`,
+	);
+}

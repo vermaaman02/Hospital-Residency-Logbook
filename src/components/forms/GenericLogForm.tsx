@@ -3,6 +3,7 @@
  * @description The MOST IMPORTANT component in the entire app.
  * Schema-driven form that renders any logbook entry form through configuration.
  * Handles 100+ form types via Zod schema + field config.
+ * Mobile-first responsive: single column on mobile, multi-column on desktop.
  *
  * @see copilot-instructions.md — Section 6, Section 9
  *
@@ -144,12 +145,12 @@ export function GenericLogForm<T extends FieldValues>({
 
 	if (isLoading) {
 		return (
-			<Card>
-				<CardHeader>
+			<Card className="border-0 shadow-sm">
+				<CardHeader className="px-4 sm:px-6">
 					<Skeleton className="h-6 w-48" />
 					<Skeleton className="h-4 w-64" />
 				</CardHeader>
-				<CardContent className="space-y-4">
+				<CardContent className="px-4 sm:px-6 space-y-4">
 					{Array.from({ length: 4 }).map((_, i) => (
 						<Skeleton key={i} className="h-10 w-full" />
 					))}
@@ -159,29 +160,40 @@ export function GenericLogForm<T extends FieldValues>({
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<div className="flex items-start justify-between">
-					<div>
-						<CardTitle>{title}</CardTitle>
-						{description && <CardDescription>{description}</CardDescription>}
+		<Card className="border-0 shadow-sm">
+			<CardHeader className="px-4 sm:px-6 pb-4">
+				<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+					<div className="min-w-0">
+						<CardTitle className="text-lg sm:text-xl leading-tight">
+							{title}
+						</CardTitle>
+						{description && (
+							<CardDescription className="mt-1 text-sm">
+								{description}
+							</CardDescription>
+						)}
 					</div>
-					{entryStatus && <StatusBadge status={entryStatus} />}
+					{entryStatus && (
+						<div className="shrink-0">
+							<StatusBadge status={entryStatus} />
+						</div>
+					)}
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="px-4 sm:px-6">
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(handleFormSubmit)}
-						className="space-y-6"
+						className="space-y-5"
 					>
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						{/* Responsive grid: 1 col on mobile, 2 on md, 3 on lg */}
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 sm:gap-y-5">
 							{fields.map((fieldConfig) => (
 								<div
 									key={fieldConfig.name}
 									className={cn(
-										fieldConfig.colSpan === 2 && "md:col-span-2",
-										fieldConfig.colSpan === 3 && "lg:col-span-3",
+										fieldConfig.colSpan === 2 && "sm:col-span-2",
+										fieldConfig.colSpan === 3 && "sm:col-span-2 lg:col-span-3",
 									)}
 								>
 									<FormField
@@ -189,7 +201,7 @@ export function GenericLogForm<T extends FieldValues>({
 										name={fieldConfig.name as never}
 										render={({ field }) => (
 											<FormItem>
-												<FormLabel>
+												<FormLabel className="text-sm font-medium">
 													{fieldConfig.label}
 													{fieldConfig.required && (
 														<span className="text-destructive ml-1">*</span>
@@ -199,11 +211,11 @@ export function GenericLogForm<T extends FieldValues>({
 													{renderField(fieldConfig, field, isReadOnly)}
 												</FormControl>
 												{fieldConfig.helpText && (
-													<FormDescription>
+													<FormDescription className="text-xs">
 														{fieldConfig.helpText}
 													</FormDescription>
 												)}
-												<FormMessage />
+												<FormMessage className="text-xs" />
 											</FormItem>
 										)}
 									/>
@@ -211,15 +223,16 @@ export function GenericLogForm<T extends FieldValues>({
 							))}
 						</div>
 
-						{/* Action Buttons */}
+						{/* Action Buttons — sticky on mobile for easy access */}
 						{!isReadOnly && (
-							<div className="flex items-center gap-3 pt-4 border-t">
+							<div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 pt-4 border-t sticky bottom-16 sm:static bg-background pb-2 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 lg:bottom-0">
 								{onSaveDraft && (
 									<Button
 										type="button"
 										variant="outline"
 										onClick={handleSaveDraft}
 										disabled={isSavingDraft}
+										className="h-11 sm:h-10"
 									>
 										{isSavingDraft ?
 											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -227,7 +240,11 @@ export function GenericLogForm<T extends FieldValues>({
 										Save Draft
 									</Button>
 								)}
-								<Button type="submit" disabled={isSubmitting}>
+								<Button
+									type="submit"
+									disabled={isSubmitting}
+									className="h-11 sm:h-10"
+								>
 									{isSubmitting ?
 										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
 									:	<Send className="mr-2 h-4 w-4" />}
@@ -260,6 +277,7 @@ function renderField(
 						config.placeholder ?? `Enter ${config.label.toLowerCase()}`
 					}
 					disabled={disabled || config.disabled}
+					className="h-11 sm:h-10"
 					{...fieldProps}
 				/>
 			);
@@ -270,6 +288,7 @@ function renderField(
 					type="number"
 					placeholder={config.placeholder ?? "0"}
 					disabled={disabled || config.disabled}
+					className="h-11 sm:h-10"
 					{...fieldProps}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
 						(field.onChange as (val: number) => void)(Number(e.target.value))
@@ -285,6 +304,7 @@ function renderField(
 					}
 					disabled={disabled || config.disabled}
 					rows={3}
+					className="min-h-20 text-sm"
 					{...fieldProps}
 				/>
 			);
@@ -305,7 +325,7 @@ function renderField(
 					value={field.value as string}
 					disabled={disabled || config.disabled}
 				>
-					<SelectTrigger>
+					<SelectTrigger className="h-11 sm:h-10">
 						<SelectValue
 							placeholder={
 								config.placeholder ?? `Select ${config.label.toLowerCase()}`
@@ -328,7 +348,7 @@ function renderField(
 					onValueChange={field.onChange as (val: string) => void}
 					value={field.value as string}
 					disabled={disabled || config.disabled}
-					className="flex flex-wrap gap-3"
+					className="flex flex-wrap gap-x-4 gap-y-2"
 				>
 					{config.options?.map((option) => (
 						<div key={option.value} className="flex items-center space-x-2">
@@ -384,6 +404,7 @@ function renderField(
 				<Input
 					placeholder={config.placeholder}
 					disabled={disabled || config.disabled}
+					className="h-11 sm:h-10"
 					{...fieldProps}
 				/>
 			);
@@ -405,12 +426,12 @@ function DatePickerField({ value, onChange, disabled }: DatePickerFieldProps) {
 				<Button
 					variant="outline"
 					className={cn(
-						"w-full justify-start text-left font-normal",
+						"w-full justify-start text-left font-normal h-11 sm:h-10",
 						!value && "text-muted-foreground",
 					)}
 					disabled={disabled}
 				>
-					<CalendarIcon className="mr-2 h-4 w-4" />
+					<CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
 					{value ? format(value, "PPP") : "Pick a date"}
 				</Button>
 			</PopoverTrigger>
