@@ -92,12 +92,16 @@ export function HodDashboardClient({ data }: { data: HodDashboardData }) {
 		:	0;
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-4 sm:space-y-6">
 			{/* ── Welcome Banner ── */}
-			<div className="relative overflow-hidden rounded-xl bg-linear-to-br from-hospital-primary via-blue-700 to-blue-800 p-6 text-white">
+			<div className="relative overflow-hidden rounded-xl bg-linear-to-br from-hospital-primary via-blue-700 to-blue-800 p-4 sm:p-6 text-white">
 				<div className="relative z-10">
-					<p className="text-blue-200 text-sm font-medium">Welcome,</p>
-					<h2 className="text-2xl font-bold mt-0.5">{data.hodName}</h2>
+					<p className="text-blue-200 text-xs sm:text-sm font-medium">
+						Welcome,
+					</p>
+					<h2 className="text-xl sm:text-2xl font-bold mt-0.5">
+						{data.hodName}
+					</h2>
 					<p className="text-blue-200 text-sm mt-1">
 						Head of Department · Emergency Medicine
 					</p>
@@ -128,7 +132,7 @@ export function HodDashboardClient({ data }: { data: HodDashboardData }) {
 			</div>
 
 			{/* ── Quick Stats ── */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
 				<QuickCard
 					label="Total Entries"
 					value={data.totalEntries}
@@ -166,7 +170,7 @@ export function HodDashboardClient({ data }: { data: HodDashboardData }) {
 				/>
 			</div>
 
-			<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
 				{/* ── Faculty Workload ── */}
 				<Card className="lg:col-span-2 border-0 shadow-sm">
 					<CardHeader className="pb-3">
@@ -473,15 +477,17 @@ function QuickCard({
 		<Card
 			className={`border-0 shadow-sm ${alert ? "ring-1 ring-amber-200" : ""}`}
 		>
-			<CardContent className="p-4 flex items-center gap-3">
+			<CardContent className="p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3">
 				<div
-					className={`h-10 w-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}
+					className={`h-9 w-9 sm:h-10 sm:w-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}
 				>
-					<Icon className={`h-5 w-5 ${color}`} />
+					<Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${color}`} />
 				</div>
-				<div>
-					<p className="text-xl font-bold leading-none">{value}</p>
-					<p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+				<div className="min-w-0">
+					<p className="text-lg sm:text-xl font-bold leading-none">{value}</p>
+					<p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 truncate">
+						{label}
+					</p>
 					{subText && (
 						<p className="text-[10px] text-emerald-600 mt-0.5">{subText}</p>
 					)}

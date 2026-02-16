@@ -2,7 +2,7 @@
  * @module Sidebar
  * @description Main navigation sidebar for the dashboard.
  * Role-aware: shows different menu items for Student, Faculty, and HOD.
- * Collapses to bottom tabs on mobile (handled by MobileNav).
+ * Renders as a drawer overlay on mobile and static panel on desktop.
  *
  * @see copilot-instructions.md — Section 6
  * @see roadmap.md — Section 11
@@ -37,7 +37,6 @@ import {
 	Truck,
 	Award,
 	FlaskConical,
-	ShieldAlert,
 	Users,
 	UserCog,
 	FileText,
@@ -49,6 +48,7 @@ import {
 	Siren,
 	ShieldCheck,
 	ClipboardCheck,
+	X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -617,9 +617,10 @@ const hodNavSections: NavSection[] = [
 
 interface SidebarProps {
 	className?: string;
+	onLinkClick?: () => void;
 }
 
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ className, onLinkClick }: SidebarProps) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { role } = useRole();
@@ -665,7 +666,6 @@ export function Sidebar({ className }: SidebarProps) {
 
 		if (!hrefQuery) return true;
 
-		// Check query params match
 		const params = new URLSearchParams(hrefQuery);
 		for (const [key, value] of params.entries()) {
 			if (searchParams.get(key) !== value) return false;
@@ -675,15 +675,15 @@ export function Sidebar({ className }: SidebarProps) {
 
 	return (
 		<TooltipProvider delayDuration={0}>
-			<aside
+			<div
 				className={cn(
-					"hidden lg:flex flex-col h-full min-h-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
-					isCollapsed ? "w-16" : "w-64",
+					"flex flex-col h-full min-h-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
+					isCollapsed ? "w-16" : "w-72 lg:w-64",
 					className,
 				)}
 			>
 				{/* Header */}
-				<div className="flex h-16 items-center justify-between border-b border-sidebar-border px-3">
+				<div className="flex h-16 items-center justify-between border-b border-sidebar-border px-3 shrink-0">
 					{isCollapsed ?
 						<Image
 							src="/AIIMS%20patna%20icon.jpeg"
@@ -701,14 +701,28 @@ export function Sidebar({ className }: SidebarProps) {
 							priority
 						/>
 					}
-					<button
-						onClick={() => setIsCollapsed(!isCollapsed)}
-						className="rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-					>
-						{isCollapsed ?
-							<ChevronRight className="h-4 w-4" />
-						:	<ChevronLeft className="h-4 w-4" />}
-					</button>
+					<div className="flex items-center gap-1">
+						{/* Close button visible on mobile only */}
+						{onLinkClick && (
+							<button
+								onClick={onLinkClick}
+								className="lg:hidden rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+								aria-label="Close menu"
+							>
+								<X className="h-5 w-5" />
+							</button>
+						)}
+						{/* Collapse toggle visible on desktop only */}
+						<button
+							onClick={() => setIsCollapsed(!isCollapsed)}
+							className="hidden lg:block rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+							aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+						>
+							{isCollapsed ?
+								<ChevronRight className="h-4 w-4" />
+							:	<ChevronLeft className="h-4 w-4" />}
+						</button>
+					</div>
 				</div>
 
 				{/* Navigation */}
@@ -734,6 +748,7 @@ export function Sidebar({ className }: SidebarProps) {
 											<Link
 												key={item.href}
 												href={item.href}
+												onClick={onLinkClick}
 												className={cn(
 													"flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
 													isActive ?
@@ -742,7 +757,7 @@ export function Sidebar({ className }: SidebarProps) {
 													isCollapsed && "justify-center px-0",
 												)}
 											>
-												<span className="relative">
+												<span className="relative shrink-0">
 													{item.icon}
 													{isCollapsed &&
 														typeof badgeCount === "number" &&
@@ -754,12 +769,14 @@ export function Sidebar({ className }: SidebarProps) {
 												</span>
 												{!isCollapsed && (
 													<>
-														<span className="flex-1">{item.title}</span>
+														<span className="flex-1 truncate">
+															{item.title}
+														</span>
 														{typeof badgeCount === "number" &&
 															badgeCount > 0 && (
 																<Badge
 																	variant="destructive"
-																	className="h-5 min-w-5 px-1 text-[10px] font-bold"
+																	className="h-5 min-w-5 px-1 text-[10px] font-bold shrink-0"
 																>
 																	{badgeCount}
 																</Badge>
@@ -790,13 +807,13 @@ export function Sidebar({ className }: SidebarProps) {
 
 				{/* Footer */}
 				{!isCollapsed && (
-					<div className="border-t border-gray-100 px-4 py-3">
+					<div className="border-t border-gray-100 px-4 py-3 shrink-0">
 						<p className="text-[9px] text-gray-400 text-center leading-tight">
 							{INSTITUTION_NAME}
 						</p>
 					</div>
 				)}
-			</aside>
+			</div>
 		</TooltipProvider>
 	);
 }

@@ -93,12 +93,16 @@ export function FacultyDashboardClient({
 	data: FacultyDashboardData;
 }) {
 	return (
-		<div className="space-y-6">
+		<div className="space-y-4 sm:space-y-6">
 			{/* ── Welcome Banner ── */}
-			<div className="relative overflow-hidden rounded-xl bg-linear-to-br from-hospital-secondary via-teal-600 to-teal-700 p-6 text-white">
+			<div className="relative overflow-hidden rounded-xl bg-linear-to-br from-hospital-secondary via-teal-600 to-teal-700 p-4 sm:p-6 text-white">
 				<div className="relative z-10">
-					<p className="text-teal-100 text-sm font-medium">Welcome back,</p>
-					<h2 className="text-2xl font-bold mt-0.5">{data.facultyName}</h2>
+					<p className="text-teal-100 text-xs sm:text-sm font-medium">
+						Welcome back,
+					</p>
+					<h2 className="text-xl sm:text-2xl font-bold mt-0.5">
+						{data.facultyName}
+					</h2>
 					<p className="text-teal-200 text-sm mt-1">
 						Faculty · Department of Emergency Medicine
 					</p>
@@ -134,7 +138,7 @@ export function FacultyDashboardClient({
 			</div>
 
 			{/* ── Quick Stats ── */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
 				<QuickCard
 					label="Assigned Students"
 					value={data.assignedStudents}
@@ -166,7 +170,7 @@ export function FacultyDashboardClient({
 				/>
 			</div>
 
-			<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
 				{/* ── Pending Reviews Queue ── */}
 				<Card className="lg:col-span-2 border-0 shadow-sm">
 					<CardHeader className="pb-3">
@@ -302,7 +306,7 @@ export function FacultyDashboardClient({
 					</Link>
 				</div>
 				{data.students.length > 0 ?
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
 						{data.students.map((s) => (
 							<Card
 								key={s.id}
@@ -461,15 +465,17 @@ function QuickCard({
 		<Card
 			className={`border-0 shadow-sm ${alert ? "ring-1 ring-amber-200" : ""}`}
 		>
-			<CardContent className="p-4 flex items-center gap-3">
+			<CardContent className="p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3">
 				<div
-					className={`h-10 w-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}
+					className={`h-9 w-9 sm:h-10 sm:w-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}
 				>
-					<Icon className={`h-5 w-5 ${color}`} />
+					<Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${color}`} />
 				</div>
-				<div>
-					<p className="text-xl font-bold leading-none">{value}</p>
-					<p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+				<div className="min-w-0">
+					<p className="text-lg sm:text-xl font-bold leading-none">{value}</p>
+					<p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 truncate">
+						{label}
+					</p>
 				</div>
 			</CardContent>
 		</Card>

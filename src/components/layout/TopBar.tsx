@@ -117,20 +117,20 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 		{
 			label: "Thesis Records",
 			count: pendingCounts?.thesisRecords ?? 0,
-			href: `${basePath}/rotation-postings`,
+			href: `${basePath}/thesis-review`,
 			icon: BookOpen,
 			color: "text-emerald-600 bg-emerald-50",
 		},
 	];
 
 	return (
-		<header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 px-4 lg:px-6">
+		<header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 px-3 sm:px-4 lg:px-6">
 			{/* Left: Mobile menu + Title */}
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-2 sm:gap-3">
 				<Button
 					variant="ghost"
 					size="icon"
-					className="lg:hidden"
+					className="lg:hidden h-9 w-9"
 					onClick={onMobileMenuToggle}
 				>
 					<Menu className="h-5 w-5" />
@@ -144,7 +144,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 			</div>
 
 			{/* Right: Role badge + Notifications + User */}
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-2 sm:gap-3">
 				{isLoaded && role && (
 					<Badge variant="secondary" className="hidden sm:flex text-xs">
 						{roleLabel}
@@ -208,11 +208,11 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 							</div>
 							<div className="border-t px-4 py-2">
 								<Link
-									href={`${basePath}/rotation-postings`}
+									href={`${basePath}/case-management`}
 									onClick={() => setNotifOpen(false)}
 									className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
 								>
-									View all reviews
+									View all modules
 									<ArrowRight className="h-3 w-3" />
 								</Link>
 							</div>
