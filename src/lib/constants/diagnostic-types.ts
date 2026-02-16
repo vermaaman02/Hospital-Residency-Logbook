@@ -99,10 +99,15 @@ export function diagnosticSlugToEnum(slug: string): string | undefined {
 	return undefined;
 }
 
+export type DiagnosticCategoryEnum =
+	| "ABG_ANALYSIS"
+	| "ECG_ANALYSIS"
+	| "OTHER_DIAGNOSTIC";
+
 /** Get category config by slug */
 export function getDiagnosticBySlug(slug: string):
 	| {
-			enumValue: string;
+			enumValue: DiagnosticCategoryEnum;
 			label: string;
 			skills: DiagnosticSkillConfig[];
 	  }
@@ -110,7 +115,7 @@ export function getDiagnosticBySlug(slug: string):
 	const enumValue = diagnosticSlugToEnum(slug);
 	if (!enumValue) return undefined;
 	return {
-		enumValue,
+		enumValue: enumValue as DiagnosticCategoryEnum,
 		label: DIAGNOSTIC_CATEGORY_LABELS[enumValue] ?? enumValue,
 		skills:
 			DIAGNOSTIC_SKILLS_BY_CATEGORY[

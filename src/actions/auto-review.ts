@@ -20,6 +20,7 @@ export type AutoReviewCategory =
 	| "seminarDiscussions"
 	| "journalClubs"
 	| "clinicalSkills"
+	| "diagnosticSkills"
 	| "caseManagement"
 	| "procedureLogs"
 	| "imagingLogs"
@@ -42,6 +43,7 @@ export interface AutoReviewSettings {
 	seminarDiscussions: boolean;
 	journalClubs: boolean;
 	clinicalSkills: boolean;
+	diagnosticSkills: boolean;
 	caseManagement: boolean;
 	procedureLogs: boolean;
 	imagingLogs: boolean;
@@ -77,6 +79,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		seminarDiscussions: map["seminarDiscussions"] ?? false,
 		journalClubs: map["journalClubs"] ?? false,
 		clinicalSkills: map["clinicalSkills"] ?? false,
+		diagnosticSkills: map["diagnosticSkills"] ?? false,
 		caseManagement: map["caseManagement"] ?? false,
 		procedureLogs: map["procedureLogs"] ?? false,
 		imagingLogs: map["imagingLogs"] ?? false,
@@ -145,6 +148,8 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/logbook-reviews");
 	revalidatePath("/dashboard/faculty/evaluation-graph");
 	revalidatePath("/dashboard/hod/evaluation-graph");
+	revalidatePath("/dashboard/faculty/diagnostics");
+	revalidatePath("/dashboard/hod/diagnostics");
 	return { success: true, category, enabled };
 }
 

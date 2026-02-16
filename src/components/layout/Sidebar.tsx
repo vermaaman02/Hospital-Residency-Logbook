@@ -319,9 +319,10 @@ const facultyNavSections: NavSection[] = [
 			},
 			{
 				title: "Diagnostics",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=diagnosticSkills",
+				href: "/dashboard/faculty/diagnostics",
 				icon: <Activity className="h-4 w-4" />,
 				roles: ["faculty"],
+				badgeKey: "diagnosticSkills",
 			},
 			{
 				title: "Imaging",
@@ -546,9 +547,10 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Diagnostics",
-				href: "/dashboard/faculty/reviews?category=clinical&tab=diagnosticSkills",
+				href: "/dashboard/hod/diagnostics",
 				icon: <Activity className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "diagnosticSkills",
 			},
 			{
 				title: "Imaging",

@@ -12,7 +12,6 @@ import {
 	getStudentsForEvaluationGraph,
 	getBatchesForEvaluationGraph,
 	getAllEvaluationGraphRecords,
-	isFacultyEvaluationEnabled,
 } from "@/actions/evaluation-graph";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { EvaluationGraphClient } from "../../faculty/evaluation-graph/EvaluationGraphClient";

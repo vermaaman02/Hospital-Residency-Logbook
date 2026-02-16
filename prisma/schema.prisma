@@ -541,6 +541,8 @@ model DiagnosticSkill {
   representativeDiagnosis String?
   confidenceLevel         ConfidenceLevel?
   totalTimesPerformed     Int                @default(0)
+  facultyId               String?
+  facultyRemark           String?
   status                  EntryStatus        @default(DRAFT)
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt

@@ -11,12 +11,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { getDiagnosticBySlug } from "@/lib/constants/diagnostic-types";
-import {
-	getMyDiagnosticSkillEntries,
-	submitDiagnosticSkillEntry,
-	deleteDiagnosticSkillEntry,
-} from "@/actions/diagnostic-skills";
-// import { DiagnosticSkillTable } from "@/components/tables/DiagnosticSkillTable";
+import { getMyDiagnosticSkillEntries } from "@/actions/diagnostic-skills";
+import { DiagnosticSkillTable } from "./DiagnosticSkillTable";
 
 interface DiagnosticCategoryPageProps {
 	params: Promise<{ category: string }>;
@@ -49,14 +45,12 @@ export default async function DiagnosticCategoryPage({
 				</div>
 			</div>
 
-			{/* <DiagnosticSkillTable
+			<DiagnosticSkillTable
 				entries={entries}
+				categoryEnum={categoryInfo.enumValue}
 				categoryLabel={categoryInfo.label}
-				categorySlug={slug}
-				totalSkills={categoryInfo.skills.length}
-				onSubmit={submitDiagnosticSkillEntry as never}
-				onDelete={deleteDiagnosticSkillEntry as never}
-			/> */}
+				skills={[...categoryInfo.skills]}
+			/>
 		</div>
 	);
 }
