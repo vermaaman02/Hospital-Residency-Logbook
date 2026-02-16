@@ -1,7 +1,7 @@
 /**
  * @module CaseManagementCategoryPage
- * @description List all case management entries for a specific category.
- * Shows entries in a table with sub-category, date, diagnosis, competency, tally.
+ * @description Student page for a specific case management category with inline editing table.
+ * Auto-initializes sub-category rows. Click row to edit inline.
  *
  * @see PG Logbook .md — "LOG OF CASE MANAGEMENT"
  */
@@ -9,11 +9,10 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { CaseManagementTable } from "@/components/tables/CaseManagementTable";
+import { CaseManagementCategoryClient } from "./CaseManagementCategoryClient";
 import {
 	getMyCaseManagementEntries,
-	submitCaseManagementEntry,
-	deleteCaseManagementEntry,
+	getAvailableCaseManagementFaculty,
 } from "@/actions/case-management";
 import { getCategoryBySlug } from "@/lib/constants/case-categories";
 import { Button } from "@/components/ui/button";
@@ -24,29 +23,31 @@ interface PageParams {
 	params: Promise<{ category: string }>;
 }
 
-async function CategoryEntries({
-	categorySlug,
+async function CategoryData({
 	categoryEnum,
 	categoryLabel,
 }: {
-	categorySlug: string;
 	categoryEnum: string;
 	categoryLabel: string;
 }) {
-	const entries = await getMyCaseManagementEntries(categoryEnum);
+	const [entries, facultyList] = await Promise.all([
+		getMyCaseManagementEntries(categoryEnum),
+		getAvailableCaseManagementFaculty(),
+	]);
 
 	return (
-		<CaseManagementTable
+		<CaseManagementCategoryClient
 			entries={JSON.parse(JSON.stringify(entries))}
-			categorySlug={categorySlug}
+			facultyList={JSON.parse(JSON.stringify(facultyList))}
+			category={categoryEnum}
 			categoryLabel={categoryLabel}
-			onSubmit={submitCaseManagementEntry}
-			onDelete={deleteCaseManagementEntry}
 		/>
 	);
 }
 
-export default async function CaseManagementCategoryPage({ params }: PageParams) {
+export default async function CaseManagementCategoryPage({
+	params,
+}: PageParams) {
 	const { category: categorySlug } = await params;
 	const cat = getCategoryBySlug(categorySlug);
 
@@ -64,7 +65,7 @@ export default async function CaseManagementCategoryPage({ params }: PageParams)
 				</Button>
 				<PageHeader
 					title={cat.label}
-					description={`${cat.subCategories.length} case types in this category`}
+					description={`${cat.subCategories.length} case types — click any row to edit inline`}
 				/>
 			</div>
 
@@ -75,11 +76,7 @@ export default async function CaseManagementCategoryPage({ params }: PageParams)
 					</div>
 				}
 			>
-				<CategoryEntries
-					categorySlug={categorySlug}
-					categoryEnum={cat.enumValue}
-					categoryLabel={cat.label}
-				/>
+				<CategoryData categoryEnum={cat.enumValue} categoryLabel={cat.label} />
 			</Suspense>
 		</div>
 	);

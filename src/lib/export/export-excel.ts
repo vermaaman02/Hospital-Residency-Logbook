@@ -254,6 +254,112 @@ function formatDateForFile(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// ======================== EVALUATION GRAPH TYPES ========================
+
+export interface EvaluationGraphExportRow {
+	semester: number;
+	knowledgeScore: number | null;
+	clinicalSkillScore: number | null;
+	proceduralSkillScore: number | null;
+	softSkillScore: number | null;
+	researchScore: number | null;
+	overallScore: number | null;
+	theoryMarks: string | null;
+	practicalMarks: string | null;
+	remarks: string | null;
+	status: string;
+}
+
+export interface EvaluationGraphReviewRow extends EvaluationGraphExportRow {
+	studentName: string;
+	batch: string;
+}
+
+// ======================== EVALUATION GRAPH — STUDENT EXPORT ========================
+
+/**
+ * Export a student's own evaluation graph records to Excel.
+ */
+export function exportEvaluationGraphToExcel(
+	rows: EvaluationGraphExportRow[],
+	studentName: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = rows.map((r) => ({
+		Semester: r.semester,
+		Knowledge: r.knowledgeScore ?? "",
+		"Clinical Skills": r.clinicalSkillScore ?? "",
+		"Procedural Skills": r.proceduralSkillScore ?? "",
+		"Soft Skills": r.softSkillScore ?? "",
+		Research: r.researchScore ?? "",
+		"Overall Score":
+			r.overallScore != null ? Number(r.overallScore.toFixed(1)) : "",
+		"Theory Marks": r.theoryMarks ?? "",
+		"Practical Marks": r.practicalMarks ?? "",
+		Remarks: stripMd(r.remarks),
+		Status: r.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ Semester: "", Knowledge: "No entries" }],
+	);
+	setColumnWidths(ws, [10, 12, 16, 18, 14, 12, 14, 14, 16, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Evaluation Graph");
+
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Evaluation_Graph_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== EVALUATION GRAPH — FACULTY / HOD EXPORT ========================
+
+/**
+ * Export evaluation graph records for review (faculty/HOD).
+ * Can export for a single student or all students.
+ */
+export function exportEvaluationGraphReviewToExcel(
+	rows: EvaluationGraphReviewRow[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = rows.map((r) => ({
+		"Student Name": r.studentName,
+		Batch: r.batch,
+		Semester: r.semester,
+		Knowledge: r.knowledgeScore ?? "",
+		"Clinical Skills": r.clinicalSkillScore ?? "",
+		"Procedural Skills": r.proceduralSkillScore ?? "",
+		"Soft Skills": r.softSkillScore ?? "",
+		Research: r.researchScore ?? "",
+		"Overall Score":
+			r.overallScore != null ? Number(r.overallScore.toFixed(1)) : "",
+		"Theory Marks": r.theoryMarks ?? "",
+		"Practical Marks": r.practicalMarks ?? "",
+		Remarks: stripMd(r.remarks),
+		Status: r.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Student Name": "", Semester: "No entries" }],
+	);
+	setColumnWidths(ws, [22, 16, 10, 12, 16, 18, 14, 12, 14, 14, 16, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Evaluation Graph Review");
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Evaluation_Graph_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
 // ======================== CASE PRESENTATION TYPES ========================
 
 export interface CasePresentationExportRow {
@@ -346,5 +452,554 @@ export function exportCasePresentationReviewToExcel(
 			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		}),
 		`Case_Presentations_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== JOURNAL CLUB TYPES ========================
+
+export interface JournalClubExportRow {
+	slNo: number;
+	date: string | null;
+	journalArticle: string | null;
+	typeOfStudy: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+export interface JournalClubReviewRow extends JournalClubExportRow {
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+// ======================== JOURNAL CLUB — STUDENT EXPORT ========================
+
+export function exportJournalClubsToExcel(
+	entries: JournalClubExportRow[],
+	studentName: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Date: e.date ?? "",
+		"Journal Article": stripMd(e.journalArticle),
+		"Type of Study": stripMd(e.typeOfStudy),
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }],
+	);
+	setColumnWidths(ws, [8, 14, 40, 30, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Journal Clubs");
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(blob, `Journal_Clubs_${safeName}_${formatDateForFile()}.xlsx`);
+}
+
+// ======================== JOURNAL CLUB — FACULTY/HOD EXPORT ========================
+
+export function exportJournalClubReviewToExcel(
+	entries: JournalClubReviewRow[],
+	reviewerRole: "faculty" | "hod",
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Date: e.date ?? "",
+		"Journal Article": stripMd(e.journalArticle),
+		"Type of Study": stripMd(e.typeOfStudy),
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 14, 40, 30, 28, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Journal Clubs Review");
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Journal_Clubs_Review_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CLINICAL SKILLS — STUDENT EXPORT ========================
+
+interface ClinicalSkillExportRow {
+	slNo: number;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+}
+
+export function exportClinicalSkillsToExcel(
+	entries: ClinicalSkillExportRow[],
+	studentName: string,
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Clinical Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ?
+			data
+		:	[{ "Sl. No.": "", "Clinical Skill": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 30, 40, 20, 18, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Skills`);
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Clinical_Skills_${label}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CLINICAL SKILLS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface ClinicalSkillReviewRow {
+	slNo: number;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportClinicalSkillReviewToExcel(
+	entries: ClinicalSkillReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		"Clinical Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 30, 40, 20, 18, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Skills Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Clinical_Skills_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — STUDENT EXPORT ========================
+
+interface CaseManagementExportRow {
+	slNo: number;
+	caseSubCategory: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	totalCaseTally: number;
+	status: string;
+}
+
+export function exportCaseManagementToExcel(
+	entries: CaseManagementExportRow[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Case Type": e.caseSubCategory,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Competency: e.competencyLevel ?? "",
+		Tally: e.totalCaseTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Case Type": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 30, 12, 20, 6, 8, 14, 35, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, categoryLabel.slice(0, 31));
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Case_Management_${safeCategory}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== CASE MANAGEMENT — FACULTY/HOD REVIEW EXPORT ========================
+
+interface CaseManagementReviewRow {
+	slNo: number;
+	caseSubCategory: string;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	competencyLevel: string | null;
+	totalCaseTally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportCaseManagementReviewToExcel(
+	entries: CaseManagementReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Category: e.categoryLabel,
+		"Case Type": e.caseSubCategory,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Competency: e.competencyLevel ?? "",
+		Tally: e.totalCaseTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 18, 28, 12, 18, 6, 8, 14, 30, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Case_Management_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — STUDENT EXPORT ========================
+
+interface ProcedureLogExportRow {
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+}
+
+export function exportProcedureLogToExcel(
+	entries: ProcedureLogExportRow[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Procedure: e.procedureDescription ?? "",
+		Location: e.performedAtLocation ?? "",
+		"Skill Level": e.skillLevel ?? "",
+		Tally: e.totalProcedureTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }],
+	);
+	setColumnWidths(ws, [8, 12, 20, 6, 8, 14, 30, 30, 16, 12, 8, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, categoryLabel.slice(0, 31));
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeCategory = categoryLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Procedure_Log_${safeCategory}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== PROCEDURE LOGS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface ProcedureLogReviewRow {
+	slNo: number;
+	categoryLabel: string;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportProcedureLogReviewToExcel(
+	entries: ProcedureLogReviewRow[],
+	reviewerRole: "faculty" | "hod",
+	label: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Category: e.categoryLabel,
+		Date: e.date ?? "",
+		"Patient Name": e.patientName ?? "",
+		Age: e.patientAge ?? "",
+		Sex: e.patientSex ?? "",
+		UHID: e.uhid ?? "",
+		Diagnosis: e.completeDiagnosis ?? "",
+		Procedure: e.procedureDescription ?? "",
+		Location: e.performedAtLocation ?? "",
+		"Skill Level": e.skillLevel ?? "",
+		Tally: e.totalProcedureTally,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(
+		ws,
+		[8, 22, 16, 10, 20, 12, 18, 6, 8, 14, 28, 28, 14, 12, 8, 12],
+	);
+	XLSX.utils.book_append_sheet(wb, ws, `${label} Review`);
+
+	const roleLabel = reviewerRole === "hod" ? "HOD" : "Faculty";
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Procedure_Log_Review_${label}_${roleLabel}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== SIMPLE LOG EXPORT (Disaster Drills, QI, Logbook Reviews) ========================
+
+/**
+ * Generic Excel export for simple log tables without complex patient/procedure data.
+ * @param rows - Array of objects where keys become column headers
+ * @param studentName - Student name for filename
+ * @param sheetLabel - Sheet name and filename label
+ */
+// ======================== DIAGNOSTIC SKILLS — STUDENT EXPORT ========================
+
+interface DiagnosticSkillExportRow {
+	slNo: number;
+	diagnosticCategory: string;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	status: string;
+}
+
+export function exportDiagnosticSkillsToExcel(
+	entries: DiagnosticSkillExportRow[],
+	studentName: string,
+	categoryLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		Category: e.diagnosticCategory,
+		"Diagnostic Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ?
+			data
+		:	[{ "Sl. No.": "", "Diagnostic Skill": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 20, 30, 40, 20, 18, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, `${categoryLabel} Skills`);
+
+	const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const blob = new Blob([wbOut], {
+		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	});
+	const safeName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		blob,
+		`Diagnostic_Skills_${categoryLabel.replace(/\s+/g, "_")}_${safeName}_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== DIAGNOSTIC SKILLS — FACULTY/HOD REVIEW EXPORT ========================
+
+interface DiagnosticSkillReviewRow {
+	slNo: number;
+	diagnosticCategory: string;
+	skillName: string;
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	facultyRemark: string | null;
+	status: string;
+	studentName: string;
+	batch: string;
+	semester: number;
+}
+
+export function exportDiagnosticSkillsReviewToExcel(
+	entries: DiagnosticSkillReviewRow[],
+) {
+	const wb = XLSX.utils.book_new();
+
+	const data = entries.map((e) => ({
+		"Sl. No.": e.slNo,
+		"Student Name": e.studentName,
+		Batch: e.batch,
+		Semester: e.semester,
+		Category: e.diagnosticCategory,
+		"Diagnostic Skill": e.skillName,
+		"Representative Diagnosis": e.representativeDiagnosis ?? "",
+		"Level of Confidence": e.confidenceLevel ?? "",
+		"Total Times Performed": e.totalTimesPerformed,
+		"Faculty Remark": stripMd(e.facultyRemark),
+		Status: e.status,
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		data.length > 0 ? data : [{ "Sl. No.": "", "Student Name": "No entries" }],
+	);
+	setColumnWidths(ws, [8, 22, 16, 10, 20, 30, 40, 20, 18, 30, 12]);
+	XLSX.utils.book_append_sheet(wb, ws, "Diagnostic Skills Review");
+
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Diagnostic_Skills_Review_${formatDateForFile()}.xlsx`,
+	);
+}
+
+// ======================== SIMPLE LOG — GENERIC EXPORT ========================
+
+export function exportSimpleLogToExcel(
+	rows: Record<string, unknown>[],
+	studentName: string,
+	sheetLabel: string,
+) {
+	const wb = XLSX.utils.book_new();
+
+	const ws = XLSX.utils.json_to_sheet(
+		rows.length > 0 ? rows : [{ "Sl. No.": "", Status: "No entries" }],
+	);
+
+	// Auto-fit columns based on header count
+	const columnCount = rows.length > 0 ? Object.keys(rows[0]).length : 2;
+	const defaultWidths = Array(columnCount).fill(16);
+	setColumnWidths(ws, defaultWidths);
+
+	XLSX.utils.book_append_sheet(wb, ws, sheetLabel.slice(0, 30));
+
+	const safeStudentName = studentName.replace(/[^a-zA-Z0-9]/g, "_");
+	const safeLabel = sheetLabel.replace(/[^a-zA-Z0-9]/g, "_");
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`${safeLabel}_${safeStudentName}_${formatDateForFile()}.xlsx`,
 	);
 }

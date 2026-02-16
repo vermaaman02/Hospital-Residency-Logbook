@@ -17,6 +17,22 @@ export interface PendingCounts {
 	rotationPostings: number;
 	thesisRecords: number;
 	casePresentations: number;
+	journalClubs: number;
+	clinicalSkills: number;
+	diagnosticSkills: number;
+	caseManagement: number;
+	procedureLogs: number;
+	imagingLogs: number;
+	transportLogs: number;
+	consentLogs: number;
+	badNewsLogs: number;
+	lifeSupportCourses: number;
+	conferences: number;
+	researchActivities: number;
+	disasterDrills: number;
+	qualityImprovement: number;
+	logbookReviews: number;
+	evaluationGraph: number;
 	total: number;
 }
 
@@ -31,6 +47,22 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 			rotationPostings: 0,
 			thesisRecords: 0,
 			casePresentations: 0,
+			journalClubs: 0,
+			clinicalSkills: 0,
+			diagnosticSkills: 0,
+			caseManagement: 0,
+			procedureLogs: 0,
+			imagingLogs: 0,
+			transportLogs: 0,
+			consentLogs: 0,
+			badNewsLogs: 0,
+			lifeSupportCourses: 0,
+			conferences: 0,
+			researchActivities: 0,
+			disasterDrills: 0,
+			qualityImprovement: 0,
+			logbookReviews: 0,
+			evaluationGraph: 0,
 			total: 0,
 		};
 
@@ -47,6 +79,22 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 				rotationPostings: 0,
 				thesisRecords: 0,
 				casePresentations: 0,
+				journalClubs: 0,
+				clinicalSkills: 0,
+				diagnosticSkills: 0,
+				caseManagement: 0,
+				procedureLogs: 0,
+				imagingLogs: 0,
+				transportLogs: 0,
+				consentLogs: 0,
+				badNewsLogs: 0,
+				lifeSupportCourses: 0,
+				conferences: 0,
+				researchActivities: 0,
+				disasterDrills: 0,
+				qualityImprovement: 0,
+				logbookReviews: 0,
+				evaluationGraph: 0,
 				total: 0,
 			};
 
@@ -60,23 +108,136 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const studentFilter =
 		studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
-	const [rotationPostings, thesisRecords, casePresentations] =
-		await Promise.all([
-			prisma.rotationPosting.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-			prisma.thesis.count({
-				where: {
-					...studentFilter,
-					status: "SUBMITTED" as never,
-				},
-			}),
-			prisma.casePresentation.count({
-				where: { ...studentFilter, status: "SUBMITTED" as never },
-			}),
-		]);
+	const [
+		rotationPostings,
+		thesisRecords,
+		casePresentations,
+		journalClubs,
+		clinicalSkillsAdult,
+		clinicalSkillsPediatric,
+		diagnosticSkills,
+		caseManagement,
+		procedureLogs,
+		imagingLogs,
+		transportLogs,
+		consentLogs,
+		badNewsLogs,
+		lifeSupportCourses,
+		conferences,
+		researchActivities,
+		disasterDrills,
+		qualityImprovement,
+		logbookReviews,
+		evaluationGraph,
+	] = await Promise.all([
+		prisma.rotationPosting.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.thesis.count({
+			where: {
+				...studentFilter,
+				status: "SUBMITTED" as never,
+			},
+		}),
+		prisma.casePresentation.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.journalClub.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.clinicalSkillAdult.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.clinicalSkillPediatric.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.diagnosticSkill.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.caseManagementLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.procedureLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.imagingLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.transportLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.consentLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.badNewsLog.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.courseAttended.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.conferenceParticipation.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.researchActivity.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.disasterDrill.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.qualityImprovement.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.logbookFacultyReview.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+		prisma.trainingMentoringRecord.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
+	]);
 
-	const total = rotationPostings + thesisRecords + casePresentations;
+	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
 
-	return { rotationPostings, thesisRecords, casePresentations, total };
+	const total =
+		rotationPostings +
+		thesisRecords +
+		casePresentations +
+		journalClubs +
+		clinicalSkills +
+		diagnosticSkills +
+		caseManagement +
+		procedureLogs +
+		imagingLogs +
+		transportLogs +
+		consentLogs +
+		badNewsLogs +
+		lifeSupportCourses +
+		conferences +
+		researchActivities +
+		disasterDrills +
+		qualityImprovement +
+		logbookReviews +
+		evaluationGraph;
+
+	return {
+		rotationPostings,
+		thesisRecords,
+		casePresentations,
+		journalClubs,
+		clinicalSkills,
+		diagnosticSkills,
+		caseManagement,
+		procedureLogs,
+		imagingLogs,
+		transportLogs,
+		consentLogs,
+		badNewsLogs,
+		lifeSupportCourses,
+		conferences,
+		researchActivities,
+		disasterDrills,
+		qualityImprovement,
+		logbookReviews,
+		evaluationGraph,
+		total,
+	};
 }

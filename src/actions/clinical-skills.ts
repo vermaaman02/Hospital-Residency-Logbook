@@ -2,6 +2,8 @@
  * @module Clinical Skills Actions
  * @description Server actions for clinical skills (Adult & Pediatric).
  * 10 fixed skills per type. Auto-initializes on first access.
+ * Supports inline editing, faculty sign-off, bulk operations, auto-review,
+ * and student detail views.
  *
  * @see PG Logbook .md — "LOG OF CLINICAL SKILL TRAINING"
  * @see prisma/schema.prisma — ClinicalSkillAdult, ClinicalSkillPediatric
@@ -12,18 +14,34 @@
 import { requireAuth, requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-	clinicalSkillSchema,
-	type ClinicalSkillInput,
-} from "@/lib/validators/clinical-skills";
-import {
 	CLINICAL_SKILLS_ADULT,
 	CLINICAL_SKILLS_PEDIATRIC,
 } from "@/lib/constants/clinical-skills";
 import { revalidatePath } from "next/cache";
+import { isAutoReviewEnabled } from "./auto-review";
 
-const REVALIDATE_PATH = "/dashboard/student/clinical-skills";
+// ======================== PATHS ========================
 
-// ─── Helpers ────────────────────────────────────────────────
+const STUDENT_PATH = "/dashboard/student/clinical-skills";
+const FACULTY_PATH = "/dashboard/faculty/clinical-skills";
+const HOD_PATH = "/dashboard/hod/clinical-skills";
+
+function revalidateAll() {
+	revalidatePath(STUDENT_PATH);
+	revalidatePath(FACULTY_PATH);
+	revalidatePath(HOD_PATH);
+}
+
+// ======================== TYPES ========================
+
+interface ClinicalSkillData {
+	representativeDiagnosis: string | null;
+	confidenceLevel: string | null;
+	totalTimesPerformed: number;
+	facultyId: string | null;
+}
+
+// ======================== HELPERS ========================
 
 function getModel(type: "adult" | "pediatric") {
 	return type === "adult" ?
@@ -35,18 +53,24 @@ function getSkillList(type: "adult" | "pediatric") {
 	return type === "adult" ? CLINICAL_SKILLS_ADULT : CLINICAL_SKILLS_PEDIATRIC;
 }
 
-// ─── Initialize ─────────────────────────────────────────────
+async function resolveUser(clerkId: string) {
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found in database");
+	return user;
+}
+
+// ======================== STUDENT ACTIONS ========================
 
 /**
  * Auto-initialize all 10 skills for a student if none exist yet.
- * Called on first page load.
  */
 export async function initializeClinicalSkills(type: "adult" | "pediatric") {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
 	const existing = await (model as typeof prisma.clinicalSkillAdult).findMany({
-		where: { userId },
+		where: { userId: user.id },
 		select: { id: true },
 	});
 
@@ -57,7 +81,7 @@ export async function initializeClinicalSkills(type: "adult" | "pediatric") {
 		skills.map((skill) =>
 			(model as typeof prisma.clinicalSkillAdult).create({
 				data: {
-					userId,
+					userId: user.id,
 					slNo: skill.slNo,
 					skillName: skill.name,
 					totalTimesPerformed: 0,
@@ -67,45 +91,55 @@ export async function initializeClinicalSkills(type: "adult" | "pediatric") {
 		),
 	);
 
-	revalidatePath(REVALIDATE_PATH);
+	revalidateAll();
 	return { initialized: true };
 }
-
-// ─── Read ───────────────────────────────────────────────────
 
 /**
  * Get all clinical skills entries for the current student.
  */
 export async function getMyClinicalSkills(type: "adult" | "pediatric") {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
 	return (model as typeof prisma.clinicalSkillAdult).findMany({
-		where: { userId },
+		where: { userId: user.id },
 		orderBy: { slNo: "asc" },
 	});
 }
 
-// ─── Update ─────────────────────────────────────────────────
+/**
+ * Get available faculty for the observing faculty dropdown.
+ */
+export async function getAvailableClinicalSkillFaculty() {
+	await requireAuth();
+	return prisma.user.findMany({
+		where: {
+			role: { in: ["FACULTY" as never, "HOD" as never] },
+			status: "ACTIVE" as never,
+		},
+		select: { id: true, firstName: true, lastName: true },
+		orderBy: { firstName: "asc" },
+	});
+}
 
 /**
- * Update a clinical skill entry (representative diagnosis, confidence, tally).
+ * Update a clinical skill entry (inline save).
  */
 export async function updateClinicalSkill(
 	type: "adult" | "pediatric",
 	id: string,
-	data: ClinicalSkillInput,
+	data: ClinicalSkillData,
 ) {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 	const model = getModel(type);
-	const validated = clinicalSkillSchema.parse(data);
 
 	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique(
-		{
-			where: { id },
-		},
+		{ where: { id } },
 	);
-	if (!existing || existing.userId !== userId) {
+	if (!existing || existing.userId !== user.id) {
 		throw new Error("Entry not found or unauthorized");
 	}
 	if (existing.status === "SIGNED") {
@@ -115,51 +149,124 @@ export async function updateClinicalSkill(
 	const entry = await (model as typeof prisma.clinicalSkillAdult).update({
 		where: { id },
 		data: {
-			representativeDiagnosis: validated.representativeDiagnosis,
-			confidenceLevel: validated.confidenceLevel,
-			totalTimesPerformed: validated.totalTimesPerformed,
-			status: "DRAFT",
+			representativeDiagnosis: data.representativeDiagnosis,
+			confidenceLevel: data.confidenceLevel as never,
+			totalTimesPerformed: data.totalTimesPerformed,
+			facultyId: data.facultyId,
+			status: existing.status === "NEEDS_REVISION" ? "DRAFT" : existing.status,
 		},
 	});
 
-	revalidatePath(REVALIDATE_PATH);
+	revalidateAll();
 	return { success: true, data: entry };
 }
 
-// ─── Submit ─────────────────────────────────────────────────
-
 /**
  * Submit a clinical skill entry for faculty review.
+ * If auto-review is enabled, automatically signs it.
  */
 export async function submitClinicalSkill(
 	type: "adult" | "pediatric",
 	id: string,
 ) {
-	const userId = await requireAuth();
+	const clerkId = await requireAuth();
+	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
 	const existing = await (model as typeof prisma.clinicalSkillAdult).findUnique(
-		{
-			where: { id },
-		},
+		{ where: { id } },
 	);
-	if (!existing || existing.userId !== userId) {
+	if (!existing || existing.userId !== user.id) {
 		throw new Error("Entry not found or unauthorized");
 	}
+	if (existing.status === "SIGNED") {
+		throw new Error("Entry is already signed");
+	}
 
-	await (model as typeof prisma.clinicalSkillAdult).update({
-		where: { id },
-		data: { status: "SUBMITTED" },
-	});
+	const autoReview = await isAutoReviewEnabled("clinicalSkills");
+	const entityType =
+		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
 
-	revalidatePath(REVALIDATE_PATH);
+	if (autoReview) {
+		await prisma.$transaction([
+			(model as typeof prisma.clinicalSkillAdult).update({
+				where: { id },
+				data: { status: "SIGNED" },
+			}),
+			prisma.digitalSignature.create({
+				data: {
+					signedById: "auto-review",
+					entityType,
+					entityId: id,
+					remark: "Auto-approved",
+				},
+			}),
+		]);
+	} else {
+		await (model as typeof prisma.clinicalSkillAdult).update({
+			where: { id },
+			data: { status: "SUBMITTED" },
+		});
+	}
+
+	revalidateAll();
 	return { success: true };
 }
 
-// ─── Faculty Sign / Reject ──────────────────────────────────
+// ======================== FACULTY / HOD ACTIONS ========================
 
 /**
- * Faculty: Sign a clinical skill entry.
+ * Faculty/HOD: Get all clinical skill submissions for review.
+ */
+export async function getClinicalSkillsForReview(type: "adult" | "pediatric") {
+	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) return [];
+
+	let studentIds: string[] = [];
+
+	if (role === "faculty") {
+		const batchAssignments = await prisma.facultyBatchAssignment.findMany({
+			where: { facultyId: user.id },
+			select: { batchId: true },
+		});
+		const batchIds = batchAssignments.map((b) => b.batchId);
+		if (batchIds.length === 0) return [];
+
+		const students = await prisma.user.findMany({
+			where: { batchId: { in: batchIds }, role: "STUDENT" as never },
+			select: { id: true },
+		});
+		studentIds = students.map((s) => s.id);
+		if (studentIds.length === 0) return [];
+	}
+
+	const where =
+		studentIds.length > 0 ?
+			{ userId: { in: studentIds }, status: { not: "DRAFT" as never } }
+		:	{ status: { not: "DRAFT" as never } };
+	const model = getModel(type);
+
+	return (model as typeof prisma.clinicalSkillAdult).findMany({
+		where,
+		orderBy: { createdAt: "desc" },
+		include: {
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					email: true,
+					currentSemester: true,
+					batchRelation: { select: { name: true } },
+				},
+			},
+		},
+	});
+}
+
+/**
+ * Faculty/HOD: Sign (approve) a clinical skill entry.
  */
 export async function signClinicalSkill(
 	type: "adult" | "pediatric",
@@ -167,6 +274,7 @@ export async function signClinicalSkill(
 	remark?: string,
 ) {
 	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 	const model = getModel(type);
 
 	const entry = await (model as typeof prisma.clinicalSkillAdult).findUnique({
@@ -183,11 +291,14 @@ export async function signClinicalSkill(
 	await prisma.$transaction([
 		(model as typeof prisma.clinicalSkillAdult).update({
 			where: { id },
-			data: { status: "SIGNED" },
+			data: {
+				status: "SIGNED",
+				facultyRemark: remark || entry.facultyRemark,
+			},
 		}),
 		prisma.digitalSignature.create({
 			data: {
-				signedById: userId,
+				signedById: user.id,
 				entityType,
 				entityId: id,
 				remark,
@@ -195,18 +306,17 @@ export async function signClinicalSkill(
 		}),
 	]);
 
-	revalidatePath(REVALIDATE_PATH);
-	revalidatePath("/dashboard/faculty/reviews");
+	revalidateAll();
 	return { success: true };
 }
 
 /**
- * Faculty: Reject a clinical skill entry with remark.
+ * Faculty/HOD: Reject a clinical skill entry with remark.
  */
 export async function rejectClinicalSkill(
 	type: "adult" | "pediatric",
 	id: string,
-	_remark: string,
+	remark: string,
 ) {
 	await requireRole(["faculty", "hod"]);
 	const model = getModel(type);
@@ -218,10 +328,67 @@ export async function rejectClinicalSkill(
 
 	await (model as typeof prisma.clinicalSkillAdult).update({
 		where: { id },
-		data: { status: "NEEDS_REVISION" },
+		data: {
+			status: "NEEDS_REVISION",
+			facultyRemark: remark,
+		},
 	});
 
-	revalidatePath(REVALIDATE_PATH);
-	revalidatePath("/dashboard/faculty/reviews");
+	revalidateAll();
 	return { success: true };
+}
+
+/**
+ * Faculty/HOD: Bulk sign multiple clinical skill entries.
+ */
+export async function bulkSignClinicalSkills(
+	type: "adult" | "pediatric",
+	ids: string[],
+) {
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await resolveUser(userId);
+	const model = getModel(type);
+	const entityType =
+		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
+
+	const entries = await (model as typeof prisma.clinicalSkillAdult).findMany({
+		where: { id: { in: ids }, status: "SUBMITTED" as never },
+	});
+
+	if (entries.length === 0) throw new Error("No submittable entries found");
+
+	await prisma.$transaction([
+		(model as typeof prisma.clinicalSkillAdult).updateMany({
+			where: { id: { in: entries.map((e) => e.id) } },
+			data: { status: "SIGNED" },
+		}),
+		...entries.map((entry) =>
+			prisma.digitalSignature.create({
+				data: {
+					signedById: user.id,
+					entityType,
+					entityId: entry.id,
+				},
+			}),
+		),
+	]);
+
+	revalidateAll();
+	return { success: true, signedCount: entries.length };
+}
+
+/**
+ * Faculty/HOD: Get a specific student's clinical skill entries.
+ */
+export async function getStudentClinicalSkills(
+	studentId: string,
+	type: "adult" | "pediatric",
+) {
+	await requireRole(["faculty", "hod"]);
+	const model = getModel(type);
+
+	return (model as typeof prisma.clinicalSkillAdult).findMany({
+		where: { userId: studentId },
+		orderBy: { slNo: "asc" },
+	});
 }

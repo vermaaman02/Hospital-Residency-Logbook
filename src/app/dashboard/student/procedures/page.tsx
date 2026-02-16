@@ -1,7 +1,7 @@
 /**
  * @module ProcedureLogsLandingPage
  * @description Student landing page for procedure logs. Shows all 49 categories
- * as cards with entry counts, progress bars, and completion stats.
+ * as cards with entry counts, progress bars, review status indicators.
  *
  * @see PG Logbook .md — "LOG OF PROCEDURES"
  * @see roadmap.md — Section 6E
@@ -16,7 +16,13 @@ import {
 } from "@/lib/constants/procedure-categories";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Syringe, ArrowRight } from "lucide-react";
+import {
+	Loader2,
+	Syringe,
+	ArrowRight,
+	CheckCircle2,
+	AlertTriangle,
+} from "lucide-react";
 import Link from "next/link";
 
 async function ProcedureCards() {
@@ -26,10 +32,13 @@ async function ProcedureCards() {
 		<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 			{PROCEDURE_CATEGORIES.map((cat) => {
 				const slug = procedureEnumToSlug(cat.enumValue);
-				const total = summary.totalByCategory[cat.enumValue] ?? 0;
+				const filled = summary.totalByCategory[cat.enumValue] ?? 0;
 				const signed = summary.signedByCategory[cat.enumValue] ?? 0;
+				const submitted = summary.submittedByCategory[cat.enumValue] ?? 0;
+				const needsRevision =
+					summary.needsRevisionByCategory[cat.enumValue] ?? 0;
 				const progress =
-					cat.maxEntries > 0 ? Math.round((total / cat.maxEntries) * 100) : 0;
+					cat.maxEntries > 0 ? Math.round((filled / cat.maxEntries) * 100) : 0;
 
 				return (
 					<Link
@@ -48,7 +57,7 @@ async function ProcedureCards() {
 							<CardContent>
 								<div className="flex items-center gap-2 mb-2">
 									<Syringe className="h-4 w-4 text-muted-foreground" />
-									<span className="text-2xl font-bold">{total}</span>
+									<span className="text-2xl font-bold">{filled}</span>
 									<span className="text-sm text-muted-foreground">
 										/ {cat.maxEntries}
 									</span>
@@ -57,24 +66,39 @@ async function ProcedureCards() {
 									<span>
 										{cat.isCpr ? "S / TM / TL" : "S / O / A / PS / PI"}
 									</span>
-									{total > 0 && (
-										<Badge variant="outline" className="text-xs">
+									{signed > 0 && (
+										<Badge variant="outline" className="text-xs gap-1">
+											<CheckCircle2 className="h-3 w-3 text-green-600" />
 											{signed} signed
 										</Badge>
 									)}
 								</div>
-								<div className="w-full bg-muted rounded-full h-1.5 mt-2">
-									<div
-										className={`rounded-full h-1.5 transition-all ${
-											progress >= 100 ?
-												"bg-hospital-success"
-											:	"bg-hospital-primary"
-										}`}
-										style={{
-											width: `${Math.min(progress, 100)}%`,
-										}}
-									/>
-								</div>
+								{needsRevision > 0 && (
+									<div className="flex items-center gap-1 mt-1.5 text-xs text-orange-600">
+										<AlertTriangle className="h-3 w-3" />
+										{needsRevision} need
+										{needsRevision === 1 ? "s" : ""} revision
+									</div>
+								)}
+								{submitted > 0 && signed < submitted && (
+									<div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
+										{submitted - signed} pending review
+									</div>
+								)}
+								{filled > 0 && (
+									<div className="w-full bg-muted rounded-full h-1.5 mt-2">
+										<div
+											className={`rounded-full h-1.5 transition-all ${
+												progress >= 100 ?
+													"bg-hospital-success"
+												:	"bg-hospital-primary"
+											}`}
+											style={{
+												width: `${Math.min(progress, 100)}%`,
+											}}
+										/>
+									</div>
+								)}
 							</CardContent>
 						</Card>
 					</Link>

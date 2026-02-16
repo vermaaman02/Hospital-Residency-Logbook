@@ -1,0 +1,921 @@
+/**
+ * @module PatientLogTable
+ * @description Reusable inline-editing table for patient-based log entries.
+ * Used by Imaging (5 categories), Transport, Consent, and Bad News modules.
+ * Modeled identically after ProcedureLogTable with all the same features:
+ * inline editing, separate patient fields, faculty selector, tally, pagination,
+ * search/filter, markdown editor, status badges, export support.
+ *
+ * @see PG Logbook .md — Imaging, Transport, Consent, Bad News sections
+ */
+
+"use client";
+
+import { useState, useTransition, useCallback, useMemo } from "react";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@/components/ui/command";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import {
+	Loader2,
+	Send,
+	Check,
+	X,
+	ChevronsUpDown,
+	Save,
+	AlertTriangle,
+	Plus,
+	Trash2,
+	ChevronLeft,
+	ChevronRight,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import {
+	MarkdownEditor,
+	renderMarkdown,
+} from "@/components/shared/MarkdownEditor";
+import type { EntryStatus } from "@/types";
+
+// ======================== TYPES ========================
+
+export interface PatientLogEntry {
+	id: string;
+	slNo: number;
+	date: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
+	completeDiagnosis: string | null;
+	procedureDescription: string | null;
+	performedAtLocation: string | null;
+	skillLevel: string | null;
+	totalProcedureTally: number;
+	facultyId: string | null;
+	facultyRemark: string | null;
+	status: string;
+}
+
+export interface FacultyOption {
+	id: string;
+	firstName: string;
+	lastName: string;
+}
+
+interface PatientLogTableProps {
+	entries: PatientLogEntry[];
+	facultyList: FacultyOption[];
+	categoryLabel: string;
+	maxEntries: number;
+	skillLevelOptions: { value: string; label: string }[];
+	skillLevelLabels: Record<string, string>;
+	onAddRow: () => Promise<unknown>;
+	onDeleteEntry: (id: string) => Promise<unknown>;
+	onUpdateEntry: (
+		id: string,
+		data: {
+			date?: string | null;
+			patientName?: string | null;
+			patientAge?: number | null;
+			patientSex?: string | null;
+			uhid?: string | null;
+			completeDiagnosis?: string | null;
+			procedureDescription?: string | null;
+			performedAtLocation?: string | null;
+			skillLevel?: string | null;
+			totalProcedureTally?: number;
+			facultyId?: string | null;
+		},
+	) => Promise<unknown>;
+	onSubmitEntry: (id: string) => Promise<unknown>;
+}
+
+interface InlineForm {
+	date: string;
+	patientName: string;
+	patientAge: string;
+	patientSex: string;
+	uhid: string;
+	completeDiagnosis: string;
+	procedureDescription: string;
+	performedAtLocation: string;
+	skillLevel: string;
+	totalProcedureTally: number;
+	facultyId: string;
+}
+
+const emptyForm: InlineForm = {
+	date: "",
+	patientName: "",
+	patientAge: "",
+	patientSex: "",
+	uhid: "",
+	completeDiagnosis: "",
+	procedureDescription: "",
+	performedAtLocation: "",
+	skillLevel: "",
+	totalProcedureTally: 0,
+	facultyId: "",
+};
+
+const SEX_OPTIONS = [
+	{ value: "Male", label: "Male" },
+	{ value: "Female", label: "Female" },
+	{ value: "Other", label: "Other" },
+];
+
+// ======================== MAIN COMPONENT ========================
+
+const PAGE_SIZE = 15;
+
+export function PatientLogTable({
+	entries,
+	facultyList,
+	categoryLabel,
+	maxEntries: _maxEntries,
+	skillLevelOptions,
+	skillLevelLabels,
+	onAddRow,
+	onDeleteEntry,
+	onUpdateEntry,
+	onSubmitEntry,
+}: PatientLogTableProps) {
+	const router = useRouter();
+	const [isPending, startTransition] = useTransition();
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [form, setForm] = useState<InlineForm>(emptyForm);
+	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
+	const [currentPage, setCurrentPage] = useState(1);
+
+	const stats = useMemo(() => {
+		const total = entries.length;
+		const signed = entries.filter((e) => e.status === "SIGNED").length;
+		const submitted = entries.filter((e) => e.status === "SUBMITTED").length;
+		const draft = entries.filter((e) => e.status === "DRAFT").length;
+		const needsRevision = entries.filter(
+			(e) => e.status === "NEEDS_REVISION",
+		).length;
+		return { total, signed, submitted, draft, needsRevision };
+	}, [entries]);
+
+	// Pagination
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+	const safePage = Math.min(currentPage, totalPages);
+	const paginatedEntries = useMemo(() => {
+		const start = (safePage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, safePage]);
+
+	const getFacultyName = useCallback(
+		(facultyId: string | null) => {
+			if (!facultyId) return "—";
+			const f = facultyList.find((fl) => fl.id === facultyId);
+			return f ? `Dr. ${f.firstName} ${f.lastName}` : "—";
+		},
+		[facultyList],
+	);
+
+	const skillLabel = useCallback(
+		(val: string | null) => {
+			if (!val) return "—";
+			return skillLevelLabels[val] ?? val;
+		},
+		[skillLevelLabels],
+	);
+
+	// ---- Add New Row ----
+	function handleAddRow() {
+		startTransition(async () => {
+			try {
+				await onAddRow();
+				toast.success("New row added");
+				const newTotalPages = Math.ceil((entries.length + 1) / PAGE_SIZE);
+				setCurrentPage(newTotalPages);
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to add row",
+				);
+			}
+		});
+	}
+
+	// ---- Delete Row ----
+	function handleDelete(id: string) {
+		startTransition(async () => {
+			try {
+				await onDeleteEntry(id);
+				toast.success("Row deleted");
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to delete",
+				);
+			}
+		});
+	}
+
+	// ---- Editing ----
+	function startEditing(entry: PatientLogEntry) {
+		if (entry.status === "SUBMITTED" || entry.status === "SIGNED") return;
+		setEditingId(entry.id);
+		setForm({
+			date: entry.date ? new Date(entry.date).toISOString().split("T")[0] : "",
+			patientName: entry.patientName ?? "",
+			patientAge: entry.patientAge != null ? String(entry.patientAge) : "",
+			patientSex: entry.patientSex ?? "",
+			uhid: entry.uhid ?? "",
+			completeDiagnosis: entry.completeDiagnosis ?? "",
+			procedureDescription: entry.procedureDescription ?? "",
+			performedAtLocation: entry.performedAtLocation ?? "",
+			skillLevel: entry.skillLevel ?? "",
+			totalProcedureTally: entry.totalProcedureTally,
+			facultyId: entry.facultyId ?? "",
+		});
+	}
+
+	function cancelEdit() {
+		setEditingId(null);
+	}
+
+	function handleSave(id: string) {
+		startTransition(async () => {
+			try {
+				const ageNum = form.patientAge ? parseInt(form.patientAge) : null;
+				if (form.patientAge && (isNaN(ageNum!) || ageNum! < 0)) {
+					toast.error("Age must be a valid positive integer");
+					return;
+				}
+				await onUpdateEntry(id, {
+					date: form.date || null,
+					patientName: form.patientName || null,
+					patientAge: ageNum,
+					patientSex: form.patientSex || null,
+					uhid: form.uhid || null,
+					completeDiagnosis: form.completeDiagnosis || null,
+					procedureDescription: form.procedureDescription || null,
+					performedAtLocation: form.performedAtLocation || null,
+					skillLevel: form.skillLevel || null,
+					totalProcedureTally: form.totalProcedureTally,
+					facultyId: form.facultyId || null,
+				});
+				toast.success("Saved");
+				setEditingId(null);
+				router.refresh();
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : "Save failed");
+			}
+		});
+	}
+
+	function handleSubmit(id: string) {
+		const entry = entries.find((e) => e.id === id);
+		if (entry) {
+			const missing: string[] = [];
+			if (!entry.skillLevel) missing.push("Skill Level");
+			if (!entry.facultyId) missing.push("Faculty Sign");
+			if (missing.length > 0) {
+				toast.error(`Cannot submit — fill: ${missing.join(", ")}`);
+				return;
+			}
+		}
+		startTransition(async () => {
+			try {
+				await onSubmitEntry(id);
+				toast.success("Submitted for review");
+				router.refresh();
+			} catch (error) {
+				toast.error(
+					error instanceof Error ? error.message : "Failed to submit",
+				);
+			}
+		});
+	}
+
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex items-center justify-between">
+					<div>
+						<CardTitle className="text-lg">{categoryLabel}</CardTitle>
+						<CardDescription>
+							{stats.total > 0 ?
+								`${stats.signed} of ${stats.total} entries signed off`
+							:	"No entries yet — add your first row"}
+						</CardDescription>
+					</div>
+					<div className="flex items-center gap-2">
+						<Badge variant="outline" className="text-sm">
+							{stats.signed}/{stats.total}
+						</Badge>
+						<Button
+							size="sm"
+							variant="default"
+							onClick={handleAddRow}
+							disabled={isPending}
+							className="gap-1"
+						>
+							{isPending ?
+								<Loader2 className="h-4 w-4 animate-spin" />
+							:	<Plus className="h-4 w-4" />}
+							Add Row
+						</Button>
+					</div>
+				</div>
+				{/* Progress bar */}
+				{stats.total > 0 && (
+					<div className="w-full bg-muted rounded-full h-2 mt-2">
+						<div
+							className="bg-hospital-secondary rounded-full h-2 transition-all"
+							style={{
+								width: `${(stats.signed / stats.total) * 100}%`,
+							}}
+						/>
+					</div>
+				)}
+			</CardHeader>
+			<CardContent className="p-0 sm:p-6 overflow-x-auto">
+				{entries.length === 0 ?
+					<div className="text-center py-12 text-muted-foreground">
+						<p className="mb-3">No entries yet.</p>
+						<Button
+							onClick={handleAddRow}
+							disabled={isPending}
+							className="gap-1"
+						>
+							{isPending ?
+								<Loader2 className="h-4 w-4 animate-spin" />
+							:	<Plus className="h-4 w-4" />}
+							Add Your First Entry
+						</Button>
+					</div>
+				:	<>
+						<div className="border rounded-lg" style={{ minWidth: "1350px" }}>
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-muted/50">
+										<TableHead className="w-12 text-center font-bold">
+											Sl.
+										</TableHead>
+										<TableHead className="w-24 font-bold">Date</TableHead>
+										<TableHead className="w-28 font-bold">
+											Patient Name
+										</TableHead>
+										<TableHead className="w-14 text-center font-bold">
+											Age
+										</TableHead>
+										<TableHead className="w-20 font-bold">Sex</TableHead>
+										<TableHead className="w-24 font-bold">UHID</TableHead>
+										<TableHead className="min-w-32 font-bold">
+											Complete Diagnosis
+										</TableHead>
+										<TableHead className="min-w-28 font-bold">
+											Procedure Description
+										</TableHead>
+										<TableHead className="w-24 font-bold">Location</TableHead>
+										<TableHead className="w-32 font-bold">
+											S/O/A/PS/PI
+										</TableHead>
+										<TableHead className="w-36 font-bold">
+											Faculty/SR Sign
+										</TableHead>
+										<TableHead className="w-16 text-center font-bold">
+											Tally
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Status
+										</TableHead>
+										<TableHead className="w-24 text-center font-bold">
+											Actions
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) =>
+										editingId === entry.id ?
+											<EditRow
+												key={entry.id}
+												entry={entry}
+												form={form}
+												setForm={setForm}
+												facultyList={facultyList}
+												facultyPickerOpen={facultyPickerOpen}
+												setFacultyPickerOpen={setFacultyPickerOpen}
+												onSave={() => handleSave(entry.id)}
+												onCancel={cancelEdit}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+												skillLevelOptions={skillLevelOptions}
+											/>
+										:	<ReadRow
+												key={entry.id}
+												entry={entry}
+												onEdit={() => startEditing(entry)}
+												onSubmit={() => handleSubmit(entry.id)}
+												onDelete={() => handleDelete(entry.id)}
+												isPending={isPending}
+												getFacultyName={getFacultyName}
+												skillLabel={skillLabel}
+											/>,
+									)}
+								</TableBody>
+							</Table>
+						</div>
+
+						{/* Pagination */}
+						{totalPages > 1 && (
+							<div className="flex items-center justify-between mt-4 px-2">
+								<p className="text-sm text-muted-foreground">
+									Showing {(safePage - 1) * PAGE_SIZE + 1}–
+									{Math.min(safePage * PAGE_SIZE, entries.length)} of{" "}
+									{entries.length} entries
+								</p>
+								<div className="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={safePage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									{Array.from({ length: totalPages }, (_, i) => i + 1)
+										.filter(
+											(p) =>
+												p === 1 ||
+												p === totalPages ||
+												Math.abs(p - safePage) <= 1,
+										)
+										.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+											if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1)
+												acc.push("...");
+											acc.push(p);
+											return acc;
+										}, [])
+										.map((p, idx) =>
+											p === "..." ?
+												<span
+													key={`dot-${idx}`}
+													className="px-1 text-muted-foreground"
+												>
+													…
+												</span>
+											:	<Button
+													key={p}
+													variant={safePage === p ? "default" : "outline"}
+													size="icon"
+													className="h-8 w-8"
+													onClick={() => setCurrentPage(p)}
+												>
+													{p}
+												</Button>,
+										)}
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={safePage === totalPages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						)}
+					</>
+				}
+			</CardContent>
+		</Card>
+	);
+}
+
+// ======================== EDIT ROW ========================
+
+function EditRow({
+	entry,
+	form,
+	setForm,
+	facultyList,
+	facultyPickerOpen,
+	setFacultyPickerOpen,
+	onSave,
+	onCancel,
+	isPending,
+	getFacultyName,
+	skillLevelOptions,
+}: {
+	entry: PatientLogEntry;
+	form: InlineForm;
+	setForm: React.Dispatch<React.SetStateAction<InlineForm>>;
+	facultyList: FacultyOption[];
+	facultyPickerOpen: boolean;
+	setFacultyPickerOpen: (open: boolean) => void;
+	onSave: () => void;
+	onCancel: () => void;
+	isPending: boolean;
+	getFacultyName: (id: string | null) => string;
+	skillLevelOptions: { value: string; label: string }[];
+}) {
+	return (
+		<TableRow className="bg-blue-50/40">
+			<TableCell className="text-center font-medium text-muted-foreground">
+				{entry.slNo}
+			</TableCell>
+			<TableCell>
+				<Input
+					type="date"
+					value={form.date}
+					onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+					className="w-28 text-xs"
+				/>
+			</TableCell>
+			<TableCell>
+				<Input
+					value={form.patientName}
+					onChange={(e) =>
+						setForm((f) => ({ ...f, patientName: e.target.value }))
+					}
+					placeholder="Name"
+					className="w-28 text-xs"
+				/>
+			</TableCell>
+			<TableCell className="text-center">
+				<Input
+					type="number"
+					min={0}
+					max={150}
+					step={1}
+					value={form.patientAge}
+					onChange={(e) => {
+						const val = e.target.value.replace(/[^0-9]/g, "");
+						setForm((f) => ({ ...f, patientAge: val }));
+					}}
+					placeholder="Age"
+					className="w-16 text-center text-xs"
+				/>
+			</TableCell>
+			<TableCell>
+				<Select
+					value={form.patientSex}
+					onValueChange={(val) => setForm((f) => ({ ...f, patientSex: val }))}
+				>
+					<SelectTrigger className="w-20 text-xs">
+						<SelectValue placeholder="Sex" />
+					</SelectTrigger>
+					<SelectContent>
+						{SEX_OPTIONS.map((s) => (
+							<SelectItem key={s.value} value={s.value}>
+								{s.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</TableCell>
+			<TableCell>
+				<Input
+					value={form.uhid}
+					onChange={(e) => setForm((f) => ({ ...f, uhid: e.target.value }))}
+					placeholder="UHID"
+					className="w-24 text-xs"
+				/>
+			</TableCell>
+			<TableCell>
+				<MarkdownEditor
+					value={form.completeDiagnosis}
+					onChange={(val) => setForm((f) => ({ ...f, completeDiagnosis: val }))}
+					placeholder="Enter diagnosis…"
+					minRows={2}
+					compact
+				/>
+			</TableCell>
+			<TableCell>
+				<MarkdownEditor
+					value={form.procedureDescription}
+					onChange={(val) =>
+						setForm((f) => ({ ...f, procedureDescription: val }))
+					}
+					placeholder="Procedure…"
+					minRows={2}
+					compact
+				/>
+			</TableCell>
+			<TableCell>
+				<Input
+					value={form.performedAtLocation}
+					onChange={(e) =>
+						setForm((f) => ({ ...f, performedAtLocation: e.target.value }))
+					}
+					placeholder="ER, ICU…"
+					className="w-24 text-xs"
+				/>
+			</TableCell>
+			<TableCell>
+				<Select
+					value={form.skillLevel}
+					onValueChange={(val) => setForm((f) => ({ ...f, skillLevel: val }))}
+				>
+					<SelectTrigger className="w-36 text-xs">
+						<SelectValue placeholder="Select…" />
+					</SelectTrigger>
+					<SelectContent>
+						{skillLevelOptions.map((sl) => (
+							<SelectItem key={sl.value} value={sl.value}>
+								{sl.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</TableCell>
+			<TableCell>
+				<Popover open={facultyPickerOpen} onOpenChange={setFacultyPickerOpen}>
+					<PopoverTrigger asChild>
+						<Button
+							variant="outline"
+							role="combobox"
+							className="w-full justify-between text-xs"
+						>
+							{form.facultyId ?
+								getFacultyName(form.facultyId)
+							:	"Select faculty…"}
+							<ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent className="w-56 p-0" align="start">
+						<Command>
+							<CommandInput placeholder="Search faculty…" />
+							<CommandList>
+								<CommandEmpty>No faculty found.</CommandEmpty>
+								<CommandGroup>
+									{facultyList.map((f) => (
+										<CommandItem
+											key={f.id}
+											value={`${f.firstName} ${f.lastName}`}
+											onSelect={() => {
+												setForm((prev) => ({ ...prev, facultyId: f.id }));
+												setFacultyPickerOpen(false);
+											}}
+										>
+											<Check
+												className={cn(
+													"mr-2 h-4 w-4",
+													form.facultyId === f.id ? "opacity-100" : "opacity-0",
+												)}
+											/>
+											Dr. {f.firstName} {f.lastName}
+										</CommandItem>
+									))}
+								</CommandGroup>
+							</CommandList>
+						</Command>
+					</PopoverContent>
+				</Popover>
+			</TableCell>
+			<TableCell className="text-center">
+				<Input
+					type="number"
+					min={0}
+					value={form.totalProcedureTally}
+					onChange={(e) =>
+						setForm((f) => ({
+							...f,
+							totalProcedureTally: parseInt(e.target.value) || 0,
+						}))
+					}
+					className="w-20 mx-auto text-center text-xs"
+				/>
+			</TableCell>
+			<TableCell className="text-center">
+				<StatusBadge status={entry.status as EntryStatus} size="sm" />
+			</TableCell>
+			<TableCell className="text-center">
+				<div className="flex items-center justify-center gap-0.5">
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+						title="Save"
+						onClick={onSave}
+						disabled={isPending}
+					>
+						{isPending ?
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						:	<Save className="h-3.5 w-3.5" />}
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-muted-foreground"
+						title="Cancel"
+						onClick={onCancel}
+						disabled={isPending}
+					>
+						<X className="h-3.5 w-3.5" />
+					</Button>
+				</div>
+			</TableCell>
+		</TableRow>
+	);
+}
+
+// ======================== READ ROW ========================
+
+function ReadRow({
+	entry,
+	onEdit,
+	onSubmit,
+	onDelete,
+	isPending,
+	getFacultyName,
+	skillLabel,
+}: {
+	entry: PatientLogEntry;
+	onEdit: () => void;
+	onSubmit: () => void;
+	onDelete: () => void;
+	isPending: boolean;
+	getFacultyName: (id: string | null) => string;
+	skillLabel: (val: string | null) => string;
+}) {
+	const isEditable = entry.status !== "SUBMITTED" && entry.status !== "SIGNED";
+
+	return (
+		<TableRow
+			className={cn(
+				"transition-colors",
+				isEditable && "cursor-pointer hover:bg-muted/30",
+				entry.status === "SIGNED" && "bg-green-50/50",
+				entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
+				entry.status === "SUBMITTED" && "bg-amber-50/30",
+			)}
+			onClick={isEditable ? onEdit : undefined}
+		>
+			<TableCell className="text-center font-medium text-muted-foreground">
+				{entry.slNo}
+			</TableCell>
+			<TableCell className="text-sm">
+				{entry.date ?
+					new Date(entry.date).toLocaleDateString("en-IN", {
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					})
+				:	<span className="text-muted-foreground italic">—</span>}
+			</TableCell>
+			<TableCell className="text-sm">
+				{entry.patientName || (
+					<span className="text-muted-foreground italic">—</span>
+				)}
+			</TableCell>
+			<TableCell className="text-center text-sm">
+				{entry.patientAge != null ?
+					entry.patientAge
+				:	<span className="text-muted-foreground">—</span>}
+			</TableCell>
+			<TableCell className="text-sm">
+				{entry.patientSex || <span className="text-muted-foreground">—</span>}
+			</TableCell>
+			<TableCell className="text-sm">
+				{entry.uhid || <span className="text-muted-foreground italic">—</span>}
+			</TableCell>
+			<TableCell className="text-sm max-w-40">
+				{entry.completeDiagnosis ?
+					<div
+						className="line-clamp-2 prose prose-sm max-w-none"
+						dangerouslySetInnerHTML={{
+							__html: renderMarkdown(entry.completeDiagnosis),
+						}}
+					/>
+				:	<span className="text-muted-foreground italic">Not filled</span>}
+			</TableCell>
+			<TableCell className="text-sm max-w-36">
+				{entry.procedureDescription ?
+					<div
+						className="line-clamp-2 prose prose-sm max-w-none"
+						dangerouslySetInnerHTML={{
+							__html: renderMarkdown(entry.procedureDescription),
+						}}
+					/>
+				:	<span className="text-muted-foreground italic">—</span>}
+			</TableCell>
+			<TableCell className="text-sm">
+				{entry.performedAtLocation || (
+					<span className="text-muted-foreground">—</span>
+				)}
+			</TableCell>
+			<TableCell>
+				{entry.skillLevel ?
+					<Badge variant="outline" className="text-xs">
+						{entry.skillLevel} — {skillLabel(entry.skillLevel)}
+					</Badge>
+				:	<span className="text-muted-foreground">—</span>}
+			</TableCell>
+			<TableCell className="text-sm">
+				{getFacultyName(entry.facultyId)}
+			</TableCell>
+			<TableCell className="text-center font-mono">
+				{entry.totalProcedureTally}
+			</TableCell>
+			<TableCell className="text-center">
+				<div>
+					<StatusBadge status={entry.status as EntryStatus} size="sm" />
+					{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<div className="flex items-center gap-1 mt-1 text-[10px] text-red-600 cursor-help">
+										<AlertTriangle className="h-3 w-3 shrink-0" />
+										<span className="line-clamp-1">Revision needed</span>
+									</div>
+								</TooltipTrigger>
+								<TooltipContent side="top" className="max-w-sm">
+									<div
+										className="prose prose-sm max-w-none text-sm"
+										dangerouslySetInnerHTML={{
+											__html: renderMarkdown(entry.facultyRemark),
+										}}
+									/>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
+					)}
+				</div>
+			</TableCell>
+			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+				<div className="flex items-center justify-center gap-0.5">
+					{entry.status === "DRAFT" && entry.skillLevel && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-hospital-primary"
+							title="Submit for review"
+							onClick={onSubmit}
+							disabled={isPending}
+						>
+							{isPending ?
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							:	<Send className="h-3.5 w-3.5" />}
+						</Button>
+					)}
+					{entry.status === "DRAFT" && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+							title="Delete entry"
+							onClick={onDelete}
+							disabled={isPending}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					)}
+				</div>
+			</TableCell>
+		</TableRow>
+	);
+}

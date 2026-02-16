@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import {
 	Sheet,
+	SheetClose,
 	SheetContent,
 	SheetDescription,
 	SheetHeader,
@@ -66,6 +67,7 @@ import {
 	CalendarDays,
 	MessageSquare,
 	ExternalLink,
+	X,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -623,12 +625,20 @@ export function ThesisReviewClient({ theses, role }: ThesisReviewClientProps) {
 				open={!!selectedThesis}
 				onOpenChange={(open) => !open && setSelectedThesisId(null)}
 			>
-				<SheetContent className="sm:max-w-xl overflow-y-auto p-0">
+				<SheetContent
+					className="sm:max-w-3xl overflow-y-auto p-0"
+					showCloseButton={false}
+				>
 					{selectedThesis && (
 						<>
 							{/* Branded Header */}
-							<div className="bg-linear-to-r from-hospital-primary to-hospital-primary-dark p-6 text-white">
-								<div className="flex items-start justify-between">
+							<div className="bg-linear-to-r from-hospital-primary to-hospital-primary-dark p-6 text-white relative">
+								{/* Custom close button visible on dark bg */}
+								<SheetClose className="absolute top-4 right-4 rounded-sm p-1 text-white/70 hover:text-white hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50">
+									<X className="h-5 w-5" />
+									<span className="sr-only">Close</span>
+								</SheetClose>
+								<div className="flex items-start justify-between pr-8">
 									<div className="flex items-center gap-3">
 										<div className="p-2.5 bg-white/20 rounded-lg">
 											<BookOpen className="h-5 w-5" />

@@ -635,7 +635,7 @@ export function RotationReviewClient({
 				open={!!detailEntry}
 				onOpenChange={(open) => !open && setDetailEntry(null)}
 			>
-				<SheetContent className="sm:max-w-lg overflow-y-auto">
+				<SheetContent className="sm:max-w-2xl overflow-y-auto">
 					{detailEntry && (
 						<>
 							<SheetHeader>

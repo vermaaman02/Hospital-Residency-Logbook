@@ -1,6 +1,7 @@
 /**
- * @module ConsentBadNewsLandingPage
- * @description Landing for H7 (Informed Consent) and H8 (Breaking Bad News).
+ * @module ConsentBadNewsPage
+ * @description Student page for H7 (Informed Consent) and H8 (Breaking Bad News).
+ * Inline editing tables with export. Mirrors procedure category pattern.
  *
  * @see PG Logbook .md — "Taking Informed Consent", "Breaking Bad News"
  */
@@ -8,54 +9,36 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, HeartHandshake } from "lucide-react";
+import { ArrowLeft, HeartHandshake, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
 	getMyConsentLogs,
-	submitConsentLog,
-	deleteConsentLog,
 	getMyBadNewsLogs,
-	submitBadNewsLog,
-	deleteBadNewsLog,
+	getAvailableOtherLogFaculty,
 } from "@/actions/other-logs";
-import { OtherLogTable } from "@/components/tables/OtherLogTable";
+import { ConsentBadNewsClient } from "./ConsentBadNewsClient";
 import { OTHER_LOG_CATEGORIES } from "@/lib/constants/other-logs-fields";
 
 async function ConsentBadNewsContent() {
-	const [consentEntries, badNewsEntries] = await Promise.all([
-		getMyConsentLogs(),
-		getMyBadNewsLogs(),
-	]);
-
-	const serializedConsent = JSON.parse(JSON.stringify(consentEntries));
-	const serializedBadNews = JSON.parse(JSON.stringify(badNewsEntries));
-
 	const H7 = OTHER_LOG_CATEGORIES.CONSENT;
 	const H8 = OTHER_LOG_CATEGORIES.BAD_NEWS;
 
-	return (
-		<div className="space-y-8">
-			<OtherLogTable
-				entries={serializedConsent}
-				categoryLabel={H7.shortLabel}
-				categoryCode={H7.code}
-				maxEntries={H7.maxEntries}
-				newEntryHref="/dashboard/student/consent-bad-news/consent/new"
-				editHrefPrefix="/dashboard/student/consent-bad-news/consent"
-				onSubmit={submitConsentLog as never}
-				onDelete={deleteConsentLog as never}
-			/>
+	const [consentEntries, badNewsEntries, facultyList] = await Promise.all([
+		getMyConsentLogs(),
+		getMyBadNewsLogs(),
+		getAvailableOtherLogFaculty(),
+	]);
 
-			<OtherLogTable
-				entries={serializedBadNews}
-				categoryLabel={H8.shortLabel}
-				categoryCode={H8.code}
-				maxEntries={H8.maxEntries}
-				newEntryHref="/dashboard/student/consent-bad-news/bad-news/new"
-				editHrefPrefix="/dashboard/student/consent-bad-news/bad-news"
-				onSubmit={submitBadNewsLog as never}
-				onDelete={deleteBadNewsLog as never}
-			/>
-		</div>
+	return (
+		<ConsentBadNewsClient
+			consentEntries={JSON.parse(JSON.stringify(consentEntries))}
+			badNewsEntries={JSON.parse(JSON.stringify(badNewsEntries))}
+			facultyList={JSON.parse(JSON.stringify(facultyList))}
+			consentLabel={H7.shortLabel}
+			badNewsLabel={H8.shortLabel}
+			consentMax={H7.maxEntries}
+			badNewsMax={H8.maxEntries}
+		/>
 	);
 }
 
@@ -63,31 +46,24 @@ export default function ConsentBadNewsPage() {
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center gap-4">
-				<Link href="/dashboard/student">
-					<Button variant="ghost" size="icon">
+				<Button variant="ghost" size="icon" asChild>
+					<Link href="/dashboard/student">
 						<ArrowLeft className="h-4 w-4" />
-					</Button>
-				</Link>
+					</Link>
+				</Button>
 				<div className="flex items-center gap-2">
 					<HeartHandshake className="h-6 w-6 text-hospital-primary" />
-					<div>
-						<h1 className="text-2xl font-bold">Consent & Bad News</h1>
-						<p className="text-muted-foreground">
-							Taking informed consent and breaking bad news communication
-						</p>
-					</div>
+					<PageHeader
+						title="Consent & Bad News"
+						description="Taking informed consent and breaking bad news — add rows and click to edit inline"
+					/>
 				</div>
 			</div>
 
 			<Suspense
 				fallback={
-					<div className="space-y-8">
-						{[1, 2].map((i) => (
-							<div key={i} className="animate-pulse border rounded-lg p-6">
-								<div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-								<div className="h-40 bg-gray-200 dark:bg-gray-700 rounded" />
-							</div>
-						))}
+					<div className="flex items-center justify-center py-12">
+						<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
 					</div>
 				}
 			>

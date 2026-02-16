@@ -1,62 +1,88 @@
 /**
  * @module ImagingCategoryPage
- * @description List page for imaging log entries in a specific category.
- * Resolves slug → enum value, fetches entries, renders ImagingLogTable.
+ * @description Student page for a specific imaging category with inline editing table.
+ * Add rows as needed. Click a row to edit inline.
  *
  * @see PG Logbook .md — "IMAGING LOGS"
  */
 
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import { getImagingBySlug } from "@/lib/constants/imaging-categories";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ImagingCategoryClient } from "./ImagingCategoryClient";
 import {
 	getMyImagingLogEntries,
-	submitImagingLogEntry,
-	deleteImagingLogEntry,
+	getAvailableImagingFaculty,
 } from "@/actions/imaging-logs";
-import { ImagingLogTable } from "@/components/tables/ImagingLogTable";
+import { getImagingBySlug } from "@/lib/constants/imaging-categories";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import Link from "next/link";
 
-interface ImagingCategoryPageProps {
+interface PageParams {
 	params: Promise<{ category: string }>;
 }
 
-export default async function ImagingCategoryPage({
-	params,
-}: ImagingCategoryPageProps) {
-	const { category: slug } = await params;
-	const categoryInfo = getImagingBySlug(slug);
+async function CategoryData({
+	categoryEnum,
+	categoryLabel,
+	maxEntries,
+}: {
+	categoryEnum: string;
+	categoryLabel: string;
+	maxEntries: number;
+}) {
+	const [entries, facultyList] = await Promise.all([
+		getMyImagingLogEntries(categoryEnum),
+		getAvailableImagingFaculty(),
+	]);
 
-	if (!categoryInfo) return notFound();
+	return (
+		<ImagingCategoryClient
+			entries={JSON.parse(JSON.stringify(entries))}
+			facultyList={JSON.parse(JSON.stringify(facultyList))}
+			imagingCategory={categoryEnum}
+			categoryLabel={categoryLabel}
+			maxEntries={maxEntries}
+		/>
+	);
+}
 
-	const rawEntries = await getMyImagingLogEntries(categoryInfo.enumValue);
-	const entries = JSON.parse(JSON.stringify(rawEntries));
+export default async function ImagingCategoryPage({ params }: PageParams) {
+	const { category: categorySlug } = await params;
+	const cat = getImagingBySlug(categorySlug);
+
+	if (!cat) {
+		notFound();
+	}
 
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center gap-4">
-				<Link href="/dashboard/student/imaging">
-					<Button variant="ghost" size="icon">
+				<Button variant="ghost" size="icon" asChild>
+					<Link href="/dashboard/student/imaging">
 						<ArrowLeft className="h-4 w-4" />
-					</Button>
-				</Link>
-				<div>
-					<h1 className="text-2xl font-bold">{categoryInfo.label}</h1>
-					<p className="text-muted-foreground">
-						Track your imaging analysis entries and skill progression
-					</p>
-				</div>
+					</Link>
+				</Button>
+				<PageHeader
+					title={cat.label}
+					description={`Target: ${cat.maxEntries} entries — add rows and click to edit inline`}
+				/>
 			</div>
 
-			<ImagingLogTable
-				entries={entries}
-				categoryLabel={categoryInfo.label}
-				categorySlug={slug}
-				maxEntries={categoryInfo.maxEntries}
-				onSubmit={submitImagingLogEntry as never}
-				onDelete={deleteImagingLogEntry as never}
-			/>
+			<Suspense
+				fallback={
+					<div className="flex items-center justify-center py-12">
+						<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+					</div>
+				}
+			>
+				<CategoryData
+					categoryEnum={cat.enumValue}
+					categoryLabel={cat.label}
+					maxEntries={cat.maxEntries}
+				/>
+			</Suspense>
 		</div>
 	);
 }

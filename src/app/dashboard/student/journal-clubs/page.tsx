@@ -1,30 +1,37 @@
 /**
- * @module Journal Clubs List Page
- * @description Student view: list all journal club entries with progress tracking.
+ * @module Journal Clubs Page
+ * @description Student view: inline-editing table for Journal Club Discussion /
+ * Critical Appraisal of Literature Presented.
  *
- * @see PG Logbook .md — "JOURNAL CLUB PRESENTED" (10 entries)
+ * @see PG Logbook .md — "JOURNAL CLUB DISCUSSION/CRITICAL APRAISAL OF LITERATURE PRESENTED"
  */
 
 import { requireAuth } from "@/lib/auth";
-import { getMyJournalClubs } from "@/actions/journal-clubs";
+import {
+	getMyJournalClubs,
+	getAvailableJournalClubFaculty,
+} from "@/actions/journal-clubs";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { JournalClubList } from "./JournalClubList";
+import { JournalClubTable } from "./JournalClubTable";
 
 export default async function JournalClubsPage() {
 	await requireAuth();
-	const entries = await getMyJournalClubs();
+	const [entries, facultyList] = await Promise.all([
+		getMyJournalClubs(),
+		getAvailableJournalClubFaculty(),
+	]);
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				title="Journal Clubs"
-				description="Journal Club Presented — Target: 10 entries"
+				description="Journal Club Discussion / Critical Appraisal of Literature Presented — Target: 10 entries"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/student" },
 					{ label: "Journal Clubs" },
 				]}
 			/>
-			<JournalClubList entries={entries} />
+			<JournalClubTable entries={entries as never} facultyList={facultyList} />
 		</div>
 	);
 }

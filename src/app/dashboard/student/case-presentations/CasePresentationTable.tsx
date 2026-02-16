@@ -72,6 +72,8 @@ import {
 	Plus,
 	BookOpen,
 	ChevronsUpDown,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -143,6 +145,8 @@ const emptyForm: InlineForm = {
 
 // ======================== MAIN COMPONENT ========================
 
+const PAGE_SIZE = 15;
+
 export function CasePresentationTable({
 	entries,
 	facultyList,
@@ -156,6 +160,14 @@ export function CasePresentationTable({
 	const [validationErrors, setValidationErrors] = useState<
 		Record<string, string>
 	>({});
+	const [currentPage, setCurrentPage] = useState(1);
+
+	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+
+	const paginatedEntries = useMemo(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return entries.slice(start, start + PAGE_SIZE);
+	}, [entries, currentPage]);
 
 	// Clear validation errors when form changes
 	useEffect(() => {
@@ -213,6 +225,8 @@ export function CasePresentationTable({
 		setEditingId(null);
 		setIsAddingNew(true);
 		setForm(emptyForm);
+		// Jump to last page where new row will appear
+		setCurrentPage(Math.max(1, Math.ceil((entries.length + 1) / PAGE_SIZE)));
 	}
 
 	function cancelEdit() {
@@ -225,7 +239,13 @@ export function CasePresentationTable({
 		if (!form.date) errors.date = "Date is required";
 		if (!form.patientName.trim())
 			errors.patientName = "Patient name is required";
-		if (!form.patientAge.trim()) errors.patientAge = "Age is required";
+		if (!form.patientAge.trim()) {
+			errors.patientAge = "Age is required";
+		} else if (!/^\d+$/.test(form.patientAge.trim())) {
+			errors.patientAge = "Age must be a number";
+		} else if (Number(form.patientAge) < 0 || Number(form.patientAge) > 150) {
+			errors.patientAge = "Age must be 0-150";
+		}
 		if (!form.patientSex) errors.patientSex = "Sex is required";
 		if (!form.uhid.trim()) errors.uhid = "UHID is required";
 		if (!form.completeDiagnosis.trim())
@@ -395,68 +415,92 @@ export function CasePresentationTable({
 						</div>
 					</div>
 				</CardHeader>
-				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					<div className="border rounded-lg min-w-300">
-						<Table>
-							<TableHeader>
-								<TableRow className="bg-muted/50">
-									<TableHead className="w-16 text-center font-bold">
-										Sl. No.
-									</TableHead>
-									<TableHead className="w-30 text-center font-bold">
-										Date
-									</TableHead>
-									<TableHead className="w-36 font-bold">Patient Name</TableHead>
-									<TableHead className="w-18 text-center font-bold">
-										Age
-									</TableHead>
-									<TableHead className="w-22 text-center font-bold">
-										Sex
-									</TableHead>
-									<TableHead className="w-28 text-center font-bold">
-										UHID
-									</TableHead>
-									<TableHead className="min-w-48 font-bold">
-										Complete Diagnosis
-									</TableHead>
-									<TableHead className="w-40 text-center font-bold">
-										Category
-									</TableHead>
-									<TableHead className="min-w-36 font-bold">
-										Faculty Remark
-									</TableHead>
-									<TableHead className="w-40 text-center font-bold">
-										Faculty Sign
-									</TableHead>
-									<TableHead className="w-20 text-center font-bold">
-										Status
-									</TableHead>
-									<TableHead className="w-28 text-center font-bold">
-										Actions
-									</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) => {
-									const isEditing = editingId === entry.id;
-									const canEdit =
-										entry.status === "DRAFT" ||
-										entry.status === "NEEDS_REVISION";
+				<CardContent className="px-0 sm:px-6 pb-4 sm:pb-6 pt-0">
+					<div className="border rounded-lg overflow-x-auto">
+						<div className="min-w-300">
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-muted/50">
+										<TableHead className="w-16 text-center font-bold">
+											Sl. No.
+										</TableHead>
+										<TableHead className="w-30 text-center font-bold">
+											Date
+										</TableHead>
+										<TableHead className="w-36 font-bold">
+											Patient Name
+										</TableHead>
+										<TableHead className="w-18 text-center font-bold">
+											Age
+										</TableHead>
+										<TableHead className="w-22 text-center font-bold">
+											Sex
+										</TableHead>
+										<TableHead className="w-28 text-center font-bold">
+											UHID
+										</TableHead>
+										<TableHead className="min-w-48 font-bold">
+											Complete Diagnosis
+										</TableHead>
+										<TableHead className="w-40 text-center font-bold">
+											Category
+										</TableHead>
+										<TableHead className="min-w-36 font-bold">
+											Faculty Remark
+										</TableHead>
+										<TableHead className="w-40 text-center font-bold">
+											Faculty Sign
+										</TableHead>
+										<TableHead className="w-20 text-center font-bold">
+											Status
+										</TableHead>
+										<TableHead className="w-28 text-center font-bold">
+											Actions
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{paginatedEntries.map((entry) => {
+										const isEditing = editingId === entry.id;
+										const canEdit =
+											entry.status === "DRAFT" ||
+											entry.status === "NEEDS_REVISION";
 
-									if (isEditing) {
+										if (isEditing) {
+											return (
+												<EditRow
+													key={entry.id}
+													slNo={entry.slNo}
+													form={form}
+													setForm={setForm}
+													facultyList={facultyList}
+													facultyPickerOpen={facultyPickerOpen}
+													setFacultyPickerOpen={setFacultyPickerOpen}
+													isPending={isPending}
+													validationErrors={validationErrors}
+													onSave={() => handleSave(entry.id)}
+													onCancel={cancelEdit}
+													onDelete={
+														entry.status === "DRAFT" ?
+															() => handleDelete(entry.id)
+														:	undefined
+													}
+												/>
+											);
+										}
+
 										return (
-											<EditRow
+											<ReadRow
 												key={entry.id}
-												slNo={entry.slNo}
-												form={form}
-												setForm={setForm}
-												facultyList={facultyList}
-												facultyPickerOpen={facultyPickerOpen}
-												setFacultyPickerOpen={setFacultyPickerOpen}
+												entry={entry}
+												getFacultyName={getFacultyName}
+												getCategoryLabel={getCategoryLabel}
+												canEdit={canEdit}
 												isPending={isPending}
-												validationErrors={validationErrors}
-												onSave={() => handleSave(entry.id)}
-												onCancel={cancelEdit}
+												onClick={() => canEdit && startEditing(entry)}
+												onSubmit={
+													canEdit ? () => handleSubmit(entry.id) : undefined
+												}
 												onDelete={
 													entry.status === "DRAFT" ?
 														() => handleDelete(entry.id)
@@ -464,61 +508,104 @@ export function CasePresentationTable({
 												}
 											/>
 										);
-									}
+									})}
 
-									return (
-										<ReadRow
-											key={entry.id}
-											entry={entry}
-											getFacultyName={getFacultyName}
-											getCategoryLabel={getCategoryLabel}
-											canEdit={canEdit}
+									{/* New Row */}
+									{isAddingNew && (
+										<EditRow
+											slNo={entries.length + 1}
+											form={form}
+											setForm={setForm}
+											facultyList={facultyList}
+											facultyPickerOpen={facultyPickerOpen}
+											setFacultyPickerOpen={setFacultyPickerOpen}
 											isPending={isPending}
-											onClick={() => canEdit && startEditing(entry)}
-											onSubmit={
-												canEdit ? () => handleSubmit(entry.id) : undefined
-											}
-											onDelete={
-												entry.status === "DRAFT" ?
-													() => handleDelete(entry.id)
-												:	undefined
-											}
+											validationErrors={validationErrors}
+											onSave={() => handleSave()}
+											onCancel={cancelEdit}
+											isNew
 										/>
-									);
-								})}
+									)}
 
-								{/* New Row */}
-								{isAddingNew && (
-									<EditRow
-										slNo={entries.length + 1}
-										form={form}
-										setForm={setForm}
-										facultyList={facultyList}
-										facultyPickerOpen={facultyPickerOpen}
-										setFacultyPickerOpen={setFacultyPickerOpen}
-										isPending={isPending}
-										validationErrors={validationErrors}
-										onSave={() => handleSave()}
-										onCancel={cancelEdit}
-										isNew
-									/>
-								)}
-
-								{/* Empty state */}
-								{entries.length === 0 && !isAddingNew && (
-									<TableRow>
-										<TableCell
-											colSpan={12}
-											className="text-center py-10 text-muted-foreground"
-										>
-											No entries yet. Click &quot;Insert New Row&quot; to add
-											your first case presentation.
-										</TableCell>
-									</TableRow>
-								)}
-							</TableBody>
-						</Table>
+									{/* Empty state */}
+									{entries.length === 0 && !isAddingNew && (
+										<TableRow>
+											<TableCell
+												colSpan={12}
+												className="text-center py-10 text-muted-foreground"
+											>
+												No entries yet. Click &quot;Insert New Row&quot; to add
+												your first case presentation.
+											</TableCell>
+										</TableRow>
+									)}
+								</TableBody>
+							</Table>
+						</div>
 					</div>
+
+					{/* Pagination */}
+					{totalPages > 1 && (
+						<div className="flex items-center justify-between mt-4 px-2">
+							<p className="text-sm text-muted-foreground">
+								Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+								{Math.min(currentPage * PAGE_SIZE, entries.length)} of{" "}
+								{entries.length} entries
+							</p>
+							<div className="flex items-center gap-1">
+								<Button
+									variant="outline"
+									size="icon"
+									className="h-8 w-8"
+									onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+									disabled={currentPage === 1}
+								>
+									<ChevronLeft className="h-4 w-4" />
+								</Button>
+								{Array.from({ length: totalPages }, (_, i) => i + 1)
+									.filter(
+										(p) =>
+											p === 1 ||
+											p === totalPages ||
+											Math.abs(p - currentPage) <= 1,
+									)
+									.reduce<(number | "...")[]>((acc, p, idx, arr) => {
+										if (idx > 0 && p - (arr[idx - 1] ?? 0) > 1) acc.push("...");
+										acc.push(p);
+										return acc;
+									}, [])
+									.map((p, idx) =>
+										p === "..." ?
+											<span
+												key={`dot-${idx}`}
+												className="px-1 text-muted-foreground"
+											>
+												…
+											</span>
+										:	<Button
+												key={p}
+												variant={currentPage === p ? "default" : "outline"}
+												size="icon"
+												className="h-8 w-8"
+												onClick={() => setCurrentPage(p)}
+											>
+												{p}
+											</Button>,
+									)}
+								<Button
+									variant="outline"
+									size="icon"
+									className="h-8 w-8"
+									onClick={() =>
+										setCurrentPage((p) => Math.min(totalPages, p + 1))
+									}
+									disabled={currentPage === totalPages}
+								>
+									<ChevronRight className="h-4 w-4" />
+								</Button>
+							</div>
+						</div>
+					)}
 
 					{/* Summary */}
 					<div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground px-2 sm:px-0">
@@ -650,16 +737,30 @@ function EditRow({
 			{/* Age */}
 			<TableCell className="pt-2">
 				<Input
+					type="number"
+					min={0}
+					max={150}
 					className={cn(
-						"h-8 text-sm text-center w-16",
+						"h-8 text-sm text-center w-16 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
 						validationErrors.patientAge && "border-red-500 ring-1 ring-red-500",
 					)}
 					placeholder="Age"
 					value={form.patientAge}
-					onChange={(e) =>
-						setForm((p) => ({ ...p, patientAge: e.target.value }))
-					}
+					onChange={(e) => {
+						const val = e.target.value;
+						if (val === "" || /^\d{0,3}$/.test(val)) {
+							setForm((p) => ({ ...p, patientAge: val }));
+						}
+					}}
+					onKeyDown={(e) => {
+						if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
+					}}
 				/>
+				{validationErrors.patientAge && (
+					<p className="text-[10px] text-red-500 mt-0.5">
+						{validationErrors.patientAge}
+					</p>
+				)}
 			</TableCell>
 
 			{/* Sex */}

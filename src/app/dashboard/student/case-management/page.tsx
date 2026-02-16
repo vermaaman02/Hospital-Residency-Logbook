@@ -16,7 +16,13 @@ import {
 } from "@/lib/constants/case-categories";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, ArrowRight } from "lucide-react";
+import {
+	Loader2,
+	FileText,
+	ArrowRight,
+	CheckCircle2,
+	AlertTriangle,
+} from "lucide-react";
 import Link from "next/link";
 
 async function CaseManagementCards() {
@@ -26,9 +32,12 @@ async function CaseManagementCards() {
 		<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 			{CASE_CATEGORIES.map((cat) => {
 				const slug = categoryEnumToSlug(cat.enumValue);
-				const total = summary.totalByCategory[cat.enumValue] ?? 0;
+				const filled = summary.totalByCategory[cat.enumValue] ?? 0;
 				const signed = summary.signedByCategory[cat.enumValue] ?? 0;
+				const submitted = summary.submittedByCategory[cat.enumValue] ?? 0;
 				const subCount = cat.subCategories.length;
+				const needsRevision =
+					summary.needsRevisionByCategory?.[cat.enumValue] ?? 0;
 
 				return (
 					<Link
@@ -47,23 +56,38 @@ async function CaseManagementCards() {
 							<CardContent>
 								<div className="flex items-center gap-2 mb-2">
 									<FileText className="h-4 w-4 text-muted-foreground" />
-									<span className="text-2xl font-bold">{total}</span>
-									<span className="text-sm text-muted-foreground">entries</span>
+									<span className="text-2xl font-bold">{filled}</span>
+									<span className="text-sm text-muted-foreground">
+										of {subCount} filled
+									</span>
 								</div>
 								<div className="flex items-center justify-between text-xs text-muted-foreground">
 									<span>{subCount} case types</span>
-									{total > 0 && (
-										<Badge variant="outline" className="text-xs">
+									{signed > 0 && (
+										<Badge variant="outline" className="text-xs gap-1">
+											<CheckCircle2 className="h-3 w-3 text-green-600" />
 											{signed} signed
 										</Badge>
 									)}
 								</div>
-								{total > 0 && (
+								{needsRevision > 0 && (
+									<div className="flex items-center gap-1 mt-1.5 text-xs text-orange-600">
+										<AlertTriangle className="h-3 w-3" />
+										{needsRevision} need{needsRevision === 1 ? "s" : ""}{" "}
+										revision
+									</div>
+								)}
+								{submitted > 0 && signed < submitted && (
+									<div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
+										{submitted - signed} pending review
+									</div>
+								)}
+								{filled > 0 && (
 									<div className="w-full bg-muted rounded-full h-1.5 mt-2">
 										<div
 											className="bg-hospital-secondary rounded-full h-1.5 transition-all"
 											style={{
-												width: `${total > 0 ? (signed / total) * 100 : 0}%`,
+												width: `${subCount > 0 ? (signed / subCount) * 100 : 0}%`,
 											}}
 										/>
 									</div>

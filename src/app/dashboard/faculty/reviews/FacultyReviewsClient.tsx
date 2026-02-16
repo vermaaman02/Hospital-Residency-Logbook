@@ -69,11 +69,13 @@ import {
 	rejectResearchActivity,
 } from "@/actions/courses-conferences";
 import {
-	signDisasterDrill,
-	rejectDisasterDrill,
-	signQualityImprovement,
-	rejectQualityImprovement,
-} from "@/actions/disaster-qi";
+	signDisasterDrillEntry as signDisasterDrill,
+	rejectDisasterDrillEntry as rejectDisasterDrill,
+} from "@/actions/disaster-drills";
+import {
+	signQualityImprovementEntry as signQualityImprovement,
+	rejectQualityImprovementEntry as rejectQualityImprovement,
+} from "@/actions/quality-improvement";
 import {
 	signTransportLog,
 	rejectTransportLog,
@@ -226,7 +228,10 @@ interface ProcedureLogReviewEntry {
 	slNo: number;
 	procedureCategory: string;
 	date: Date | string | null;
-	patientInfo: string | null;
+	patientName: string | null;
+	patientAge: number | null;
+	patientSex: string | null;
+	uhid: string | null;
 	completeDiagnosis: string | null;
 	procedureDescription: string | null;
 	performedAtLocation: string | null;
@@ -1208,7 +1213,14 @@ export function FacultyReviewsClient({
 									</CardHeader>
 									<CardContent>
 										<div className="text-sm text-muted-foreground mb-4 space-y-1">
-											{entry.patientInfo && <p>Patient: {entry.patientInfo}</p>}
+											{entry.patientName && (
+												<p>
+													Patient: {entry.patientName}
+													{entry.patientAge ? `, ${entry.patientAge}y` : ""}
+													{entry.patientSex ? ` / ${entry.patientSex}` : ""}
+													{entry.uhid ? ` / ${entry.uhid}` : ""}
+												</p>
+											)}
 											{entry.completeDiagnosis && (
 												<p>Diagnosis: {entry.completeDiagnosis}</p>
 											)}

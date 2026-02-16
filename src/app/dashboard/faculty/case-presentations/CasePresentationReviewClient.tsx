@@ -185,16 +185,21 @@ export function CasePresentationReviewClient({
 	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
 	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
 
-	// Unique students list
+	// Export status filter (separate from table display filter)
+	const [exportStatusFilter, setExportStatusFilter] = useState("ALL");
+
+	// Unique students list (filtered by batch)
 	const studentOptions = useMemo(() => {
 		const map = new Map<string, string>();
 		for (const s of submissions) {
+			if (batchFilter !== "ALL" && s.user.batchRelation?.name !== batchFilter)
+				continue;
 			map.set(s.user.id, `${s.user.firstName} ${s.user.lastName}`.trim());
 		}
 		return Array.from(map.entries())
 			.map(([id, name]) => ({ id, name: name || "Unknown" }))
 			.sort((a, b) => a.name.localeCompare(b.name));
-	}, [submissions]);
+	}, [submissions, batchFilter]);
 
 	// ---- Category helper ----
 	const getCategoryLabel = useCallback((val: string | null) => {
@@ -383,8 +388,8 @@ export function CasePresentationReviewClient({
 				(s) => s.user.batchRelation?.name === batchFilter,
 			);
 		}
-		if (statusFilter !== "ALL") {
-			exportData = exportData.filter((s) => s.status === statusFilter);
+		if (exportStatusFilter !== "ALL") {
+			exportData = exportData.filter((s) => s.status === exportStatusFilter);
 		}
 		if (selectedStudentId !== "all") {
 			exportData = exportData.filter((s) => s.user.id === selectedStudentId);
@@ -405,7 +410,7 @@ export function CasePresentationReviewClient({
 			batch: e.user.batchRelation?.name ?? "—",
 			semester: e.user.currentSemester ?? 0,
 		}));
-	}, [submissions, selectedStudentId, batchFilter, statusFilter]);
+	}, [submissions, selectedStudentId, batchFilter, exportStatusFilter]);
 
 	const handleExportPdf = useCallback(async () => {
 		const { exportCasePresentationReviewToPdf } =
@@ -423,8 +428,8 @@ export function CasePresentationReviewClient({
 
 	return (
 		<div className="space-y-6">
-			{/* Auto-Review Toggle + Export */}
-			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+			{/* Top-Level Filter Bar: Auto-Review + Batch + Status + Student + Export */}
+			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
 				{/* HOD Auto-Review Toggle */}
 				{role === "hod" && (
 					<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30">
@@ -446,14 +451,55 @@ export function CasePresentationReviewClient({
 					</div>
 				)}
 
-				<div className="flex items-center gap-2 ml-auto">
-					{/* Student Filter for Export */}
+				<div className="flex items-center gap-2 ml-auto flex-wrap">
+					{/* Batch Filter */}
+					{batches.length > 0 && (
+						<Select
+							value={batchFilter}
+							onValueChange={(val) => {
+								handleBatchChange(val);
+								setSelectedStudentId("all");
+							}}
+						>
+							<SelectTrigger className="w-40 text-xs">
+								<SelectValue placeholder="Batch" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="ALL">All Batches</SelectItem>
+								{batches.map((b) => (
+									<SelectItem key={b} value={b}>
+										{b}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
+
+					{/* Export Status Filter */}
+					<Select
+						value={exportStatusFilter}
+						onValueChange={setExportStatusFilter}
+					>
+						<SelectTrigger className="w-40 text-xs">
+							<Filter className="h-3.5 w-3.5 mr-1" />
+							<SelectValue placeholder="Status" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="ALL">All Status</SelectItem>
+							<SelectItem value="SUBMITTED">Pending</SelectItem>
+							<SelectItem value="SIGNED">Signed</SelectItem>
+							<SelectItem value="NEEDS_REVISION">Needs Revision</SelectItem>
+						</SelectContent>
+					</Select>
+
+					{/* Searchable Student Selector */}
 					<Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
 						<PopoverTrigger asChild>
 							<Button
 								variant="outline"
 								size="sm"
 								role="combobox"
+								aria-expanded={studentPickerOpen}
 								className="w-48 justify-between text-xs"
 							>
 								{selectedStudentId === "all" ?
@@ -520,7 +566,7 @@ export function CasePresentationReviewClient({
 							(
 								selectedStudentId !== "all" ||
 								batchFilter !== "ALL" ||
-								statusFilter !== "ALL"
+								exportStatusFilter !== "ALL"
 							) ?
 								"Download (Filtered)"
 							:	"Download All"
@@ -580,23 +626,6 @@ export function CasePresentationReviewClient({
 								</SelectItem>
 							</SelectContent>
 						</Select>
-
-						{/* Batch Filter */}
-						{batches.length > 0 && (
-							<Select value={batchFilter} onValueChange={handleBatchChange}>
-								<SelectTrigger className="w-44 shrink-0">
-									<SelectValue placeholder="Batch" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="ALL">All Batches</SelectItem>
-									{batches.map((b) => (
-										<SelectItem key={b} value={b}>
-											{b}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						)}
 
 						{/* Bulk Sign */}
 						{selectedIds.size > 0 && (

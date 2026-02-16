@@ -53,6 +53,7 @@ model User {
   researchActivities        ResearchActivity[]
   disasterDrills            DisasterDrill[]
   qualityImprovement        QualityImprovement[]
+  logbookFacultyReviews     LogbookFacultyReview[]
   evaluations               ResidentEvaluation[]
   thesis                    Thesis?
   transportLogs             TransportLog[]
@@ -313,12 +314,14 @@ model JournalClub {
   journalArticle  String?
   typeOfStudy     String?
   facultyRemark   String?
+  facultyId       String?
   status          EntryStatus @default(DRAFT)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 5: CLINICAL SKILL TRAINING ========================
@@ -332,12 +335,15 @@ model ClinicalSkillAdult {
   representativeDiagnosis String?
   confidenceLevel         ConfidenceLevel?
   totalTimesPerformed     Int             @default(0)
+  facultyId               String?         // Selected observing faculty
+  facultyRemark           String?         // Faculty remark / rejection reason
   status                  EntryStatus     @default(DRAFT)
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ClinicalSkillPediatric {
@@ -349,12 +355,15 @@ model ClinicalSkillPediatric {
   representativeDiagnosis String?
   confidenceLevel         ConfidenceLevel?
   totalTimesPerformed     Int             @default(0)
+  facultyId               String?         // Selected observing faculty
+  facultyRemark           String?         // Faculty remark / rejection reason
   status                  EntryStatus     @default(DRAFT)
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum ConfidenceLevel {
@@ -374,10 +383,14 @@ model CaseManagementLog {
   slNo              Int
   caseSubCategory   String          // e.g., "Acute Airway Obstruction"
   date              DateTime?
-  patientInfo       String?         // Name/Age/Sex/UHID
+  patientName       String?
+  patientAge        Int?
+  patientSex        String?         // Male / Female / Other
+  uhid              String?
   completeDiagnosis String?
   competencyLevel   CompetencyLevel?
   totalCaseTally    Int             @default(0)
+  facultyId         String?         // Selected faculty for sign-off
   status            EntryStatus     @default(DRAFT)
   facultyRemark     String?
   createdAt         DateTime        @default(now())
@@ -386,6 +399,7 @@ model CaseManagementLog {
   @@index([userId])
   @@index([category])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum CaseCategory {
@@ -432,11 +446,17 @@ model ProcedureLog {
   procedureCategory    ProcedureCategory
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int               @default(0)
   status               EntryStatus       @default(DRAFT)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
@@ -444,6 +464,7 @@ model ProcedureLog {
   @@index([userId])
   @@index([procedureCategory])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum ProcedureCategory {
@@ -520,6 +541,8 @@ model DiagnosticSkill {
   representativeDiagnosis String?
   confidenceLevel         ConfidenceLevel?
   totalTimesPerformed     Int                @default(0)
+  facultyId               String?
+  facultyRemark           String?
   status                  EntryStatus        @default(DRAFT)
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
@@ -544,11 +567,17 @@ model ImagingLog {
   imagingCategory      ImagingCategory
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int             @default(0)
   status               EntryStatus     @default(DRAFT)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
@@ -556,6 +585,7 @@ model ImagingLog {
   @@index([userId])
   @@index([imagingCategory])
   @@index([status])
+  @@index([facultyId])
 }
 
 enum ImagingCategory {
@@ -574,17 +604,24 @@ model TransportLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ConsentLog {
@@ -593,17 +630,24 @@ model ConsentLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model BadNewsLog {
@@ -612,17 +656,24 @@ model BadNewsLog {
   user                 User        @relation(fields: [userId], references: [id])
   slNo                 Int
   date                 DateTime?
-  patientInfo          String?
+  patientName          String?
+  patientAge           Int?
+  patientSex           String?
+  uhid                 String?
   completeDiagnosis    String?
   procedureDescription String?
   performedAtLocation  String?
   skillLevel           SkillLevel?
+  facultyId            String?
+  facultyRemark        String?
+  totalProcedureTally  Int         @default(0)
   status               EntryStatus @default(DRAFT)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 11: COURSES & CONFERENCES ========================
@@ -636,12 +687,15 @@ model CourseAttended {
   courseName      String?
   conductedAt     String?
   confidenceLevel String?
+  facultyId       String?
+  facultyRemark   String?
   status          EntryStatus @default(DRAFT)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ConferenceParticipation {
@@ -653,12 +707,15 @@ model ConferenceParticipation {
   conferenceName    String?
   conductedAt       String?
   participationRole String?
+  facultyId         String?
+  facultyRemark     String?
   status            EntryStatus @default(DRAFT)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model ResearchActivity {
@@ -670,12 +727,15 @@ model ResearchActivity {
   activity          String?
   conductedAt       String?
   participationRole String?
+  facultyId         String?
+  facultyRemark     String?
   status            EntryStatus @default(DRAFT)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 12: DISASTER & QUALITY ========================
@@ -688,12 +748,15 @@ model DisasterDrill {
   date           DateTime?
   description    String?
   roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
   status         EntryStatus @default(DRAFT)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
 }
 
 model QualityImprovement {
@@ -704,12 +767,36 @@ model QualityImprovement {
   date           DateTime?
   description    String?
   roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
   status         EntryStatus @default(DRAFT)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([facultyId])
+}
+
+// Periodic Logbook Faculty Review (SEM 1-6, 2 reviews per semester)
+model LogbookFacultyReview {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  slNo           Int
+  reviewNo       String?     // "SEM 1", "SEM 2", etc.
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
 }
 
 // ======================== MODULE 13: RESIDENT EVALUATION ========================
@@ -744,7 +831,7 @@ model ResidentEvaluation {
   @@index([status])
 }
 
-// ======================== MODULE 14: TRAINING & MENTORING ========================
+// ======================== MODULE 14: TRAINING & MENTORING / EVALUATION GRAPH ========================
 
 model TrainingMentoringRecord {
   id                   String      @id @default(cuid())
@@ -758,6 +845,11 @@ model TrainingMentoringRecord {
   softSkillScore       Int?        // Soft Skills domain
   researchScore        Int?        // Research domain
   overallScore         Float?      // Auto-calculated average
+  
+  // End Semester Assessment
+  theoryMarks          String?     // e.g. "Pass", "Fail", "72%"
+  practicalMarks       String?     // e.g. "Pass", "Fail", "85%"
+  
   evaluatedById        String?     // Faculty who evaluated
   remarks              String?
   status               EntryStatus @default(DRAFT)

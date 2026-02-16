@@ -1,15 +1,14 @@
 /**
  * @module ProfessionalEntryTable
- * @description Reusable table for H1 (Courses), H2 (Conferences), H3 (Research).
- * Displays date, primary text field, secondary text field, status, actions.
+ * @description Generic table component for professional entries.
+ * Used by Courses & Conferences, Research, and Disaster QI modules.
  *
- * @see PG Logbook .md — Sections: Courses, Conferences, Research
+ * @note This is a minimal placeholder. For Life-Support Courses, use
+ * the dedicated LifeSupportCoursesTable component instead.
  */
 
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
 	Card,
 	CardContent,
@@ -17,8 +16,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
 	Table,
 	TableBody,
@@ -27,36 +24,32 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { toast } from "sonner";
-import { format } from "date-fns";
-import { Loader2, Send, Trash2, Pencil, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import type { EntryStatus } from "@/types";
 
-interface ProfessionalEntry {
-	id: string;
-	slNo: number;
-	date: Date | string | null;
-	status: string;
-	[key: string]: unknown;
-}
-
-interface ColumnConfig {
+interface ColumnDef {
 	key: string;
 	label: string;
 	className?: string;
+	render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode;
 }
 
 interface ProfessionalEntryTableProps {
-	entries: ProfessionalEntry[];
+	entries: Record<string, unknown>[];
 	title: string;
 	description: string;
 	code: string;
 	maxEntries: number;
-	columns: ColumnConfig[];
+	columns: ColumnDef[];
 	newEntryHref: string;
-	editHrefPrefix: string;
-	onSubmit: (id: string) => Promise<{ success: boolean }>;
-	onDelete: (id: string) => Promise<{ success: boolean }>;
+	editHrefPrefix?: string;
+	onSubmit?: (id: string) => Promise<void>;
+	onDelete?: (id: string) => Promise<void>;
 }
 
 export function ProfessionalEntryTable({
@@ -71,168 +64,119 @@ export function ProfessionalEntryTable({
 	onSubmit,
 	onDelete,
 }: ProfessionalEntryTableProps) {
-	const router = useRouter();
-	const [isPending, startTransition] = useTransition();
-	const [actionId, setActionId] = useState<string | null>(null);
+	const signedCount = entries.filter((e) => e.status === "SIGNED").length;
+	const draftCount = entries.filter((e) => e.status === "DRAFT").length;
 
-	function handleSubmit(id: string) {
-		setActionId(id);
-		startTransition(async () => {
-			try {
-				const result = await onSubmit(id);
-				if (result.success) {
-					toast.success("Entry submitted for review");
-					router.refresh();
-				}
-			} catch {
-				toast.error("Failed to submit entry");
-			} finally {
-				setActionId(null);
-			}
-		});
-	}
-
-	function handleDelete(id: string) {
-		setActionId(id);
-		startTransition(async () => {
-			try {
-				const result = await onDelete(id);
-				if (result.success) {
-					toast.success("Entry deleted");
-					router.refresh();
-				}
-			} catch {
-				toast.error("Failed to delete entry");
-			} finally {
-				setActionId(null);
-			}
-		});
-	}
-
-	const progressPercent =
-		maxEntries > 0 ?
-			Math.min(100, Math.round((entries.length / maxEntries) * 100))
-		:	0;
+	const renderCell = (col: ColumnDef, entry: Record<string, unknown>) => {
+		const value = entry[col.key];
+		if (col.render) return col.render(value, entry);
+		if (col.key === "date" && value) {
+			return format(new Date(value as string), "dd/MM/yyyy");
+		}
+		return String(value ?? "—");
+	};
 
 	return (
 		<Card>
-			<CardHeader>
-				<div className="flex items-start justify-between">
-					<div>
-						<CardTitle className="flex items-center gap-2">
-							<Badge variant="outline" className="text-xs">
-								{code}
-							</Badge>
-							{title}
-						</CardTitle>
-						<CardDescription className="mt-1">{description}</CardDescription>
-					</div>
-					<Button size="sm" onClick={() => router.push(newEntryHref)}>
-						<Plus className="h-4 w-4 mr-1" />
-						Add Entry
-					</Button>
-				</div>
-				<div className="mt-3">
-					<div className="flex items-center justify-between text-sm text-muted-foreground mb-1">
-						<span>
-							{entries.length} of {maxEntries} entries
+			<CardHeader className="flex flex-row items-start justify-between">
+				<div>
+					<CardTitle className="flex items-center gap-2">
+						<span className="text-sm font-semibold bg-muted px-2 py-0.5 rounded">
+							{code}
 						</span>
-						<span>{progressPercent}%</span>
-					</div>
-					<div className="h-2 w-full rounded-full bg-muted">
-						<div
-							className="h-2 rounded-full bg-primary transition-all"
-							style={{ width: `${progressPercent}%` }}
-						/>
-					</div>
+						{title}
+					</CardTitle>
+					<CardDescription>{description}</CardDescription>
+					<p className="text-xs text-muted-foreground mt-1">
+						{signedCount} of {maxEntries} entries signed
+					</p>
 				</div>
+				{entries.length < maxEntries && (
+					<Link href={newEntryHref}>
+						<Button size="sm" className="gap-1.5">
+							<Plus className="h-4 w-4" />
+							Add Entry
+						</Button>
+					</Link>
+				)}
 			</CardHeader>
-			<CardContent>
-				{entries.length === 0 ?
-					<div className="border rounded-lg p-8 text-center text-muted-foreground">
-						No entries yet. Add your first entry.
-					</div>
-				:	<div className="overflow-x-auto">
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead className="w-14">Sl.</TableHead>
-									<TableHead className="w-28">Date</TableHead>
-									{columns.map((col) => (
-										<TableHead key={col.key} className={col.className}>
-											{col.label}
-										</TableHead>
-									))}
-									<TableHead className="w-24">Status</TableHead>
-									<TableHead className="w-32">Actions</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{entries.map((entry) => (
-									<TableRow key={entry.id}>
-										<TableCell className="font-medium">{entry.slNo}</TableCell>
-										<TableCell>
-											{entry.date ?
-												format(new Date(entry.date as string), "dd MMM yyyy")
-											:	"—"}
-										</TableCell>
-										{columns.map((col) => (
-											<TableCell key={col.key} className={col.className}>
-												<span className="line-clamp-2">
-													{(entry[col.key] as string) ?? "—"}
-												</span>
-											</TableCell>
-										))}
-										<TableCell>
-											<StatusBadge status={entry.status as never} />
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center gap-1">
-												{(entry.status === "DRAFT" ||
-													entry.status === "NEEDS_REVISION") && (
-													<>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7"
-															onClick={() =>
-																router.push(
-																	`${editHrefPrefix}/${entry.id}/edit`,
-																)
-															}
-														>
-															<Pencil className="h-3.5 w-3.5" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7"
-															onClick={() => handleSubmit(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															{isPending && actionId === entry.id ?
-																<Loader2 className="h-3.5 w-3.5 animate-spin" />
-															:	<Send className="h-3.5 w-3.5" />}
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7 text-destructive"
-															onClick={() => handleDelete(entry.id)}
-															disabled={isPending && actionId === entry.id}
-														>
-															<Trash2 className="h-3.5 w-3.5" />
-														</Button>
-													</>
-												)}
-											</div>
-										</TableCell>
-									</TableRow>
+			<CardContent className="p-0 overflow-x-auto">
+				<Table>
+					<TableHeader>
+						<TableRow className="bg-muted/50">
+							<TableHead className="w-12 text-center font-bold">Sl.</TableHead>
+							<TableHead className="w-28 text-center font-bold">Date</TableHead>
+							{columns.map((col) => (
+								<TableHead
+									key={col.key}
+									className={cn("font-bold", col.className)}
+								>
+									{col.label}
+								</TableHead>
+							))}
+							<TableHead className="w-24 text-center font-bold">
+								Status
+							</TableHead>
+							<TableHead className="w-28 text-center font-bold">
+								Actions
+							</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{entries.map((entry, idx) => (
+							<TableRow
+								key={String(entry.id)}
+								className={cn(
+									entry.status === "SIGNED" && "bg-green-50/50",
+									entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
+								)}
+							>
+								<TableCell className="text-center font-medium">
+									{idx + 1}.
+								</TableCell>
+								<TableCell className="text-center text-sm">
+									{entry.date ?
+										format(new Date(entry.date as string), "dd/MM/yy")
+									:	"—"}
+								</TableCell>
+								{columns.map((col) => (
+									<TableCell
+										key={col.key}
+										className={cn("text-sm", col.className)}
+									>
+										{renderCell(col, entry)}
+									</TableCell>
 								))}
-							</TableBody>
-						</Table>
-					</div>
-				}
+								<TableCell className="text-center">
+									<StatusBadge status={entry.status as EntryStatus} size="sm" />
+								</TableCell>
+								<TableCell className="text-center">
+									{entry.status === "DRAFT" && onDelete && (
+										<Button
+											variant="ghost"
+											size="icon"
+											className="h-7 w-7 text-destructive"
+											onClick={() => onDelete(String(entry.id))}
+											title="Delete"
+										>
+											<Trash2 className="h-3.5 w-3.5" />
+										</Button>
+									)}
+								</TableCell>
+							</TableRow>
+						))}
+						{entries.length === 0 && (
+							<TableRow>
+								<TableCell
+									colSpan={columns.length + 4}
+									className="text-center py-8 text-muted-foreground"
+								>
+									No entries yet. Add your first entry.
+								</TableCell>
+							</TableRow>
+						)}
+					</TableBody>
+				</Table>
 			</CardContent>
 		</Card>
 	);

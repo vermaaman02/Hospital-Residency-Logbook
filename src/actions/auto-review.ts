@@ -17,7 +17,23 @@ export type AutoReviewCategory =
 	| "thesis"
 	| "trainingMentoring"
 	| "casePresentations"
-	| "seminarDiscussions";
+	| "seminarDiscussions"
+	| "journalClubs"
+	| "clinicalSkills"
+	| "diagnosticSkills"
+	| "caseManagement"
+	| "procedureLogs"
+	| "imagingLogs"
+	| "transportLogs"
+	| "consentLogs"
+	| "badNewsLogs"
+	| "lifeSupportCourses"
+	| "conferences"
+	| "researchActivities"
+	| "disasterDrills"
+	| "qualityImprovement"
+	| "logbookReviews"
+	| "evaluationGraphFacultyEnabled";
 
 export interface AutoReviewSettings {
 	rotationPostings: boolean;
@@ -25,6 +41,22 @@ export interface AutoReviewSettings {
 	trainingMentoring: boolean;
 	casePresentations: boolean;
 	seminarDiscussions: boolean;
+	journalClubs: boolean;
+	clinicalSkills: boolean;
+	diagnosticSkills: boolean;
+	caseManagement: boolean;
+	procedureLogs: boolean;
+	imagingLogs: boolean;
+	transportLogs: boolean;
+	consentLogs: boolean;
+	badNewsLogs: boolean;
+	lifeSupportCourses: boolean;
+	conferences: boolean;
+	researchActivities: boolean;
+	disasterDrills: boolean;
+	qualityImprovement: boolean;
+	logbookReviews: boolean;
+	evaluationGraphFacultyEnabled: boolean;
 }
 
 /**
@@ -45,6 +77,22 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		trainingMentoring: map["trainingMentoring"] ?? false,
 		casePresentations: map["casePresentations"] ?? false,
 		seminarDiscussions: map["seminarDiscussions"] ?? false,
+		journalClubs: map["journalClubs"] ?? false,
+		clinicalSkills: map["clinicalSkills"] ?? false,
+		diagnosticSkills: map["diagnosticSkills"] ?? false,
+		caseManagement: map["caseManagement"] ?? false,
+		procedureLogs: map["procedureLogs"] ?? false,
+		imagingLogs: map["imagingLogs"] ?? false,
+		transportLogs: map["transportLogs"] ?? false,
+		consentLogs: map["consentLogs"] ?? false,
+		badNewsLogs: map["badNewsLogs"] ?? false,
+		lifeSupportCourses: map["lifeSupportCourses"] ?? false,
+		conferences: map["conferences"] ?? false,
+		researchActivities: map["researchActivities"] ?? false,
+		disasterDrills: map["disasterDrills"] ?? false,
+		qualityImprovement: map["qualityImprovement"] ?? false,
+		logbookReviews: map["logbookReviews"] ?? false,
+		evaluationGraphFacultyEnabled: map["evaluationGraphFacultyEnabled"] ?? true,
 	};
 }
 
@@ -73,6 +121,35 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/hod/case-presentations");
 	revalidatePath("/dashboard/faculty/case-presentations");
+	revalidatePath("/dashboard/faculty/reviews");
+	revalidatePath("/dashboard/faculty/clinical-skills");
+	revalidatePath("/dashboard/hod/clinical-skills");
+	revalidatePath("/dashboard/faculty/case-management");
+	revalidatePath("/dashboard/hod/case-management");
+	revalidatePath("/dashboard/faculty/procedures");
+	revalidatePath("/dashboard/hod/procedures");
+	revalidatePath("/dashboard/faculty/imaging");
+	revalidatePath("/dashboard/hod/imaging");
+	revalidatePath("/dashboard/faculty/transport");
+	revalidatePath("/dashboard/hod/transport");
+	revalidatePath("/dashboard/faculty/consent-bad-news");
+	revalidatePath("/dashboard/hod/consent-bad-news");
+	revalidatePath("/dashboard/faculty/life-support-courses");
+	revalidatePath("/dashboard/hod/life-support-courses");
+	revalidatePath("/dashboard/faculty/conferences");
+	revalidatePath("/dashboard/hod/conferences");
+	revalidatePath("/dashboard/faculty/research-activities");
+	revalidatePath("/dashboard/hod/research-activities");
+	revalidatePath("/dashboard/faculty/disaster-drills");
+	revalidatePath("/dashboard/hod/disaster-drills");
+	revalidatePath("/dashboard/faculty/quality-improvement");
+	revalidatePath("/dashboard/hod/quality-improvement");
+	revalidatePath("/dashboard/faculty/logbook-reviews");
+	revalidatePath("/dashboard/hod/logbook-reviews");
+	revalidatePath("/dashboard/faculty/evaluation-graph");
+	revalidatePath("/dashboard/hod/evaluation-graph");
+	revalidatePath("/dashboard/faculty/diagnostics");
+	revalidatePath("/dashboard/hod/diagnostics");
 	return { success: true, category, enabled };
 }
 
