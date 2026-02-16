@@ -99,7 +99,7 @@ const studentNavSections: NavSection[] = [
 			},
 			{
 				title: "My Profile",
-				href: "/dashboard/student/profile",
+				href: "/dashboard/profile",
 				icon: <UserCircle className="h-4 w-4" />,
 				roles: ["student"],
 			},
@@ -397,6 +397,17 @@ const facultyNavSections: NavSection[] = [
 			},
 		],
 	},
+	{
+		title: "Account",
+		items: [
+			{
+				title: "My Profile",
+				href: "/dashboard/profile",
+				icon: <UserCircle className="h-4 w-4" />,
+				roles: ["faculty"],
+			},
+		],
+	},
 ];
 
 const hodNavSections: NavSection[] = [
@@ -603,6 +614,17 @@ const hodNavSections: NavSection[] = [
 		],
 	},
 	{
+		title: "Account",
+		items: [
+			{
+				title: "My Profile",
+				href: "/dashboard/profile",
+				icon: <UserCircle className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+		],
+	},
+	{
 		title: "Support",
 		items: [
 			{
@@ -715,12 +737,12 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 						{/* Collapse toggle visible on desktop only */}
 						<button
 							onClick={() => setIsCollapsed(!isCollapsed)}
-							className="hidden lg:block rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+							className="hidden lg:flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-gray-900 hover:bg-gray-100 hover:border-gray-300 transition-all shadow-sm"
 							aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
 						>
 							{isCollapsed ?
-								<ChevronRight className="h-4 w-4" />
-							:	<ChevronLeft className="h-4 w-4" />}
+								<ChevronRight className="h-4.5 w-4.5" />
+							:	<ChevronLeft className="h-4.5 w-4.5" />}
 						</button>
 					</div>
 				</div>
