@@ -11,6 +11,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+/** Routes that must NOT require auth (healthcheck, webhooks) */
+const isPublicApiRoute = createRouteMatcher([
+	"/api/health",
+	"/api/webhooks(.*)",
+]);
+
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api(.*)"]);
 
 const isHodRoute = createRouteMatcher(["/dashboard/hod(.*)"]);
@@ -25,6 +31,11 @@ function getDashboardForRole(role: string | undefined): string {
 }
 
 export default clerkMiddleware(async (auth, req) => {
+	// Allow public API routes through without auth (healthcheck, webhooks)
+	if (isPublicApiRoute(req)) {
+		return NextResponse.next();
+	}
+
 	// Protect all dashboard and API routes — must be signed in
 	if (isProtectedRoute(req)) {
 		await auth.protect();
