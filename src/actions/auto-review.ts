@@ -16,6 +16,7 @@ export type AutoReviewCategory =
 	| "rotationPostings"
 	| "thesis"
 	| "trainingMentoring"
+	| "attendance"
 	| "casePresentations"
 	| "seminarDiscussions"
 	| "journalClubs"
@@ -39,6 +40,7 @@ export interface AutoReviewSettings {
 	rotationPostings: boolean;
 	thesis: boolean;
 	trainingMentoring: boolean;
+	attendance: boolean;
 	casePresentations: boolean;
 	seminarDiscussions: boolean;
 	journalClubs: boolean;
@@ -75,6 +77,7 @@ export async function getAutoReviewSettings(): Promise<AutoReviewSettings> {
 		rotationPostings: map["rotationPostings"] ?? false,
 		thesis: map["thesis"] ?? false,
 		trainingMentoring: map["trainingMentoring"] ?? false,
+		attendance: map["attendance"] ?? false,
 		casePresentations: map["casePresentations"] ?? false,
 		seminarDiscussions: map["seminarDiscussions"] ?? false,
 		journalClubs: map["journalClubs"] ?? false,
@@ -150,6 +153,8 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/evaluation-graph");
 	revalidatePath("/dashboard/faculty/diagnostics");
 	revalidatePath("/dashboard/hod/diagnostics");
+	revalidatePath("/dashboard/faculty/attendance");
+	revalidatePath("/dashboard/hod/attendance");
 	return { success: true, category, enabled };
 }
 

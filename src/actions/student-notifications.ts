@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 export interface StudentNotification {
 	id: string;
 	type:
+		| "attendance"
 		| "rotation"
 		| "case-presentation"
 		| "seminar"
@@ -53,6 +54,7 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 
 	// Fetch signed/rejected entries from all modules in parallel
 	const [
+		attendanceSheets,
 		rotations,
 		casePresentations,
 		seminars,
@@ -62,6 +64,22 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 		caseManagementLogs,
 		procedureLogs,
 	] = await Promise.all([
+		prisma.attendanceSheet.findMany({
+			where: {
+				userId: user.id,
+				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+			},
+			orderBy: { updatedAt: "desc" },
+			take: 5,
+			select: {
+				id: true,
+				weekStartDate: true,
+				weekEndDate: true,
+				status: true,
+				facultyRemark: true,
+				updatedAt: true,
+			},
+		}),
 		prisma.rotationPosting.findMany({
 			where: {
 				userId: user.id,
@@ -179,6 +197,24 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 			},
 		}),
 	]);
+
+	// Map attendance sheets
+	for (const a of attendanceSheets) {
+		const weekLabel = `${a.weekStartDate.toLocaleDateString()} – ${a.weekEndDate.toLocaleDateString()}`;
+		notifications.push({
+			id: a.id,
+			type: "attendance",
+			title: `Attendance: ${weekLabel}`,
+			message:
+				a.status === "SIGNED" ?
+					"Attendance sheet approved"
+				:	"Revision needed for attendance sheet",
+			status: a.status as "SIGNED" | "NEEDS_REVISION",
+			remark: a.facultyRemark,
+			updatedAt: a.updatedAt.toISOString(),
+			href: "/dashboard/student/attendance",
+		});
+	}
 
 	// Map rotation postings
 	for (const r of rotations) {

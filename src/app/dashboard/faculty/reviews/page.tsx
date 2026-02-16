@@ -47,19 +47,6 @@ export default async function FacultyReviewsPage({
 		orderBy: { createdAt: "desc" },
 	});
 
-	// Get pending attendance sheets (HOD only)
-	const pendingAttendance =
-		authResult.role === "hod" ?
-			await prisma.attendanceSheet.findMany({
-				where: { status: "SUBMITTED" },
-				include: {
-					user: { select: { firstName: true, lastName: true, email: true } },
-					entries: true,
-				},
-				orderBy: { createdAt: "desc" },
-			})
-		:	[];
-
 	// Get pending academic entries (Case Presentations, Seminars, Journal Clubs)
 	const pendingCasePresentations = await prisma.casePresentation.findMany({
 		where: studentFilter,
@@ -220,7 +207,6 @@ export default async function FacultyReviewsPage({
 			/>
 			<FacultyReviewsClient
 				pendingRotations={pendingRotations}
-				pendingAttendance={pendingAttendance}
 				pendingCasePresentations={pendingCasePresentations}
 				pendingSeminars={pendingSeminars}
 				pendingJournalClubs={pendingJournalClubs}

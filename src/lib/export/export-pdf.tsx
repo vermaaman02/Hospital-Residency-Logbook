@@ -1929,3 +1929,202 @@ export async function exportSimpleLogToPdf(
 	const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
 	saveAs(blob, `${safeTitle}_${formatFileDate()}.pdf`);
 }
+
+// ======================== ATTENDANCE — PDF EXPORT ========================
+
+interface AttendanceEntryPdf {
+	day: string;
+	date: string | null;
+	presentAbsent: string | null;
+	hodName: string | null;
+}
+
+interface AttendanceSheetPdf {
+	id: string;
+	weekStartDate: string;
+	weekEndDate: string;
+	batch: string | null;
+	postedDepartment: string | null;
+	status: string;
+	facultyRemark: string | null;
+	entries: AttendanceEntryPdf[];
+	user?: {
+		firstName: string;
+		lastName: string;
+		batchRelation?: { name: string } | null;
+	};
+}
+
+const DAY_LABELS_PDF: Record<string, string> = {
+	MONDAY: "Monday",
+	TUESDAY: "Tuesday",
+	WEDNESDAY: "Wednesday",
+	THURSDAY: "Thursday",
+	FRIDAY: "Friday",
+	SATURDAY: "Saturday",
+	SUNDAY: "Sunday",
+};
+
+function fmtShortDate(d: string | null): string {
+	if (!d) return "—";
+	try {
+		const dt = new Date(d);
+		return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+	} catch {
+		return "—";
+	}
+}
+
+function AttendancePdf({
+	sheets,
+	title,
+	studentName,
+}: {
+	sheets: AttendanceSheetPdf[];
+	title: string;
+	studentName?: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>{title}</Text>
+					{studentName && <Text style={styles.subtitle}>{studentName}</Text>}
+					<Text style={styles.subtitle}>
+						Generated on {new Date().toLocaleDateString()}
+					</Text>
+				</View>
+
+				<View style={styles.divider} />
+
+				{sheets.length === 0 && (
+					<Text style={{ fontSize: 10, color: "#888", marginTop: 12 }}>
+						No attendance sheets to display.
+					</Text>
+				)}
+
+				{sheets.map((sheet, si) => {
+					const weekLabel = `${fmtShortDate(sheet.weekStartDate)} – ${fmtShortDate(sheet.weekEndDate)}`;
+					const sheetStudentName =
+						sheet.user ?
+							`${sheet.user.firstName} ${sheet.user.lastName}`
+						:	undefined;
+
+					return (
+						<View key={sheet.id} style={{ marginBottom: 18 }} wrap={false}>
+							{/* Sheet Header */}
+							<Text style={styles.sectionTitle}>
+								Week {si + 1}: {weekLabel}
+							</Text>
+
+							{sheetStudentName && (
+								<View style={styles.infoRow}>
+									<Text style={styles.infoLabel}>Student:</Text>
+									<Text style={styles.infoValue}>{sheetStudentName}</Text>
+								</View>
+							)}
+							{sheet.postedDepartment && (
+								<View style={styles.infoRow}>
+									<Text style={styles.infoLabel}>Department:</Text>
+									<Text style={styles.infoValue}>{sheet.postedDepartment}</Text>
+								</View>
+							)}
+							{sheet.batch && (
+								<View style={styles.infoRow}>
+									<Text style={styles.infoLabel}>Batch:</Text>
+									<Text style={styles.infoValue}>{sheet.batch}</Text>
+								</View>
+							)}
+							<View style={styles.infoRow}>
+								<Text style={styles.infoLabel}>Status:</Text>
+								<Text style={styles.infoValue}>{sheet.status}</Text>
+							</View>
+							{sheet.facultyRemark && (
+								<View style={styles.infoRow}>
+									<Text style={styles.infoLabel}>Remark:</Text>
+									<Text style={styles.infoValue}>{sheet.facultyRemark}</Text>
+								</View>
+							)}
+
+							{/* Table Header */}
+							<View style={styles.table}>
+								<View style={styles.tableHeader}>
+									<Text style={[styles.tableCellBold, { width: "8%" }]}>#</Text>
+									<Text style={[styles.tableCellBold, { width: "20%" }]}>
+										Day
+									</Text>
+									<Text style={[styles.tableCellBold, { width: "20%" }]}>
+										Date
+									</Text>
+									<Text style={[styles.tableCellBold, { width: "22%" }]}>
+										Present/Absent
+									</Text>
+									<Text style={[styles.tableCellBold, { width: "30%" }]}>
+										HoD Name
+									</Text>
+								</View>
+
+								{/* Table Rows */}
+								{sheet.entries.map((entry, ei) => (
+									<View
+										key={ei}
+										style={[
+											styles.tableRow,
+											ei % 2 === 1 ? styles.tableRowAlt : {},
+										]}
+									>
+										<Text style={[styles.tableCell, { width: "8%" }]}>
+											{ei + 1}
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											{DAY_LABELS_PDF[entry.day] ?? entry.day}
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											{fmtShortDate(entry.date)}
+										</Text>
+										<Text style={[styles.tableCell, { width: "22%" }]}>
+											{entry.presentAbsent ?? "—"}
+										</Text>
+										<Text style={[styles.tableCell, { width: "30%" }]}>
+											{entry.hodName ?? "—"}
+										</Text>
+									</View>
+								))}
+							</View>
+						</View>
+					);
+				})}
+
+				<View style={styles.footer}>
+					<Text>
+						Total: {sheets.length} week(s) —{" "}
+						{sheets.reduce((sum, s) => sum + s.entries.length, 0)} entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+/**
+ * Export attendance sheets to PDF (student view — own sheets).
+ */
+export async function exportAttendancePdf(sheets: AttendanceSheetPdf[]) {
+	const blob = await pdf(
+		<AttendancePdf
+			sheets={sheets}
+			title="Attendance Sheet for Clinical Posting"
+		/>,
+	).toBlob();
+	saveAs(blob, `Attendance_Sheets_${formatFileDate()}.pdf`);
+}
+
+/**
+ * Export attendance sheets to PDF (review view — with student names).
+ */
+export async function exportAttendanceReviewPdf(sheets: AttendanceSheetPdf[]) {
+	const blob = await pdf(
+		<AttendancePdf sheets={sheets} title="Attendance Review — All Students" />,
+	).toBlob();
+	saveAs(blob, `Attendance_Review_${formatFileDate()}.pdf`);
+}

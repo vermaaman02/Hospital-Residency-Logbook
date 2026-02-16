@@ -228,6 +228,7 @@ model AttendanceSheet {
   postedDepartment String?
   entries          AttendanceEntry[]
   status           EntryStatus       @default(DRAFT)
+  facultyRemark    String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 

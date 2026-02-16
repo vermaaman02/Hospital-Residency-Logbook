@@ -251,6 +251,13 @@ const facultyNavSections: NavSection[] = [
 				roles: ["faculty"],
 				badgeKey: "rotationPostings",
 			},
+			{
+				title: "Attendance",
+				href: "/dashboard/faculty/attendance",
+				icon: <CalendarDays className="h-4 w-4" />,
+				roles: ["faculty"],
+				badgeKey: "attendance",
+			},
 		],
 	},
 	{
@@ -451,9 +458,10 @@ const hodNavSections: NavSection[] = [
 			},
 			{
 				title: "Attendance",
-				href: "/dashboard/faculty/reviews?category=administrative&tab=attendance",
+				href: "/dashboard/hod/attendance",
 				icon: <CalendarDays className="h-4 w-4" />,
 				roles: ["hod"],
+				badgeKey: "attendance",
 			},
 		],
 	},

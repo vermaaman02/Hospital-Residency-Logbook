@@ -14,6 +14,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export interface PendingCounts {
+	attendance: number;
 	rotationPostings: number;
 	thesisRecords: number;
 	casePresentations: number;
@@ -44,6 +45,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user)
 		return {
+			attendance: 0,
 			rotationPostings: 0,
 			thesisRecords: 0,
 			casePresentations: 0,
@@ -76,6 +78,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		const batchIds = batchAssignments.map((b) => b.batchId);
 		if (batchIds.length === 0)
 			return {
+				attendance: 0,
 				rotationPostings: 0,
 				thesisRecords: 0,
 				casePresentations: 0,
@@ -109,6 +112,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
 	const [
+		attendance,
 		rotationPostings,
 		thesisRecords,
 		casePresentations,
@@ -130,6 +134,9 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		logbookReviews,
 		evaluationGraph,
 	] = await Promise.all([
+		prisma.attendanceSheet.count({
+			where: { ...studentFilter, status: "SUBMITTED" as never },
+		}),
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },
 		}),
@@ -198,6 +205,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 	const clinicalSkills = clinicalSkillsAdult + clinicalSkillsPediatric;
 
 	const total =
+		attendance +
 		rotationPostings +
 		thesisRecords +
 		casePresentations +
@@ -219,6 +227,7 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		evaluationGraph;
 
 	return {
+		attendance,
 		rotationPostings,
 		thesisRecords,
 		casePresentations,
