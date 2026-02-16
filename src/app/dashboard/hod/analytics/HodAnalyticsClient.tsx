@@ -385,9 +385,13 @@ function OverviewSection({
 										outerRadius={100}
 										dataKey="count"
 										nameKey="status"
-										label={({ status, percent }) =>
-											`${status} ${(percent * 100).toFixed(0)}%`
-										}
+										label={(props) => {
+											const d = props as unknown as {
+												status: string;
+												percent: number;
+											};
+											return `${d.status} ${(d.percent * 100).toFixed(0)}%`;
+										}}
 										labelLine={false}
 									>
 										{overview.statusDistribution.map((entry) => (
@@ -466,7 +470,13 @@ function RotationsSection({
 									outerRadius={85}
 									dataKey="value"
 									nameKey="label"
-									label={({ label, value }) => `${label}: ${value}`}
+									label={(props) => {
+										const d = props as unknown as {
+											label: string;
+											value: number;
+										};
+										return `${d.label}: ${d.value}`;
+									}}
 								>
 									<Cell fill="#0066CC" />
 									<Cell fill="#00897B" />
@@ -497,7 +507,13 @@ function RotationsSection({
 									outerRadius={85}
 									dataKey="count"
 									nameKey="status"
-									label={({ status, count }) => `${status}: ${count}`}
+									label={(props) => {
+										const d = props as unknown as {
+											status: string;
+											count: number;
+										};
+										return `${d.status}: ${d.count}`;
+									}}
 								>
 									{rotations.statusSplit.map((entry) => (
 										<Cell
@@ -706,9 +722,13 @@ function CaseManagementSection({
 										outerRadius={90}
 										dataKey="count"
 										nameKey="level"
-										label={({ level, percent }) =>
-											`${level} ${(percent * 100).toFixed(0)}%`
-										}
+										label={(props) => {
+											const d = props as unknown as {
+												level: string;
+												percent: number;
+											};
+											return `${d.level} ${(d.percent * 100).toFixed(0)}%`;
+										}}
 										labelLine={false}
 									>
 										{caseManagement.competencyDist.map(
@@ -843,9 +863,13 @@ function ClinicalSkillsSection({
 									outerRadius={90}
 									dataKey="count"
 									nameKey="level"
-									label={({ level, percent }) =>
-										`${level} ${(percent * 100).toFixed(0)}%`
-									}
+									label={(props) => {
+										const d = props as unknown as {
+											level: string;
+											percent: number;
+										};
+										return `${d.level} ${(d.percent * 100).toFixed(0)}%`;
+									}}
 									labelLine={false}
 								>
 									{clinicalSkills.confidenceDist.map(
