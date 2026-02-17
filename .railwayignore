@@ -1,0 +1,39 @@
+# Railway Ignore File
+# Files and directories to exclude from Railway deployments
+
+# Documentation (except README)
+*.md
+!README.md
+
+# Development files
+.env.example
+.env.local
+.env*.local
+.vscode/
+.idea/
+
+# Test files
+__tests__/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# GitHub
+.github/
+
+# Seed files (run manually via railway:seed)
+prisma/seed.ts
+
+# Local development
+*.local
+.DS_Store
+
+# Logbook source document
+PG Logbook .md
+roadmap.md
