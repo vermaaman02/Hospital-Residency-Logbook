@@ -198,7 +198,7 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 		}
 	}
 
-	function handleRoleChange(clerkId: string, newRole: string) {
+	function _handleRoleChange(clerkId: string, newRole: string) {
 		if (newRole === "none") return;
 		startTransition(async () => {
 			try {
@@ -546,35 +546,27 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 															Semester {user.currentSemester ?? 1}
 														</p>
 													</div>
-												:	<span className="text-xs text-muted-foreground">
-														—
-													</span>
-												}
-											</TableCell>
-
-											{/* Change Role */}
-											<TableCell>
-												<Select
-													defaultValue={user.role}
-													onValueChange={(val) =>
-														handleRoleChange(user.clerkId, val)
-													}
-													disabled={isPending}
-												>
-													<SelectTrigger className="w-28 h-8 text-xs">
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectItem value="hod">HOD</SelectItem>
-														<SelectItem value="faculty">Faculty</SelectItem>
-														<SelectItem value="student">Student</SelectItem>
-													</SelectContent>
-												</Select>
+												: (
+													user.role === "faculty" &&
+													user.assignedBatches.length > 0
+												) ?
+													<div className="flex flex-wrap gap-1">
+														{user.assignedBatches.map((ab) => (
+															<Badge
+																key={ab.id}
+																variant="outline"
+																className="text-xs"
+															>
+																{ab.name}
+															</Badge>
+														))}
+													</div>
+												:	<span className="text-muted-foreground">—</span>}
 											</TableCell>
 
 											{/* Actions */}
 											<TableCell className="text-right">
-												<div className="flex items-center justify-end gap-1.5">
+												<div className="flex items-center justify-end gap-1">
 													<Button
 														variant="outline"
 														size="sm"

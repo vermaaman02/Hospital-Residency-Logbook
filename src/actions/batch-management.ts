@@ -295,6 +295,111 @@ export async function removeFacultyFromBatch(
 }
 
 /**
+ * Bulk assign multiple students to a batch (HOD only).
+ * Updates each student's batchId, batch name, and currentSemester.
+ */
+export async function bulkAssignStudentsToBatch(
+	studentIds: string[],
+	batchId: string,
+) {
+	await requireRole(["hod"]);
+
+	if (!studentIds.length) {
+		return { success: false, message: "No students selected" };
+	}
+
+	const batch = await prisma.batch.findUnique({ where: { id: batchId } });
+	if (!batch) return { success: false, message: "Batch not found" };
+
+	// Verify all IDs are valid students
+	const students = await prisma.user.findMany({
+		where: { id: { in: studentIds }, role: "STUDENT" },
+		select: { id: true },
+	});
+
+	if (students.length !== studentIds.length) {
+		return {
+			success: false,
+			message: "Some selected users are not valid students",
+		};
+	}
+
+	await prisma.user.updateMany({
+		where: { id: { in: studentIds } },
+		data: {
+			batchId,
+			batch: batch.name,
+			currentSemester: batch.currentSemester,
+		},
+	});
+
+	revalidatePath("/dashboard/hod/manage-users");
+	return {
+		success: true,
+		message: `${students.length} student(s) assigned to "${batch.name}"`,
+	};
+}
+
+/**
+ * Bulk assign multiple faculty members to a batch (HOD only).
+ * Creates FacultyBatchAssignment records, skipping duplicates.
+ */
+export async function bulkAssignFacultyToBatch(
+	facultyIds: string[],
+	batchId: string,
+) {
+	await requireRole(["hod"]);
+
+	if (!facultyIds.length) {
+		return { success: false, message: "No faculty selected" };
+	}
+
+	const batch = await prisma.batch.findUnique({ where: { id: batchId } });
+	if (!batch) return { success: false, message: "Batch not found" };
+
+	// Verify all IDs are valid faculty
+	const facultyMembers = await prisma.user.findMany({
+		where: { id: { in: facultyIds }, role: "FACULTY" },
+		select: { id: true },
+	});
+
+	if (facultyMembers.length !== facultyIds.length) {
+		return {
+			success: false,
+			message: "Some selected users are not valid faculty",
+		};
+	}
+
+	// Find existing assignments to skip duplicates
+	const existing = await prisma.facultyBatchAssignment.findMany({
+		where: { batchId, facultyId: { in: facultyIds } },
+		select: { facultyId: true },
+	});
+	const existingSet = new Set(existing.map((e) => e.facultyId));
+	const newFacultyIds = facultyIds.filter((id) => !existingSet.has(id));
+
+	if (newFacultyIds.length === 0) {
+		return {
+			success: false,
+			message: "All selected faculty are already assigned to this batch",
+		};
+	}
+
+	await prisma.facultyBatchAssignment.createMany({
+		data: newFacultyIds.map((facultyId) => ({ facultyId, batchId })),
+	});
+
+	const skipped = facultyIds.length - newFacultyIds.length;
+	const msg =
+		skipped > 0 ?
+			`${newFacultyIds.length} faculty assigned, ${skipped} already assigned`
+		:	`${newFacultyIds.length} faculty assigned to "${batch.name}"`;
+
+	revalidatePath("/dashboard/hod/manage-users");
+	return { success: true, message: msg };
+}
+
+/**
  * Get all faculty-batch assignments for a batch (HOD only).
  */
 export async function getBatchFaculty(batchId: string) {
