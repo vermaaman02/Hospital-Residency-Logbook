@@ -32,6 +32,7 @@ export interface UserData {
 	batchId: string | null;
 	batchName: string | null;
 	currentSemester: number | null;
+	assignedBatches: { id: string; name: string }[];
 	clerkBanned: boolean;
 	createdAt: string;
 }
@@ -106,7 +107,11 @@ export function ManageUsersClient({ users, batches }: ManageUsersClientProps) {
 				</TabsContent>
 
 				<TabsContent value="batches">
-					<BatchesTab batches={batches} facultyUsers={faculty} />
+					<BatchesTab
+						batches={batches}
+						facultyUsers={faculty}
+						studentUsers={students}
+					/>
 				</TabsContent>
 
 				<TabsContent value="promote">

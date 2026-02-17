@@ -514,6 +514,11 @@ export async function getAllUsers(_query?: string) {
 		orderBy: { createdAt: "desc" },
 		include: {
 			batchRelation: { select: { id: true, name: true } },
+			facultyBatchAssignments: {
+				include: {
+					batch: { select: { id: true, name: true } },
+				},
+			},
 		},
 	});
 
@@ -546,6 +551,10 @@ export async function getAllUsers(_query?: string) {
 				batchId: user.batchId,
 				batchName: user.batchRelation?.name ?? null,
 				currentSemester: user.currentSemester,
+				assignedBatches: user.facultyBatchAssignments.map((fba) => ({
+					id: fba.batch.id,
+					name: fba.batch.name,
+				})),
 				clerkBanned,
 				createdAt: user.createdAt.toISOString(),
 			};

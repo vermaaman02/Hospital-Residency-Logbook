@@ -50,7 +50,11 @@ import {
 	deleteBatch,
 	assignFacultyToBatch,
 	removeFacultyFromBatch,
+	bulkAssignStudentsToBatch,
+	bulkAssignFacultyToBatch,
 } from "@/actions/batch-management";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
 	Plus,
@@ -64,6 +68,9 @@ import {
 	XCircle,
 	UserCog,
 	X,
+	UserPlus,
+	Search,
+	ListFilter,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { BatchData, UserData } from "../ManageUsersClient";
@@ -71,6 +78,7 @@ import type { BatchData, UserData } from "../ManageUsersClient";
 interface BatchesTabProps {
 	batches: BatchData[];
 	facultyUsers: UserData[];
+	studentUsers: UserData[];
 }
 
 interface BatchFormState {
@@ -89,7 +97,11 @@ const emptyForm: BatchFormState = {
 	currentSemester: "1",
 };
 
-export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
+export function BatchesTab({
+	batches,
+	facultyUsers,
+	studentUsers,
+}: BatchesTabProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -106,6 +118,31 @@ export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
 	const [facultyBatchTarget, setFacultyBatchTarget] =
 		useState<BatchData | null>(null);
 	const [selectedFacultyId, setSelectedFacultyId] = useState("");
+
+	// Bulk assign students dialog
+	const [bulkStudentDialogOpen, setBulkStudentDialogOpen] = useState(false);
+	const [bulkStudentBatchTarget, setBulkStudentBatchTarget] =
+		useState<BatchData | null>(null);
+	const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
+		new Set(),
+	);
+	const [studentSearchQuery, setStudentSearchQuery] = useState("");
+	const [studentBatchFilter, setStudentBatchFilter] = useState<string>("all");
+	const [studentSemesterFilter, setStudentSemesterFilter] =
+		useState<string>("all");
+	const [studentAssignmentFilter, setStudentAssignmentFilter] =
+		useState<string>("all");
+
+	// Bulk assign faculty dialog
+	const [bulkFacultyDialogOpen, setBulkFacultyDialogOpen] = useState(false);
+	const [bulkFacultyBatchTarget, setBulkFacultyBatchTarget] =
+		useState<BatchData | null>(null);
+	const [selectedFacultyIds, setSelectedFacultyIds] = useState<Set<string>>(
+		new Set(),
+	);
+	const [facultySearchQuery, setFacultySearchQuery] = useState("");
+	const [facultyAssignmentFilter, setFacultyAssignmentFilter] =
+		useState<string>("all");
 
 	function updateForm(field: keyof BatchFormState, value: string) {
 		setFormState((prev) => ({ ...prev, [field]: value }));
@@ -275,6 +312,193 @@ export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
 			)
 		:	[];
 
+	// ====== Bulk assign students helpers ======
+
+	function openBulkStudentDialog(batch: BatchData) {
+		setBulkStudentBatchTarget(batch);
+		setSelectedStudentIds(new Set());
+		setStudentSearchQuery("");
+		setStudentBatchFilter("all");
+		setStudentSemesterFilter("all");
+		setStudentAssignmentFilter("all");
+		setBulkStudentDialogOpen(true);
+	}
+
+	// Students not in this batch (available to assign)
+	const availableStudentsForBulk =
+		bulkStudentBatchTarget ?
+			studentUsers.filter((s) => s.batchId !== bulkStudentBatchTarget.id)
+		:	[];
+
+	// Unique batch names and semesters for filter dropdowns
+	const studentBatchOptions = Array.from(
+		new Set(availableStudentsForBulk.map((s) => s.batch).filter(Boolean)),
+	) as string[];
+	const studentSemesterOptions = Array.from(
+		new Set(
+			availableStudentsForBulk
+				.map((s) => s.currentSemester)
+				.filter((v): v is number => v !== null),
+		),
+	).sort((a, b) => a - b);
+
+	const filteredBulkStudents = availableStudentsForBulk.filter((s) => {
+		// Search filter
+		if (studentSearchQuery) {
+			const q = studentSearchQuery.toLowerCase();
+			const matchesSearch =
+				s.firstName.toLowerCase().includes(q) ||
+				s.lastName.toLowerCase().includes(q) ||
+				s.email.toLowerCase().includes(q) ||
+				(s.batch ?? "").toLowerCase().includes(q);
+			if (!matchesSearch) return false;
+		}
+		// Batch filter
+		if (studentBatchFilter !== "all") {
+			if (studentBatchFilter === "unassigned") {
+				if (s.batchId !== null) return false;
+			} else {
+				if (s.batch !== studentBatchFilter) return false;
+			}
+		}
+		// Semester filter
+		if (studentSemesterFilter !== "all") {
+			if (s.currentSemester !== parseInt(studentSemesterFilter)) return false;
+		}
+		// Assignment filter
+		if (studentAssignmentFilter !== "all") {
+			if (studentAssignmentFilter === "unassigned" && s.batchId !== null)
+				return false;
+			if (studentAssignmentFilter === "assigned" && s.batchId === null)
+				return false;
+		}
+		return true;
+	});
+
+	function toggleStudent(id: string) {
+		setSelectedStudentIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	}
+
+	function toggleAllStudents() {
+		if (selectedStudentIds.size === filteredBulkStudents.length) {
+			setSelectedStudentIds(new Set());
+		} else {
+			setSelectedStudentIds(new Set(filteredBulkStudents.map((s) => s.id)));
+		}
+	}
+
+	function handleBulkAssignStudents() {
+		if (!bulkStudentBatchTarget || selectedStudentIds.size === 0) return;
+		startTransition(async () => {
+			try {
+				const result = await bulkAssignStudentsToBatch(
+					Array.from(selectedStudentIds),
+					bulkStudentBatchTarget.id,
+				);
+				if (result.success) {
+					toast.success(result.message);
+					setBulkStudentDialogOpen(false);
+					router.refresh();
+				} else {
+					toast.error(result.message ?? "Failed to assign students");
+				}
+			} catch {
+				toast.error("Failed to assign students");
+			}
+		});
+	}
+
+	// ====== Bulk assign faculty helpers ======
+
+	function openBulkFacultyDialog(batch: BatchData) {
+		setBulkFacultyBatchTarget(batch);
+		setSelectedFacultyIds(new Set());
+		setFacultySearchQuery("");
+		setFacultyAssignmentFilter("all");
+		setBulkFacultyDialogOpen(true);
+	}
+
+	// Faculty not already assigned to this batch
+	const availableFacultyForBulk =
+		bulkFacultyBatchTarget ?
+			facultyUsers.filter(
+				(f) =>
+					!bulkFacultyBatchTarget.assignedFaculty.some((af) => af.id === f.id),
+			)
+		:	[];
+
+	// Check if a faculty is assigned to any batch (for filter)
+	const facultyBatchMap = new Map<string, string[]>();
+	for (const b of batches) {
+		for (const af of b.assignedFaculty) {
+			const existing = facultyBatchMap.get(af.id) ?? [];
+			existing.push(b.name);
+			facultyBatchMap.set(af.id, existing);
+		}
+	}
+
+	const filteredBulkFaculty = availableFacultyForBulk.filter((f) => {
+		// Search filter
+		if (facultySearchQuery) {
+			const q = facultySearchQuery.toLowerCase();
+			const matchesSearch =
+				f.firstName.toLowerCase().includes(q) ||
+				f.lastName.toLowerCase().includes(q) ||
+				f.email.toLowerCase().includes(q);
+			if (!matchesSearch) return false;
+		}
+		// Assignment filter
+		if (facultyAssignmentFilter !== "all") {
+			const hasAnyBatch = facultyBatchMap.has(f.id);
+			if (facultyAssignmentFilter === "unassigned" && hasAnyBatch) return false;
+			if (facultyAssignmentFilter === "assigned" && !hasAnyBatch) return false;
+		}
+		return true;
+	});
+
+	function toggleFaculty(id: string) {
+		setSelectedFacultyIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	}
+
+	function toggleAllFaculty() {
+		if (selectedFacultyIds.size === filteredBulkFaculty.length) {
+			setSelectedFacultyIds(new Set());
+		} else {
+			setSelectedFacultyIds(new Set(filteredBulkFaculty.map((f) => f.id)));
+		}
+	}
+
+	function handleBulkAssignFaculty() {
+		if (!bulkFacultyBatchTarget || selectedFacultyIds.size === 0) return;
+		startTransition(async () => {
+			try {
+				const result = await bulkAssignFacultyToBatch(
+					Array.from(selectedFacultyIds),
+					bulkFacultyBatchTarget.id,
+				);
+				if (result.success) {
+					toast.success(result.message);
+					setBulkFacultyDialogOpen(false);
+					router.refresh();
+				} else {
+					toast.error(result.message ?? "Failed to assign faculty");
+				}
+			} catch {
+				toast.error("Failed to assign faculty");
+			}
+		});
+	}
+
 	return (
 		<div className="space-y-4">
 			{/* Header */}
@@ -363,24 +587,50 @@ export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
 												:	"—"}
 											</TableCell>
 											<TableCell>
-												<div className="flex items-center gap-1">
-													<Users className="h-3.5 w-3.5 text-muted-foreground" />
-													<span className="font-medium">
-														{batch.studentCount}
-													</span>
+												<div className="flex items-center gap-2">
+													<div className="flex items-center gap-1">
+														<Users className="h-3.5 w-3.5 text-muted-foreground" />
+														<span className="font-medium">
+															{batch.studentCount}
+														</span>
+													</div>
+													<Button
+														variant="ghost"
+														size="sm"
+														className="h-6 px-1.5 text-xs gap-1 text-blue-600 hover:text-blue-700"
+														onClick={() => openBulkStudentDialog(batch)}
+														disabled={isPending}
+														title="Bulk assign students"
+													>
+														<UserPlus className="h-3 w-3" />
+														Assign
+													</Button>
 												</div>
 											</TableCell>
 											<TableCell>
-												<button
-													onClick={() => openFacultyDialog(batch)}
-													className="flex items-center gap-1 text-sm hover:underline cursor-pointer"
-													disabled={isPending}
-												>
-													<UserCog className="h-3.5 w-3.5 text-muted-foreground" />
-													<span className="font-medium">
-														{batch.facultyCount}
-													</span>
-												</button>
+												<div className="flex items-center gap-2">
+													<button
+														onClick={() => openFacultyDialog(batch)}
+														className="flex items-center gap-1 text-sm hover:underline cursor-pointer"
+														disabled={isPending}
+													>
+														<UserCog className="h-3.5 w-3.5 text-muted-foreground" />
+														<span className="font-medium">
+															{batch.facultyCount}
+														</span>
+													</button>
+													<Button
+														variant="ghost"
+														size="sm"
+														className="h-6 px-1.5 text-xs gap-1 text-purple-600 hover:text-purple-700"
+														onClick={() => openBulkFacultyDialog(batch)}
+														disabled={isPending}
+														title="Bulk assign faculty"
+													>
+														<UserPlus className="h-3 w-3" />
+														Assign
+													</Button>
+												</div>
 											</TableCell>
 											<TableCell>
 												<button
@@ -634,6 +884,339 @@ export function BatchesTab({ batches, facultyUsers }: BatchesTabProps) {
 							onClick={() => setFacultyDialogOpen(false)}
 						>
 							Done
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Bulk Assign Students Dialog */}
+			<Dialog
+				open={bulkStudentDialogOpen}
+				onOpenChange={setBulkStudentDialogOpen}
+			>
+				<DialogContent className="sm:max-w-lg max-h-[90vh]">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<Users className="h-5 w-5 text-blue-600" />
+							Assign Students — {bulkStudentBatchTarget?.name}
+						</DialogTitle>
+						<DialogDescription>
+							Select students to assign to this batch. Students already in this
+							batch are excluded.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-3 py-2">
+						{/* Search */}
+						<div className="relative">
+							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+							<Input
+								placeholder="Search students by name, email, or batch..."
+								value={studentSearchQuery}
+								onChange={(e) => setStudentSearchQuery(e.target.value)}
+								className="pl-9"
+							/>
+						</div>
+
+						{/* Filters */}
+						<div className="flex flex-wrap gap-2">
+							<div className="flex items-center gap-1.5">
+								<ListFilter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+								<span className="text-xs text-muted-foreground shrink-0">
+									Filters:
+								</span>
+							</div>
+							<Select
+								value={studentAssignmentFilter}
+								onValueChange={setStudentAssignmentFilter}
+							>
+								<SelectTrigger className="h-7 text-xs w-32.5">
+									<SelectValue placeholder="Assignment" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All Students</SelectItem>
+									<SelectItem value="unassigned">No Batch</SelectItem>
+									<SelectItem value="assigned">Has Batch</SelectItem>
+								</SelectContent>
+							</Select>
+							{studentBatchOptions.length > 0 && (
+								<Select
+									value={studentBatchFilter}
+									onValueChange={setStudentBatchFilter}
+								>
+									<SelectTrigger className="h-7 text-xs w-32.5">
+										<SelectValue placeholder="Batch" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">All Batches</SelectItem>
+										<SelectItem value="unassigned">No Batch</SelectItem>
+										{studentBatchOptions.map((b) => (
+											<SelectItem key={b} value={b}>
+												{b}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							)}
+							{studentSemesterOptions.length > 0 && (
+								<Select
+									value={studentSemesterFilter}
+									onValueChange={setStudentSemesterFilter}
+								>
+									<SelectTrigger className="h-7 text-xs w-28">
+										<SelectValue placeholder="Semester" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">All Semesters</SelectItem>
+										{studentSemesterOptions.map((sem) => (
+											<SelectItem key={sem} value={sem.toString()}>
+												Semester {sem}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							)}
+							{(studentBatchFilter !== "all" ||
+								studentSemesterFilter !== "all" ||
+								studentAssignmentFilter !== "all") && (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-xs text-muted-foreground"
+									onClick={() => {
+										setStudentBatchFilter("all");
+										setStudentSemesterFilter("all");
+										setStudentAssignmentFilter("all");
+									}}
+								>
+									<X className="h-3 w-3 mr-1" />
+									Clear
+								</Button>
+							)}
+						</div>
+
+						{/* Select all / count */}
+						<div className="flex items-center justify-between px-1">
+							<label className="flex items-center gap-2 text-sm cursor-pointer">
+								<Checkbox
+									checked={
+										filteredBulkStudents.length > 0 &&
+										selectedStudentIds.size === filteredBulkStudents.length
+									}
+									onCheckedChange={toggleAllStudents}
+								/>
+								Select All
+							</label>
+							<span className="text-xs text-muted-foreground">
+								{selectedStudentIds.size} of {filteredBulkStudents.length}{" "}
+								selected
+							</span>
+						</div>
+
+						{/* Student list */}
+						<ScrollArea className="h-64 border rounded-md">
+							{filteredBulkStudents.length === 0 ?
+								<div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+									<Users className="h-6 w-6 opacity-50 mb-2" />
+									<p className="text-sm">
+										{availableStudentsForBulk.length === 0 ?
+											"All students are already in this batch"
+										:	"No students match your search"}
+									</p>
+								</div>
+							:	<div className="divide-y">
+									{filteredBulkStudents.map((student) => (
+										<label
+											key={student.id}
+											className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition-colors"
+										>
+											<Checkbox
+												checked={selectedStudentIds.has(student.id)}
+												onCheckedChange={() => toggleStudent(student.id)}
+											/>
+											<div className="flex-1 min-w-0">
+												<p className="text-sm font-medium truncate">
+													{student.firstName} {student.lastName}
+												</p>
+												<p className="text-xs text-muted-foreground truncate">
+													{student.email}
+												</p>
+											</div>
+											{student.batch && (
+												<Badge variant="outline" className="text-xs shrink-0">
+													{student.batch}
+												</Badge>
+											)}
+											{student.currentSemester && (
+												<Badge variant="secondary" className="text-xs shrink-0">
+													Sem {student.currentSemester}
+												</Badge>
+											)}
+										</label>
+									))}
+								</div>
+							}
+						</ScrollArea>
+					</div>
+					<DialogFooter className="gap-2 sm:gap-0">
+						<Button
+							variant="outline"
+							onClick={() => setBulkStudentDialogOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={handleBulkAssignStudents}
+							disabled={isPending || selectedStudentIds.size === 0}
+							className="gap-2"
+						>
+							{isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+							Assign{" "}
+							{selectedStudentIds.size > 0 ? selectedStudentIds.size : ""}{" "}
+							Student{selectedStudentIds.size !== 1 ? "s" : ""}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Bulk Assign Faculty Dialog */}
+			<Dialog
+				open={bulkFacultyDialogOpen}
+				onOpenChange={setBulkFacultyDialogOpen}
+			>
+				<DialogContent className="sm:max-w-lg max-h-[90vh]">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<UserCog className="h-5 w-5 text-purple-600" />
+							Assign Faculty — {bulkFacultyBatchTarget?.name}
+						</DialogTitle>
+						<DialogDescription>
+							Select faculty members to assign to this batch. Already-assigned
+							faculty are excluded.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-3 py-2">
+						{/* Search */}
+						<div className="relative">
+							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+							<Input
+								placeholder="Search faculty by name or email..."
+								value={facultySearchQuery}
+								onChange={(e) => setFacultySearchQuery(e.target.value)}
+								className="pl-9"
+							/>
+						</div>
+
+						{/* Filters */}
+						<div className="flex flex-wrap items-center gap-2">
+							<div className="flex items-center gap-1.5">
+								<ListFilter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+								<span className="text-xs text-muted-foreground shrink-0">
+									Filter:
+								</span>
+							</div>
+							<Select
+								value={facultyAssignmentFilter}
+								onValueChange={setFacultyAssignmentFilter}
+							>
+								<SelectTrigger className="h-7 text-xs w-40">
+									<SelectValue placeholder="Assignment" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All Faculty</SelectItem>
+									<SelectItem value="unassigned">No Batches Yet</SelectItem>
+									<SelectItem value="assigned">Has Other Batches</SelectItem>
+								</SelectContent>
+							</Select>
+							{facultyAssignmentFilter !== "all" && (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-xs text-muted-foreground"
+									onClick={() => setFacultyAssignmentFilter("all")}
+								>
+									<X className="h-3 w-3 mr-1" />
+									Clear
+								</Button>
+							)}
+						</div>
+
+						{/* Select all / count */}
+						<div className="flex items-center justify-between px-1">
+							<label className="flex items-center gap-2 text-sm cursor-pointer">
+								<Checkbox
+									checked={
+										filteredBulkFaculty.length > 0 &&
+										selectedFacultyIds.size === filteredBulkFaculty.length
+									}
+									onCheckedChange={toggleAllFaculty}
+								/>
+								Select All
+							</label>
+							<span className="text-xs text-muted-foreground">
+								{selectedFacultyIds.size} of {filteredBulkFaculty.length}{" "}
+								selected
+							</span>
+						</div>
+
+						{/* Faculty list */}
+						<ScrollArea className="h-64 border rounded-md">
+							{filteredBulkFaculty.length === 0 ?
+								<div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+									<UserCog className="h-6 w-6 opacity-50 mb-2" />
+									<p className="text-sm">
+										{availableFacultyForBulk.length === 0 ?
+											"All faculty are already assigned to this batch"
+										:	"No faculty match your search"}
+									</p>
+								</div>
+							:	<div className="divide-y">
+									{filteredBulkFaculty.map((faculty) => (
+										<label
+											key={faculty.id}
+											className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition-colors"
+										>
+											<Checkbox
+												checked={selectedFacultyIds.has(faculty.id)}
+												onCheckedChange={() => toggleFaculty(faculty.id)}
+											/>
+											<div className="flex-1 min-w-0">
+												<p className="text-sm font-medium truncate">
+													{faculty.firstName} {faculty.lastName}
+												</p>
+												<p className="text-xs text-muted-foreground truncate">
+													{faculty.email}
+												</p>
+											</div>
+											{facultyBatchMap.has(faculty.id) && (
+												<Badge variant="outline" className="text-xs shrink-0">
+													{facultyBatchMap.get(faculty.id)!.length} batch
+													{facultyBatchMap.get(faculty.id)!.length !== 1 ?
+														"es"
+													:	""}
+												</Badge>
+											)}
+										</label>
+									))}
+								</div>
+							}
+						</ScrollArea>
+					</div>
+					<DialogFooter className="gap-2 sm:gap-0">
+						<Button
+							variant="outline"
+							onClick={() => setBulkFacultyDialogOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={handleBulkAssignFaculty}
+							disabled={isPending || selectedFacultyIds.size === 0}
+							className="gap-2"
+						>
+							{isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+							Assign{" "}
+							{selectedFacultyIds.size > 0 ? selectedFacultyIds.size : ""}{" "}
+							Faculty
 						</Button>
 					</DialogFooter>
 				</DialogContent>
