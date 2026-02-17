@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-	output: "standalone",
 	images: {
 		remotePatterns: [
 			{
@@ -13,6 +12,11 @@ const nextConfig: NextConfig = {
 				hostname: "images.clerk.dev",
 			},
 		],
+	},
+	experimental: {
+		serverActions: {
+			allowedOrigins: ["localhost:3000", "*.railway.app", "*.up.railway.app"],
+		},
 	},
 };
 
