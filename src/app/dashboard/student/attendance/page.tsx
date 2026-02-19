@@ -11,13 +11,14 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AttendanceClient } from "./AttendanceClient";
+import { getMyAttendanceAnalytics } from "@/actions/attendance";
 
 export default async function StudentAttendancePage() {
 	const clerkId = await requireAuth();
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) redirect("/sign-in");
 
-	const [sheets, facultyUsers] = await Promise.all([
+	const [sheets, facultyUsers, analytics] = await Promise.all([
 		prisma.attendanceSheet.findMany({
 			where: { userId: user.id },
 			include: { entries: { orderBy: { day: "asc" } } },
@@ -31,6 +32,7 @@ export default async function StudentAttendancePage() {
 			select: { firstName: true, lastName: true },
 			orderBy: { firstName: "asc" },
 		}),
+		getMyAttendanceAnalytics(),
 	]);
 
 	const serialized = JSON.parse(JSON.stringify(sheets));
@@ -50,6 +52,7 @@ export default async function StudentAttendancePage() {
 				sheets={serialized}
 				userBatch={user.batch ?? ""}
 				facultyNames={facultyNames}
+				analytics={analytics}
 			/>
 		</div>
 	);

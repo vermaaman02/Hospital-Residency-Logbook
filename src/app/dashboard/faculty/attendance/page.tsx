@@ -1,7 +1,7 @@
 /**
  * @module Faculty Attendance Review Page
  * @description Server component that fetches attendance data for review.
- * Shared by both faculty and HOD (HOD page re-exports with role="hod").
+ * Uses server-side pagination from getAttendanceForReview.
  *
  * @see actions/attendance.ts — getAttendanceForReview
  */
@@ -22,14 +22,11 @@ export default async function FacultyAttendancePage() {
 	}
 
 	const [rawSheets, autoReviewSettings] = await Promise.all([
-		getAttendanceForReview(),
+		getAttendanceForReview({ page: 1, pageSize: 15 }),
 		getAutoReviewSettings(),
 	]);
 
 	const sheets = JSON.parse(JSON.stringify(rawSheets));
-
-	const dashboardBase =
-		authResult.role === "hod" ? "/dashboard/hod" : "/dashboard/faculty";
 
 	return (
 		<div className="space-y-6">
@@ -41,7 +38,7 @@ export default async function FacultyAttendancePage() {
 					:	"Review attendance sheets from your assigned students"
 				}
 				breadcrumbs={[
-					{ label: "Dashboard", href: dashboardBase },
+					{ label: "Dashboard", href: "/dashboard/faculty" },
 					{ label: "Attendance" },
 				]}
 			/>

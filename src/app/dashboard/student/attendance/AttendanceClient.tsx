@@ -127,6 +127,52 @@ interface AttendanceSheetData {
 	facultyRemark: string | null;
 	entries: AttendanceEntryData[];
 	createdAt: string;
+}
+
+interface DayForm {
+	date: Date | undefined;
+	presentAbsent: string;
+	hodName: string;
+}
+
+interface SheetHeaderForm {
+	weekStartDate: Date | undefined;
+	weekEndDate: Date | undefined;
+	batch: string;
+	postedDepartment: string;
+}
+
+interface AnalyticsData {
+	totalDays: number;
+	presentDays: number;
+	absentDays: number;
+	leaveDays: number;
+	holidayDays: number;
+	workingDays: number;
+	attendancePct: number;
+	minimumPct: number;
+	meetsMinimum: boolean;
+	weeklyData: { week: string; present: number; absent: number; leave: number; holiday: number; total: number }[];
+	monthlyTrend: { month: string; present: number; absent: number; total: number; pct: number }[];
+	totalSheets: number;
+	signedSheets: number;
+}
+
+interface AttendanceClientProps {
+	sheets: AttendanceSheetData[];
+	userBatch: string;
+	facultyNames: string[];
+	analytics?: AnalyticsData;
+}
+	userId: string;
+	weekStartDate: string;
+	weekEndDate: string;
+	batch: string | null;
+	postedDepartment: string | null;
+	status: string;
+	facultyRemark: string | null;
+	entries: AttendanceEntryData[];
+	createdAt: string;
 	updatedAt: string;
 }
 
@@ -155,6 +201,7 @@ export function AttendanceClient({
 	sheets,
 	userBatch,
 	facultyNames,
+	analytics,
 }: AttendanceClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -383,6 +430,9 @@ export function AttendanceClient({
 
 	return (
 		<div className="space-y-6">
+			{/* Analytics Dashboard */}
+			{analytics && <AnalyticsDashboard analytics={analytics} />}
+
 			{/* Stats Row */}
 			<div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
 				<MiniStat label="Total" value={stats.total} />
@@ -551,6 +601,142 @@ export function AttendanceClient({
 				</DialogContent>
 			</Dialog>
 		</div>
+	);
+}
+
+// ======================== ANALYTICS DASHBOARD ========================
+
+function AnalyticsDashboard({ analytics }: { analytics: AnalyticsData }) {
+	const {
+		attendancePct,
+		minimumPct,
+		meetsMinimum,
+		presentDays,
+		absentDays,
+		leaveDays,
+		holidayDays,
+		workingDays,
+		weeklyData,
+		totalSheets,
+		signedSheets,
+	} = analytics;
+
+	const pctColor =
+		meetsMinimum ? "text-green-600" : "text-red-600";
+	const progressColor =
+		meetsMinimum ? "bg-green-500" : "bg-red-500";
+
+	return (
+		<Card>
+			<CardHeader className="pb-3">
+				<CardTitle className="text-lg flex items-center gap-2">
+					<CalendarIcon className="h-5 w-5 text-hospital-primary" />
+					Attendance Overview
+				</CardTitle>
+				<CardDescription>
+					Your attendance summary and progress towards the minimum requirement
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-4">
+				{/* Main Percentage & Progress Bar */}
+				<div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+					<div className="text-center sm:text-left">
+						<span className={cn("text-4xl font-bold", pctColor)}>
+							{attendancePct}%
+						</span>
+						<p className="text-sm text-muted-foreground mt-0.5">
+							Attendance Rate
+						</p>
+					</div>
+					<div className="flex-1 w-full">
+						<div className="flex justify-between text-xs text-muted-foreground mb-1">
+							<span>0%</span>
+							<span className="font-medium">
+								Min: {minimumPct}%
+								{meetsMinimum ?
+									<span className="text-green-600 ml-1">✓ Met</span>
+								:	<span className="text-red-600 ml-1">✗ Below</span>}
+							</span>
+							<span>100%</span>
+						</div>
+						<div className="h-3 bg-gray-100 rounded-full overflow-hidden relative">
+							<div
+								className={cn("h-full rounded-full transition-all", progressColor)}
+								style={{ width: `${Math.min(attendancePct, 100)}%` }}
+							/>
+							{/* Minimum threshold marker */}
+							<div
+								className="absolute top-0 h-full w-0.5 bg-gray-800"
+								style={{ left: `${minimumPct}%` }}
+							/>
+						</div>
+					</div>
+				</div>
+
+				{/* KPI Grid */}
+				<div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+					<div className="text-center p-2 bg-green-50 rounded-lg border border-green-100">
+						<div className="text-lg font-bold text-green-600">{presentDays}</div>
+						<div className="text-[10px] text-muted-foreground">Present</div>
+					</div>
+					<div className="text-center p-2 bg-red-50 rounded-lg border border-red-100">
+						<div className="text-lg font-bold text-red-600">{absentDays}</div>
+						<div className="text-[10px] text-muted-foreground">Absent</div>
+					</div>
+					<div className="text-center p-2 bg-amber-50 rounded-lg border border-amber-100">
+						<div className="text-lg font-bold text-amber-600">{leaveDays}</div>
+						<div className="text-[10px] text-muted-foreground">Leave</div>
+					</div>
+					<div className="text-center p-2 bg-blue-50 rounded-lg border border-blue-100">
+						<div className="text-lg font-bold text-blue-600">{holidayDays}</div>
+						<div className="text-[10px] text-muted-foreground">Holiday</div>
+					</div>
+					<div className="text-center p-2 bg-gray-50 rounded-lg border border-gray-100">
+						<div className="text-lg font-bold text-gray-600">{workingDays}</div>
+						<div className="text-[10px] text-muted-foreground">Working Days</div>
+					</div>
+					<div className="text-center p-2 bg-purple-50 rounded-lg border border-purple-100">
+						<div className="text-lg font-bold text-purple-600">
+							{signedSheets}/{totalSheets}
+						</div>
+						<div className="text-[10px] text-muted-foreground">Signed</div>
+					</div>
+				</div>
+
+				{/* Weekly Mini Chart */}
+				{weeklyData.length > 0 && (
+					<div>
+						<p className="text-xs font-medium text-muted-foreground mb-2">
+							Last {weeklyData.length} weeks
+						</p>
+						<div className="flex gap-1 items-end h-16">
+							{weeklyData.map((w, i) => {
+								const maxH = 64;
+								const h = w.total > 0 ? Math.max(4, (w.present / 7) * maxH) : 4;
+								return (
+									<div
+										key={i}
+										className="flex-1 group relative"
+										title={`${w.week}: ${w.present}P / ${w.absent}A / ${w.leave}L`}
+									>
+										<div
+											className={cn(
+												"rounded-t transition-all",
+												w.present >= 5 ? "bg-green-400" : w.present >= 3 ? "bg-amber-400" : "bg-red-400",
+											)}
+											style={{ height: `${h}px` }}
+										/>
+										<div className="text-[8px] text-center text-muted-foreground mt-0.5 truncate">
+											{w.week}
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				)}
+			</CardContent>
+		</Card>
 	);
 }
 

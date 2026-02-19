@@ -101,6 +101,8 @@ model Batch {
   // Relations
   students           User[]
   facultyAssignments FacultyBatchAssignment[]
+  attendanceConfig   AttendanceConfig?
+  attendanceHolidays AttendanceHoliday[]
 
   @@index([isActive])
 }
@@ -218,6 +220,54 @@ model ThesisSemesterRecord {
 
 // ======================== MODULE 3: ATTENDANCE ========================
 
+// --- Attendance Configuration (set by HOD) ---
+model AttendanceConfig {
+  id                    String   @id @default(cuid())
+  batchId               String
+  batch                 Batch    @relation(fields: [batchId], references: [id])
+
+  // Batch academic dates
+  batchStartDate        DateTime
+  batchEndDate          DateTime
+
+  // Class timing window — students can only mark attendance within this window
+  classStartTime        String   // "08:00" (HH:mm format)
+  classEndTime          String   // "17:00" (HH:mm format)
+
+  // Location-based restriction
+  locationEnabled       Boolean  @default(false)
+  locationLatitude      Float?   // Campus center latitude
+  locationLongitude     Float?   // Campus center longitude
+  locationRadiusMeters  Int?     @default(500) // Allowed radius in meters
+
+  // Weekly off days (e.g., ["SATURDAY", "SUNDAY"])
+  weeklyOffDays         String[] @default([]) // DayOfWeek values as strings
+
+  // Minimum attendance criteria percentage
+  minimumAttendancePct  Float    @default(75.0) // 75%
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([batchId])
+  @@index([batchId])
+}
+
+// --- Holiday Calendar (set by HOD) ---
+model AttendanceHoliday {
+  id          String   @id @default(cuid())
+  date        DateTime // The holiday date
+  name        String   // e.g., "Republic Day", "Holi"
+  batchId     String?  // null = global (all batches), specific = batch-only
+  batch       Batch?   @relation(fields: [batchId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([date, batchId])
+  @@index([batchId])
+  @@index([date])
+}
+
+// --- Weekly attendance sheet (student creates, faculty/HOD reviews) ---
 model AttendanceSheet {
   id               String            @id @default(cuid())
   userId           String
@@ -234,18 +284,26 @@ model AttendanceSheet {
 
   @@index([userId])
   @@index([status])
+  @@index([weekStartDate])
 }
 
+// --- Daily attendance record (one per day per sheet) ---
 model AttendanceEntry {
   id                String          @id @default(cuid())
   attendanceSheetId String
   attendanceSheet   AttendanceSheet @relation(fields: [attendanceSheetId], references: [id], onDelete: Cascade)
   date              DateTime?
   day               DayOfWeek
-  presentAbsent     String?         // "Present", "Absent", or remarks
+  presentAbsent     String?         // "Present", "Absent", "Leave", "Holiday"
   hodName           String?
+  // Location & time metadata (captured when student marks attendance)
+  markedAt          DateTime?       // Exact time attendance was marked
+  latitude          Float?          // Student's location when marked
+  longitude         Float?          // Student's location when marked
+  withinLocation    Boolean?        // Was student within allowed radius?
 
   @@index([attendanceSheetId])
+  @@index([date])
 }
 
 enum DayOfWeek {

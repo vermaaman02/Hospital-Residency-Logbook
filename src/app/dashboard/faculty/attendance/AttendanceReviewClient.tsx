@@ -1,12 +1,12 @@
 /**
  * @module AttendanceReviewClient
- * @description Review UI for attendance sheets.
+ * @description Review UI for attendance sheets with server-side pagination.
  * Features: stat cards, search, batch/status filter, bulk select, detail sheet,
- * sign/reject dialogs with remarks, auto-review toggle, pagination.
- * Used by both faculty and HOD pages.
+ * sign/reject dialogs with remarks, auto-review toggle, server-side pagination.
+ * Used by faculty page. HOD page has its own dedicated HodAttendanceClient.
  *
  * @see PG Logbook .md — "Attendance Sheet for Clinical Posting"
- * @see RotationReviewClient.tsx — review pattern reference
+ * @see actions/attendance.ts — getAttendanceForReview (paginated)
  */
 
 "use client";
@@ -78,6 +78,8 @@ import { useRouter } from "next/navigation";
 import {
 	signAttendanceSheet,
 	rejectAttendanceSheet,
+	bulkSignAttendanceSheets,
+	getAttendanceForReview,
 } from "@/actions/attendance";
 import { toggleAutoReview } from "@/actions/auto-review";
 import type { AutoReviewSettings } from "@/actions/auto-review";
@@ -104,25 +106,30 @@ export interface AttendanceSheetForReview {
 	facultyRemark: string | null;
 	entries: AttendanceEntryData[];
 	createdAt: string;
-	updatedAt: string;
 	user: {
 		id: string;
 		firstName: string;
 		lastName: string;
 		batchRelation: { name: string } | null;
 		currentSemester: number | null;
+		profileImage?: string | null;
 	};
 }
 
+interface PaginatedSheets {
+	data: AttendanceSheetForReview[];
+	total: number;
+	page: number;
+	pageSize: number;
+}
+
 interface AttendanceReviewClientProps {
-	sheets: AttendanceSheetForReview[];
+	sheets: PaginatedSheets;
 	role: "faculty" | "hod";
 	autoReviewSettings: AutoReviewSettings;
 }
 
 type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION" | "DRAFT";
-
-const PAGE_SIZE = 10;
 
 const DAYS_ORDERED = [
 	"MONDAY",
@@ -147,19 +154,26 @@ const DAY_LABELS: Record<string, string> = {
 // ======================== MAIN COMPONENT ========================
 
 export function AttendanceReviewClient({
-	sheets,
+	sheets: initialSheets,
 	role,
 	autoReviewSettings,
 }: AttendanceReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
+	// Server-side paginated data
+	const [sheets, setSheets] = useState(initialSheets.data);
+	const [total, setTotal] = useState(initialSheets.total);
+	const [page, setPage] = useState(initialSheets.page);
+	const pageSize = initialSheets.pageSize;
+	const [loading, setLoading] = useState(false);
+
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 	const [batchFilter, setBatchFilter] = useState("ALL");
 
-	// Batches from submissions
+	// Batches from submissions (extract from current page)
 	const batches = useMemo(() => {
 		const set = new Set<string>();
 		sheets.forEach((s) => {
@@ -186,62 +200,74 @@ export function AttendanceReviewClient({
 		useState<AttendanceSheetForReview | null>(null);
 	const [rejectRemark, setRejectRemark] = useState("");
 
-	// Pagination
-	const [page, setPage] = useState(1);
-
 	// Auto-review toggle
 	const [autoReview, setAutoReview] = useState(autoReviewSettings.attendance);
 
-	// ---- Filtering ----
-	const filtered = useMemo(() => {
-		let result = sheets;
-		if (statusFilter !== "ALL") {
-			result = result.filter((s) => s.status === statusFilter);
-		}
-		if (batchFilter !== "ALL") {
-			result = result.filter((s) => s.user.batchRelation?.name === batchFilter);
-		}
-		if (searchQuery.trim()) {
-			const q = searchQuery.toLowerCase();
-			result = result.filter(
-				(s) =>
-					`${s.user.firstName} ${s.user.lastName}`.toLowerCase().includes(q) ||
-					(s.postedDepartment ?? "").toLowerCase().includes(q) ||
-					(s.user.batchRelation?.name ?? "").toLowerCase().includes(q),
-			);
-		}
-		return result;
-	}, [sheets, statusFilter, batchFilter, searchQuery]);
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-	// Paginate
-	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-	const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+	// ---- Server-side data fetching ----
+	const fetchSheets = useCallback(
+		async (pg: number, status?: string, batch?: string, search?: string) => {
+			setLoading(true);
+			try {
+				const result = await getAttendanceForReview({
+					page: pg,
+					pageSize,
+					status: status || undefined,
+					batchId: batch || undefined,
+					search: search || undefined,
+				});
+				const serialized = JSON.parse(JSON.stringify(result));
+				setSheets(serialized.data);
+				setTotal(serialized.total);
+				setPage(serialized.page);
+			} catch {
+				toast.error("Failed to load attendance sheets");
+			} finally {
+				setLoading(false);
+			}
+		},
+		[pageSize],
+	);
 
-	const handleSearchChange = useCallback((val: string) => {
-		setSearchQuery(val);
-		setPage(1);
-	}, []);
-	const handleStatusChange = useCallback((val: StatusFilter) => {
-		setStatusFilter(val);
-		setPage(1);
-	}, []);
-	const handleBatchChange = useCallback((val: string) => {
-		setBatchFilter(val);
-		setPage(1);
-	}, []);
+	function handlePageChange(newPage: number) {
+		setSelectedIds(new Set());
+		fetchSheets(
+			newPage,
+			statusFilter !== "ALL" ? statusFilter : undefined,
+			batchFilter !== "ALL" ? batchFilter : undefined,
+			searchQuery || undefined,
+		);
+	}
 
-	// ---- Counts ----
+	function handleFilterChange(
+		newStatus: StatusFilter,
+		newBatch: string,
+		newSearch: string,
+	) {
+		setStatusFilter(newStatus);
+		setBatchFilter(newBatch);
+		setSearchQuery(newSearch);
+		setSelectedIds(new Set());
+		fetchSheets(
+			1,
+			newStatus !== "ALL" ? newStatus : undefined,
+			newBatch !== "ALL" ? newBatch : undefined,
+			newSearch || undefined,
+		);
+	}
+
+	// ---- Counts (from current page view) ----
 	const counts = useMemo(() => {
-		const c = { ALL: 0, SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
+		const c = { SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
 		for (const s of sheets) {
-			c.ALL++;
 			if (s.status in c) c[s.status as keyof typeof c]++;
 		}
-		return c;
+		return { ...c, ALL: sheets.length };
 	}, [sheets]);
 
 	// ---- Bulk Select ----
-	const submittedInView = paginated.filter((s) => s.status === "SUBMITTED");
+	const submittedInView = sheets.filter((s) => s.status === "SUBMITTED");
 	const allSubmittedSelected =
 		submittedInView.length > 0 &&
 		submittedInView.every((s) => selectedIds.has(s.id));
@@ -284,7 +310,12 @@ export function AttendanceReviewClient({
 					next.delete(signTarget.id);
 					return next;
 				});
-				router.refresh();
+				fetchSheets(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Failed to sign");
 			}
@@ -315,7 +346,12 @@ export function AttendanceReviewClient({
 					next.delete(rejectTarget.id);
 					return next;
 				});
-				router.refresh();
+				fetchSheets(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(
 					error instanceof Error ? error.message : "Failed to reject",
@@ -324,25 +360,23 @@ export function AttendanceReviewClient({
 		});
 	}
 
-	function bulkSign() {
+	function handleBulkSign() {
 		const ids = Array.from(selectedIds);
 		if (ids.length === 0) return;
 		startTransition(async () => {
-			let success = 0;
-			let failed = 0;
-			for (const id of ids) {
-				try {
-					await signAttendanceSheet(id);
-					success++;
-				} catch {
-					failed++;
-				}
+			try {
+				const result = await bulkSignAttendanceSheets(ids);
+				toast.success(`Signed ${result.signedCount} sheets`);
+				setSelectedIds(new Set());
+				fetchSheets(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
+			} catch {
+				toast.error("Bulk sign failed");
 			}
-			setSelectedIds(new Set());
-			toast.success(
-				`Signed ${success} sheets${failed > 0 ? `, ${failed} failed` : ""}`,
-			);
-			router.refresh();
 		});
 	}
 
@@ -368,12 +402,12 @@ export function AttendanceReviewClient({
 	// ---- Export ----
 	async function handleExportPdf() {
 		const { exportAttendancePdf } = await import("@/lib/export/export-pdf");
-		exportAttendancePdf(filtered);
+		exportAttendancePdf(sheets);
 	}
 
 	async function handleExportExcel() {
 		const { exportAttendanceExcel } = await import("@/lib/export/export-excel");
-		exportAttendanceExcel(filtered);
+		exportAttendanceExcel(sheets);
 	}
 
 	// ---- Helpers ----
@@ -389,7 +423,7 @@ export function AttendanceReviewClient({
 		<div className="space-y-6">
 			{/* Stats Row */}
 			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<StatMini label="Total" count={counts.ALL} color="default" />
+				<StatMini label="Total (page)" count={total} color="default" />
 				<StatMini
 					label="Pending Review"
 					count={counts.SUBMITTED}
@@ -411,9 +445,11 @@ export function AttendanceReviewClient({
 						<div className="relative flex-1 w-full">
 							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
-								placeholder="Search by student name, department, or batch..."
+								placeholder="Search by student name..."
 								value={searchQuery}
-								onChange={(e) => handleSearchChange(e.target.value)}
+								onChange={(e) =>
+									handleFilterChange(statusFilter, batchFilter, e.target.value)
+								}
 								className="pl-9"
 							/>
 						</div>
@@ -423,30 +459,35 @@ export function AttendanceReviewClient({
 							<Filter className="h-4 w-4 text-muted-foreground" />
 							<Select
 								value={statusFilter}
-								onValueChange={(v) => handleStatusChange(v as StatusFilter)}
+								onValueChange={(v) =>
+									handleFilterChange(
+										v as StatusFilter,
+										batchFilter,
+										searchQuery,
+									)
+								}
 							>
 								<SelectTrigger className="w-44">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="ALL">All ({counts.ALL})</SelectItem>
-									<SelectItem value="SUBMITTED">
-										Pending ({counts.SUBMITTED})
-									</SelectItem>
-									<SelectItem value="SIGNED">
-										Signed ({counts.SIGNED})
-									</SelectItem>
-									<SelectItem value="NEEDS_REVISION">
-										Revision ({counts.NEEDS_REVISION})
-									</SelectItem>
-									<SelectItem value="DRAFT">Draft ({counts.DRAFT})</SelectItem>
+									<SelectItem value="ALL">All Status</SelectItem>
+									<SelectItem value="SUBMITTED">Pending</SelectItem>
+									<SelectItem value="SIGNED">Signed</SelectItem>
+									<SelectItem value="NEEDS_REVISION">Revision</SelectItem>
+									<SelectItem value="DRAFT">Draft</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 
 						{/* Batch Filter */}
 						{batches.length > 0 && (
-							<Select value={batchFilter} onValueChange={handleBatchChange}>
+							<Select
+								value={batchFilter}
+								onValueChange={(v) =>
+									handleFilterChange(statusFilter, v, searchQuery)
+								}
+							>
 								<SelectTrigger className="w-44">
 									<SelectValue placeholder="Batch" />
 								</SelectTrigger>
@@ -490,7 +531,7 @@ export function AttendanceReviewClient({
 							<Button
 								size="sm"
 								className="bg-green-600 hover:bg-green-700 text-white"
-								onClick={bulkSign}
+								onClick={handleBulkSign}
 								disabled={isPending}
 							>
 								{isPending ?
@@ -515,14 +556,18 @@ export function AttendanceReviewClient({
 				<CardHeader className="pb-3">
 					<CardTitle className="text-lg flex items-center gap-2">
 						<ClipboardList className="h-5 w-5" />
-						Attendance Sheets ({filtered.length})
+						Attendance Sheets ({total})
 					</CardTitle>
 					<CardDescription>
 						Click on any row to view full attendance details
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					{filtered.length === 0 ?
+					{loading ?
+						<div className="flex justify-center py-12">
+							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+						</div>
+					: sheets.length === 0 ?
 						<div className="text-center py-12 text-muted-foreground">
 							<ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
 							<p className="font-medium">No attendance sheets found</p>
@@ -559,7 +604,7 @@ export function AttendanceReviewClient({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{paginated.map((sheet) => (
+									{sheets.map((sheet) => (
 										<TableRow
 											key={sheet.id}
 											className={cn(
@@ -661,22 +706,22 @@ export function AttendanceReviewClient({
 					{totalPages > 1 && (
 						<div className="flex items-center justify-between mt-4 px-2">
 							<p className="text-sm text-muted-foreground">
-								Page {page} of {totalPages} ({filtered.length} sheets)
+								Page {page} of {totalPages} ({total} sheets)
 							</p>
 							<div className="flex gap-1">
 								<Button
 									variant="outline"
 									size="sm"
-									disabled={page <= 1}
-									onClick={() => setPage((p) => p - 1)}
+									disabled={page <= 1 || loading}
+									onClick={() => handlePageChange(page - 1)}
 								>
 									<ChevronLeft className="h-4 w-4" />
 								</Button>
 								<Button
 									variant="outline"
 									size="sm"
-									disabled={page >= totalPages}
-									onClick={() => setPage((p) => p + 1)}
+									disabled={page >= totalPages || loading}
+									onClick={() => handlePageChange(page + 1)}
 								>
 									<ChevronRight className="h-4 w-4" />
 								</Button>
