@@ -85,6 +85,7 @@ import {
 	deleteCaseManagementEntry,
 } from "@/actions/case-management";
 import { COMPETENCY_LEVEL_OPTIONS } from "@/lib/constants/case-management-fields";
+import { getSubCategoryOptions } from "@/lib/constants/case-categories";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
@@ -120,6 +121,7 @@ interface CaseManagementTableProps {
 }
 
 interface InlineForm {
+	caseSubCategory: string;
 	date: string;
 	patientName: string;
 	patientAge: string;
@@ -132,6 +134,7 @@ interface InlineForm {
 }
 
 const emptyForm: InlineForm = {
+	caseSubCategory: "",
 	date: "",
 	patientName: "",
 	patientAge: "",
@@ -206,6 +209,7 @@ export function CaseManagementTable({
 		if (entry.status === "SUBMITTED" || entry.status === "SIGNED") return;
 		setEditingId(entry.id);
 		setForm({
+			caseSubCategory: entry.caseSubCategory ?? "",
 			date: entry.date ? new Date(entry.date).toISOString().split("T")[0] : "",
 			patientName: entry.patientName ?? "",
 			patientAge: entry.patientAge != null ? String(entry.patientAge) : "",
@@ -231,6 +235,7 @@ export function CaseManagementTable({
 					return;
 				}
 				await updateCaseManagementEntry(id, {
+					caseSubCategory: form.caseSubCategory || null,
 					date: form.date || null,
 					patientName: form.patientName || null,
 					patientAge: ageNum,
@@ -254,6 +259,13 @@ export function CaseManagementTable({
 		const entry = entries.find((e) => e.id === id);
 		if (entry) {
 			const missing: string[] = [];
+			if (!entry.caseSubCategory?.trim()) missing.push("Case Category");
+			if (!entry.date) missing.push("Date");
+			if (!entry.patientName?.trim()) missing.push("Patient Name");
+			if (entry.patientAge == null) missing.push("Age");
+			if (!entry.patientSex?.trim()) missing.push("Sex");
+			if (!entry.uhid?.trim()) missing.push("UHID");
+			if (!entry.completeDiagnosis?.trim()) missing.push("Complete Diagnosis");
 			if (!entry.competencyLevel) missing.push("Competency Level");
 			if (!entry.facultyId) missing.push("Faculty Sign");
 			if (missing.length > 0) {
@@ -429,6 +441,7 @@ export function CaseManagementTable({
 												onCancel={cancelEdit}
 												isPending={isPending}
 												getFacultyName={getFacultyName}
+												category={category}
 											/>
 										:	<ReadRow
 												key={entry.id}
@@ -528,6 +541,7 @@ function EditRow({
 	onCancel,
 	isPending,
 	getFacultyName,
+	category,
 }: {
 	entry: CaseManagementEntry;
 	form: InlineForm;
@@ -539,7 +553,13 @@ function EditRow({
 	onCancel: () => void;
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
+	category: string;
 }) {
+	const subCategoryOptions = useMemo(
+		() => getSubCategoryOptions(category),
+		[category],
+	);
+
 	return (
 		<TableRow className="bg-blue-50/40">
 			{/* Sl. No */}
@@ -547,9 +567,25 @@ function EditRow({
 				{entry.slNo}
 			</TableCell>
 
-			{/* Case Category (sub-category, read-only) */}
-			<TableCell className="font-medium text-sm">
-				{entry.caseSubCategory}
+			{/* Case Category (sub-category, editable select) */}
+			<TableCell>
+				<Select
+					value={form.caseSubCategory}
+					onValueChange={(val) =>
+						setForm((f) => ({ ...f, caseSubCategory: val }))
+					}
+				>
+					<SelectTrigger className="w-40 text-xs">
+						<SelectValue placeholder="Select case type…" />
+					</SelectTrigger>
+					<SelectContent>
+						{subCategoryOptions.map((sc) => (
+							<SelectItem key={sc.value} value={sc.value}>
+								{sc.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 			</TableCell>
 
 			{/* Date */}
@@ -789,7 +825,11 @@ function ReadRow({
 
 			{/* Case Category (sub-category) */}
 			<TableCell className="font-medium text-sm">
-				{entry.caseSubCategory}
+				{entry.caseSubCategory || (
+					<span className="text-muted-foreground italic text-xs">
+						Not set — click to edit
+					</span>
+				)}
 			</TableCell>
 
 			{/* Date */}
@@ -888,7 +928,7 @@ function ReadRow({
 			{/* Actions */}
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				<div className="flex items-center justify-center gap-0.5">
-					{entry.status === "DRAFT" && entry.competencyLevel && (
+					{entry.status === "DRAFT" && (
 						<Button
 							variant="ghost"
 							size="icon"

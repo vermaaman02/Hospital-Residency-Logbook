@@ -12,7 +12,7 @@
 
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
 import {
 	Card,
 	CardContent,
@@ -70,6 +70,7 @@ import {
 	ShieldCheck,
 	CheckCheck,
 	CalendarOff,
+	Clock,
 } from "lucide-react";
 import { format, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -246,13 +247,40 @@ export function AttendanceClient({
 	const todayHolidayName = holidayMap.get(todayStr) ?? null;
 	const todayIsHoliday = todayHolidayName !== null;
 
+	// ============= TIME WINDOW CHECK =============
+	// Re-check every 30 seconds so the UI auto-enables when the window opens
+	const [nowMinutes, setNowMinutes] = useState(() => {
+		const n = new Date();
+		return n.getHours() * 60 + n.getMinutes();
+	});
+
+	useEffect(() => {
+		const interval = setInterval(() => {
+			const n = new Date();
+			setNowMinutes(n.getHours() * 60 + n.getMinutes());
+		}, 30_000);
+		return () => clearInterval(interval);
+	}, []);
+
+	const isWithinTimeWindow = useMemo(() => {
+		if (!config?.classStartTime || !config?.classEndTime) return true; // no restriction
+		const [startH, startM] = config.classStartTime.split(":").map(Number);
+		const [endH, endM] = config.classEndTime.split(":").map(Number);
+		const startMin = startH * 60 + startM;
+		const endMin = endH * 60 + endM;
+		return nowMinutes >= startMin && nowMinutes <= endMin;
+	}, [config?.classStartTime, config?.classEndTime, nowMinutes]);
+
 	// Method gating: which attendance methods are available?
 	const showManualForm =
-		(config?.manualAttendanceEnabled ?? true) && !todayIsHoliday;
+		(config?.manualAttendanceEnabled ?? true) &&
+		!todayIsHoliday &&
+		isWithinTimeWindow;
 	const showFaceRecognition =
 		(config?.faceRecognitionEnabled ?? false) &&
 		!!config?.batchId &&
-		!todayIsHoliday;
+		!todayIsHoliday &&
+		isWithinTimeWindow;
 
 	// Entries sorted by date descending
 	const sortedEntries = useMemo(() => {
@@ -578,6 +606,27 @@ export function AttendanceClient({
 					</div>
 				)}
 
+				{/* Time Window Closed Banner — blocks manual + face attendance */}
+				{!todayIsHoliday &&
+					!isWithinTimeWindow &&
+					config?.classStartTime &&
+					config?.classEndTime && (
+						<div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-3">
+							<Clock className="h-6 w-6 text-orange-500 mt-0.5 shrink-0" />
+							<div>
+								<p className="font-semibold text-orange-800">
+									Attendance window is currently closed
+								</p>
+								<p className="text-sm text-orange-700 mt-1">
+									You can mark attendance only between{" "}
+									<strong>{config.classStartTime}</strong> and{" "}
+									<strong>{config.classEndTime}</strong>. The form will
+									automatically become available when the window opens.
+								</p>
+							</div>
+						</div>
+					)}
+
 				{/* Mark Attendance Card */}
 				<Card>
 					<CardHeader className="pb-3">
@@ -728,7 +777,7 @@ export function AttendanceClient({
 									Mark
 								</Button>
 							</div>
-						: !todayIsHoliday ?
+						: !todayIsHoliday && !config?.manualAttendanceEnabled ?
 							<div className="text-center py-4 text-sm text-muted-foreground">
 								Manual attendance form is disabled by administrator.
 								{showFaceRecognition &&
