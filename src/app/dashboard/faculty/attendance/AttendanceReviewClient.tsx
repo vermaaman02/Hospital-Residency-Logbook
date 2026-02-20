@@ -1,12 +1,12 @@
 /**
  * @module AttendanceReviewClient
- * @description Review UI for attendance sheets.
- * Features: stat cards, search, batch/status filter, bulk select, detail sheet,
- * sign/reject dialogs with remarks, auto-review toggle, pagination.
- * Used by both faculty and HOD pages.
+ * @description Review UI for daily attendance entries with server-side pagination.
+ * Features: stat cards, search, batch/status filter, bulk select, detail panel,
+ * sign/reject dialogs with remarks, auto-review toggle.
+ * Each entry is an individual day (not weekly sheets).
  *
  * @see PG Logbook .md — "Attendance Sheet for Clinical Posting"
- * @see RotationReviewClient.tsx — review pattern reference
+ * @see actions/attendance.ts — getDailyEntriesForReview, signDailyEntry, etc.
  */
 
 "use client";
@@ -55,7 +55,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ExportDropdown } from "@/components/shared/ExportDropdown";
 import {
 	Search,
 	CheckCircle2,
@@ -76,8 +75,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
-	signAttendanceSheet,
-	rejectAttendanceSheet,
+	signDailyEntry,
+	rejectDailyEntry,
+	bulkSignDailyEntries,
+	getDailyEntriesForReview,
 } from "@/actions/attendance";
 import { toggleAutoReview } from "@/actions/auto-review";
 import type { AutoReviewSettings } from "@/actions/auto-review";
@@ -85,166 +86,177 @@ import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
 
-interface AttendanceEntryData {
+interface DailyEntryForReview {
 	id: string;
 	date: string | null;
 	day: string;
 	presentAbsent: string | null;
 	hodName: string | null;
-}
-
-export interface AttendanceSheetForReview {
-	id: string;
-	userId: string;
-	weekStartDate: string;
-	weekEndDate: string;
-	batch: string | null;
-	postedDepartment: string | null;
 	status: string;
 	facultyRemark: string | null;
-	entries: AttendanceEntryData[];
-	createdAt: string;
-	updatedAt: string;
-	user: {
-		id: string;
-		firstName: string;
-		lastName: string;
-		batchRelation: { name: string } | null;
-		currentSemester: number | null;
+	signedAt: string | null;
+	signedBy: string | null;
+	markedAt: string | null;
+	attendanceSheet: {
+		userId: string;
+		batch: string | null;
+		postedDepartment: string | null;
+		user: {
+			id: string;
+			firstName: string;
+			lastName: string;
+			batchRelation: { name: string } | null;
+			currentSemester: number | null;
+			profileImage: string | null;
+		};
 	};
 }
 
+interface PaginatedEntries {
+	data: DailyEntryForReview[];
+	total: number;
+	page: number;
+	pageSize: number;
+}
+
 interface AttendanceReviewClientProps {
-	sheets: AttendanceSheetForReview[];
+	entries: PaginatedEntries;
 	role: "faculty" | "hod";
 	autoReviewSettings: AutoReviewSettings;
 }
 
 type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION" | "DRAFT";
 
-const PAGE_SIZE = 10;
-
-const DAYS_ORDERED = [
-	"MONDAY",
-	"TUESDAY",
-	"WEDNESDAY",
-	"THURSDAY",
-	"FRIDAY",
-	"SATURDAY",
-	"SUNDAY",
-] as const;
-
-const DAY_LABELS: Record<string, string> = {
-	MONDAY: "Mon",
-	TUESDAY: "Tue",
-	WEDNESDAY: "Wed",
-	THURSDAY: "Thu",
-	FRIDAY: "Fri",
-	SATURDAY: "Sat",
-	SUNDAY: "Sun",
+const STATUS_COLOR: Record<string, string> = {
+	Present: "bg-green-100 text-green-700",
+	Absent: "bg-red-100 text-red-700",
+	Leave: "bg-amber-100 text-amber-700",
+	Holiday: "bg-blue-100 text-blue-700",
 };
 
 // ======================== MAIN COMPONENT ========================
 
 export function AttendanceReviewClient({
-	sheets,
+	entries: initialEntries,
 	role,
 	autoReviewSettings,
 }: AttendanceReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
+	// Server-side paginated data
+	const [entries, setEntries] = useState(initialEntries.data);
+	const [total, setTotal] = useState(initialEntries.total);
+	const [page, setPage] = useState(initialEntries.page);
+	const pageSize = initialEntries.pageSize;
+	const [loading, setLoading] = useState(false);
+
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 	const [batchFilter, setBatchFilter] = useState("ALL");
 
-	// Batches from submissions
+	// Batches from current page
 	const batches = useMemo(() => {
 		const set = new Set<string>();
-		sheets.forEach((s) => {
-			if (s.user.batchRelation?.name) set.add(s.user.batchRelation.name);
+		entries.forEach((e) => {
+			if (e.attendanceSheet.user.batchRelation?.name)
+				set.add(e.attendanceSheet.user.batchRelation.name);
 		});
 		return Array.from(set).sort();
-	}, [sheets]);
+	}, [entries]);
 
 	// Bulk selection
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-	// Detail sheet
-	const [detailSheet, setDetailSheet] =
-		useState<AttendanceSheetForReview | null>(null);
+	// Detail entry
+	const [detailEntry, setDetailEntry] = useState<DailyEntryForReview | null>(
+		null,
+	);
 
 	// Sign dialog
-	const [signTarget, setSignTarget] = useState<AttendanceSheetForReview | null>(
+	const [signTarget, setSignTarget] = useState<DailyEntryForReview | null>(
 		null,
 	);
 	const [signRemark, setSignRemark] = useState("");
 
 	// Reject dialog
-	const [rejectTarget, setRejectTarget] =
-		useState<AttendanceSheetForReview | null>(null);
+	const [rejectTarget, setRejectTarget] = useState<DailyEntryForReview | null>(
+		null,
+	);
 	const [rejectRemark, setRejectRemark] = useState("");
-
-	// Pagination
-	const [page, setPage] = useState(1);
 
 	// Auto-review toggle
 	const [autoReview, setAutoReview] = useState(autoReviewSettings.attendance);
 
-	// ---- Filtering ----
-	const filtered = useMemo(() => {
-		let result = sheets;
-		if (statusFilter !== "ALL") {
-			result = result.filter((s) => s.status === statusFilter);
-		}
-		if (batchFilter !== "ALL") {
-			result = result.filter((s) => s.user.batchRelation?.name === batchFilter);
-		}
-		if (searchQuery.trim()) {
-			const q = searchQuery.toLowerCase();
-			result = result.filter(
-				(s) =>
-					`${s.user.firstName} ${s.user.lastName}`.toLowerCase().includes(q) ||
-					(s.postedDepartment ?? "").toLowerCase().includes(q) ||
-					(s.user.batchRelation?.name ?? "").toLowerCase().includes(q),
-			);
-		}
-		return result;
-	}, [sheets, statusFilter, batchFilter, searchQuery]);
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-	// Paginate
-	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-	const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+	// ---- Server-side data fetching ----
+	const fetchEntries = useCallback(
+		async (pg: number, status?: string, batch?: string, search?: string) => {
+			setLoading(true);
+			try {
+				const result = await getDailyEntriesForReview({
+					page: pg,
+					pageSize,
+					status: status || undefined,
+					batchId: batch || undefined,
+					search: search || undefined,
+				});
+				const serialized = JSON.parse(JSON.stringify(result));
+				setEntries(serialized.data);
+				setTotal(serialized.total);
+				setPage(serialized.page);
+			} catch {
+				toast.error("Failed to load attendance entries");
+			} finally {
+				setLoading(false);
+			}
+		},
+		[pageSize],
+	);
 
-	const handleSearchChange = useCallback((val: string) => {
-		setSearchQuery(val);
-		setPage(1);
-	}, []);
-	const handleStatusChange = useCallback((val: StatusFilter) => {
-		setStatusFilter(val);
-		setPage(1);
-	}, []);
-	const handleBatchChange = useCallback((val: string) => {
-		setBatchFilter(val);
-		setPage(1);
-	}, []);
+	function handlePageChange(newPage: number) {
+		setSelectedIds(new Set());
+		fetchEntries(
+			newPage,
+			statusFilter !== "ALL" ? statusFilter : undefined,
+			batchFilter !== "ALL" ? batchFilter : undefined,
+			searchQuery || undefined,
+		);
+	}
 
-	// ---- Counts ----
+	function handleFilterChange(
+		newStatus: StatusFilter,
+		newBatch: string,
+		newSearch: string,
+	) {
+		setStatusFilter(newStatus);
+		setBatchFilter(newBatch);
+		setSearchQuery(newSearch);
+		setSelectedIds(new Set());
+		fetchEntries(
+			1,
+			newStatus !== "ALL" ? newStatus : undefined,
+			newBatch !== "ALL" ? newBatch : undefined,
+			newSearch || undefined,
+		);
+	}
+
+	// ---- Counts (from current page view) ----
 	const counts = useMemo(() => {
-		const c = { ALL: 0, SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
-		for (const s of sheets) {
-			c.ALL++;
-			if (s.status in c) c[s.status as keyof typeof c]++;
+		const c = { SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
+		for (const e of entries) {
+			if (e.status in c) c[e.status as keyof typeof c]++;
 		}
-		return c;
-	}, [sheets]);
+		return { ...c, ALL: entries.length };
+	}, [entries]);
 
 	// ---- Bulk Select ----
-	const submittedInView = paginated.filter((s) => s.status === "SUBMITTED");
+	const submittedInView = entries.filter((e) => e.status === "SUBMITTED");
 	const allSubmittedSelected =
 		submittedInView.length > 0 &&
-		submittedInView.every((s) => selectedIds.has(s.id));
+		submittedInView.every((e) => selectedIds.has(e.id));
 
 	function toggleSelect(id: string) {
 		setSelectedIds((prev) => {
@@ -259,12 +271,12 @@ export function AttendanceReviewClient({
 		if (allSubmittedSelected) {
 			setSelectedIds(new Set());
 		} else {
-			setSelectedIds(new Set(submittedInView.map((s) => s.id)));
+			setSelectedIds(new Set(submittedInView.map((e) => e.id)));
 		}
 	}
 
 	// ---- Actions ----
-	function openSign(entry: AttendanceSheetForReview) {
+	function openSign(entry: DailyEntryForReview) {
 		setSignTarget(entry);
 		setSignRemark("");
 	}
@@ -273,25 +285,30 @@ export function AttendanceReviewClient({
 		if (!signTarget) return;
 		startTransition(async () => {
 			try {
-				await signAttendanceSheet(signTarget.id, signRemark || undefined);
+				await signDailyEntry(signTarget.id, signRemark || undefined);
 				toast.success(
-					`Signed attendance for ${signTarget.user.firstName} ${signTarget.user.lastName}`,
+					`Signed attendance for ${signTarget.attendanceSheet.user.firstName} ${signTarget.attendanceSheet.user.lastName}`,
 				);
 				setSignTarget(null);
-				setDetailSheet(null);
+				setDetailEntry(null);
 				setSelectedIds((prev) => {
 					const next = new Set(prev);
 					next.delete(signTarget.id);
 					return next;
 				});
-				router.refresh();
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Failed to sign");
 			}
 		});
 	}
 
-	function openReject(entry: AttendanceSheetForReview) {
+	function openReject(entry: DailyEntryForReview) {
 		setRejectTarget(entry);
 		setRejectRemark("");
 	}
@@ -304,18 +321,23 @@ export function AttendanceReviewClient({
 		}
 		startTransition(async () => {
 			try {
-				await rejectAttendanceSheet(rejectTarget.id, rejectRemark);
+				await rejectDailyEntry(rejectTarget.id, rejectRemark);
 				toast.success(
-					`Sent back for revision: ${rejectTarget.user.firstName} ${rejectTarget.user.lastName}`,
+					`Sent back for revision: ${rejectTarget.attendanceSheet.user.firstName} ${rejectTarget.attendanceSheet.user.lastName}`,
 				);
 				setRejectTarget(null);
-				setDetailSheet(null);
+				setDetailEntry(null);
 				setSelectedIds((prev) => {
 					const next = new Set(prev);
 					next.delete(rejectTarget.id);
 					return next;
 				});
-				router.refresh();
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(
 					error instanceof Error ? error.message : "Failed to reject",
@@ -324,25 +346,23 @@ export function AttendanceReviewClient({
 		});
 	}
 
-	function bulkSign() {
+	function handleBulkSign() {
 		const ids = Array.from(selectedIds);
 		if (ids.length === 0) return;
 		startTransition(async () => {
-			let success = 0;
-			let failed = 0;
-			for (const id of ids) {
-				try {
-					await signAttendanceSheet(id);
-					success++;
-				} catch {
-					failed++;
-				}
+			try {
+				const result = await bulkSignDailyEntries(ids);
+				toast.success(`Signed ${result.signedCount} entries`);
+				setSelectedIds(new Set());
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
+			} catch {
+				toast.error("Bulk sign failed");
 			}
-			setSelectedIds(new Set());
-			toast.success(
-				`Signed ${success} sheets${failed > 0 ? `, ${failed} failed` : ""}`,
-			);
-			router.refresh();
 		});
 	}
 
@@ -365,31 +385,15 @@ export function AttendanceReviewClient({
 		});
 	}
 
-	// ---- Export ----
-	async function handleExportPdf() {
-		const { exportAttendancePdf } = await import("@/lib/export/export-pdf");
-		exportAttendancePdf(filtered);
-	}
-
-	async function handleExportExcel() {
-		const { exportAttendanceExcel } = await import("@/lib/export/export-excel");
-		exportAttendanceExcel(filtered);
-	}
-
-	// ---- Helpers ----
-	function weekLabel(s: AttendanceSheetForReview) {
-		return (
-			format(new Date(s.weekStartDate), "dd MMM") +
-			" – " +
-			format(new Date(s.weekEndDate), "dd MMM yyyy")
-		);
+	function studentLabel(e: DailyEntryForReview) {
+		return `${e.attendanceSheet.user.firstName} ${e.attendanceSheet.user.lastName}`;
 	}
 
 	return (
 		<div className="space-y-6">
 			{/* Stats Row */}
 			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<StatMini label="Total" count={counts.ALL} color="default" />
+				<StatMini label="Total (page)" count={total} color="default" />
 				<StatMini
 					label="Pending Review"
 					count={counts.SUBMITTED}
@@ -411,9 +415,11 @@ export function AttendanceReviewClient({
 						<div className="relative flex-1 w-full">
 							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
-								placeholder="Search by student name, department, or batch..."
+								placeholder="Search by student name..."
 								value={searchQuery}
-								onChange={(e) => handleSearchChange(e.target.value)}
+								onChange={(e) =>
+									handleFilterChange(statusFilter, batchFilter, e.target.value)
+								}
 								className="pl-9"
 							/>
 						</div>
@@ -423,30 +429,35 @@ export function AttendanceReviewClient({
 							<Filter className="h-4 w-4 text-muted-foreground" />
 							<Select
 								value={statusFilter}
-								onValueChange={(v) => handleStatusChange(v as StatusFilter)}
+								onValueChange={(v) =>
+									handleFilterChange(
+										v as StatusFilter,
+										batchFilter,
+										searchQuery,
+									)
+								}
 							>
 								<SelectTrigger className="w-44">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="ALL">All ({counts.ALL})</SelectItem>
-									<SelectItem value="SUBMITTED">
-										Pending ({counts.SUBMITTED})
-									</SelectItem>
-									<SelectItem value="SIGNED">
-										Signed ({counts.SIGNED})
-									</SelectItem>
-									<SelectItem value="NEEDS_REVISION">
-										Revision ({counts.NEEDS_REVISION})
-									</SelectItem>
-									<SelectItem value="DRAFT">Draft ({counts.DRAFT})</SelectItem>
+									<SelectItem value="ALL">All Status</SelectItem>
+									<SelectItem value="SUBMITTED">Pending</SelectItem>
+									<SelectItem value="SIGNED">Signed</SelectItem>
+									<SelectItem value="NEEDS_REVISION">Revision</SelectItem>
+									<SelectItem value="DRAFT">Draft</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 
 						{/* Batch Filter */}
 						{batches.length > 0 && (
-							<Select value={batchFilter} onValueChange={handleBatchChange}>
+							<Select
+								value={batchFilter}
+								onValueChange={(v) =>
+									handleFilterChange(statusFilter, v, searchQuery)
+								}
+							>
 								<SelectTrigger className="w-44">
 									<SelectValue placeholder="Batch" />
 								</SelectTrigger>
@@ -460,11 +471,6 @@ export function AttendanceReviewClient({
 								</SelectContent>
 							</Select>
 						)}
-
-						<ExportDropdown
-							onExportPdf={handleExportPdf}
-							onExportExcel={handleExportExcel}
-						/>
 					</div>
 
 					{/* Auto-review toggle (HOD only) */}
@@ -490,7 +496,7 @@ export function AttendanceReviewClient({
 							<Button
 								size="sm"
 								className="bg-green-600 hover:bg-green-700 text-white"
-								onClick={bulkSign}
+								onClick={handleBulkSign}
 								disabled={isPending}
 							>
 								{isPending ?
@@ -510,26 +516,30 @@ export function AttendanceReviewClient({
 				</CardContent>
 			</Card>
 
-			{/* Submissions Table */}
+			{/* Entries Table */}
 			<Card>
 				<CardHeader className="pb-3">
 					<CardTitle className="text-lg flex items-center gap-2">
 						<ClipboardList className="h-5 w-5" />
-						Attendance Sheets ({filtered.length})
+						Daily Attendance Entries ({total})
 					</CardTitle>
 					<CardDescription>
-						Click on any row to view full attendance details
+						Review individual daily attendance entries from students
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
-					{filtered.length === 0 ?
+					{loading ?
+						<div className="flex justify-center py-12">
+							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+						</div>
+					: entries.length === 0 ?
 						<div className="text-center py-12 text-muted-foreground">
 							<ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-							<p className="font-medium">No attendance sheets found</p>
+							<p className="font-medium">No attendance entries found</p>
 							<p className="text-sm mt-1">
 								{searchQuery || statusFilter !== "ALL" ?
 									"Try adjusting your search or filter"
-								:	"No attendance sheets have been submitted yet"}
+								:	"No attendance entries have been submitted yet"}
 							</p>
 						</div>
 					:	<div className="border rounded-lg">
@@ -545,7 +555,11 @@ export function AttendanceReviewClient({
 										</TableHead>
 										<TableHead className="font-bold">Student</TableHead>
 										<TableHead className="text-center font-bold">
-											Week
+											Date
+										</TableHead>
+										<TableHead className="text-center font-bold">Day</TableHead>
+										<TableHead className="text-center font-bold">
+											Attendance
 										</TableHead>
 										<TableHead className="text-center font-bold">
 											Department
@@ -559,24 +573,24 @@ export function AttendanceReviewClient({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{paginated.map((sheet) => (
+									{entries.map((entry) => (
 										<TableRow
-											key={sheet.id}
+											key={entry.id}
 											className={cn(
 												"cursor-pointer transition-colors",
-												selectedIds.has(sheet.id) && "bg-blue-50/60",
-												sheet.status === "SIGNED" && "bg-green-50/40",
+												selectedIds.has(entry.id) && "bg-blue-50/60",
+												entry.status === "SIGNED" && "bg-green-50/40",
 											)}
-											onClick={() => setDetailSheet(sheet)}
+											onClick={() => setDetailEntry(entry)}
 										>
 											<TableCell
 												className="text-center"
 												onClick={(e) => e.stopPropagation()}
 											>
-												{sheet.status === "SUBMITTED" && (
+												{entry.status === "SUBMITTED" && (
 													<Checkbox
-														checked={selectedIds.has(sheet.id)}
-														onCheckedChange={() => toggleSelect(sheet.id)}
+														checked={selectedIds.has(entry.id)}
+														onCheckedChange={() => toggleSelect(entry.id)}
 													/>
 												)}
 											</TableCell>
@@ -586,27 +600,57 @@ export function AttendanceReviewClient({
 														<User className="h-4 w-4 text-hospital-primary" />
 													</div>
 													<div>
-														<div className="font-medium text-sm">
-															{sheet.user.firstName} {sheet.user.lastName}
-														</div>
+														<button
+															type="button"
+															className="font-medium text-sm text-hospital-primary hover:underline text-left"
+															onClick={(e) => {
+																e.stopPropagation();
+																router.push(
+																	`/dashboard/faculty/attendance/student/${entry.attendanceSheet.user.id}`,
+																);
+															}}
+														>
+															{studentLabel(entry)}
+														</button>
 														<div className="text-xs text-muted-foreground">
-															{sheet.user.batchRelation?.name ?? "No batch"}
-															{sheet.user.currentSemester ?
-																` · Sem ${sheet.user.currentSemester}`
+															{entry.attendanceSheet.user.batchRelation?.name ??
+																"No batch"}
+															{entry.attendanceSheet.user.currentSemester ?
+																` · Sem ${entry.attendanceSheet.user.currentSemester}`
 															:	""}
 														</div>
 													</div>
 												</div>
 											</TableCell>
-											<TableCell className="text-center text-sm">
-												{weekLabel(sheet)}
+											<TableCell className="text-center text-sm font-medium">
+												{entry.date ?
+													format(new Date(entry.date), "dd MMM yyyy")
+												:	"—"}
 											</TableCell>
 											<TableCell className="text-center text-sm">
-												{sheet.postedDepartment ?? "—"}
+												{entry.day ?
+													entry.day.charAt(0) + entry.day.slice(1).toLowerCase()
+												:	"—"}
+											</TableCell>
+											<TableCell className="text-center">
+												{entry.presentAbsent ?
+													<span
+														className={cn(
+															"px-2 py-0.5 rounded text-xs font-medium",
+															STATUS_COLOR[entry.presentAbsent] ??
+																"bg-gray-100 text-gray-600",
+														)}
+													>
+														{entry.presentAbsent}
+													</span>
+												:	"—"}
+											</TableCell>
+											<TableCell className="text-center text-sm">
+												{entry.attendanceSheet.postedDepartment ?? "—"}
 											</TableCell>
 											<TableCell className="text-center">
 												<StatusBadge
-													status={sheet.status as EntryStatus}
+													status={entry.status as EntryStatus}
 													size="sm"
 												/>
 											</TableCell>
@@ -620,18 +664,18 @@ export function AttendanceReviewClient({
 														size="icon"
 														className="h-7 w-7 text-blue-600"
 														title="View details"
-														onClick={() => setDetailSheet(sheet)}
+														onClick={() => setDetailEntry(entry)}
 													>
 														<Eye className="h-3.5 w-3.5" />
 													</Button>
-													{sheet.status === "SUBMITTED" && (
+													{entry.status === "SUBMITTED" && (
 														<>
 															<Button
 																variant="ghost"
 																size="icon"
 																className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
 																title="Sign"
-																onClick={() => openSign(sheet)}
+																onClick={() => openSign(entry)}
 																disabled={isPending}
 															>
 																<CheckCircle2 className="h-3.5 w-3.5" />
@@ -641,7 +685,7 @@ export function AttendanceReviewClient({
 																size="icon"
 																className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
 																title="Reject"
-																onClick={() => openReject(sheet)}
+																onClick={() => openReject(entry)}
 																disabled={isPending}
 															>
 																<XCircle className="h-3.5 w-3.5" />
@@ -661,22 +705,22 @@ export function AttendanceReviewClient({
 					{totalPages > 1 && (
 						<div className="flex items-center justify-between mt-4 px-2">
 							<p className="text-sm text-muted-foreground">
-								Page {page} of {totalPages} ({filtered.length} sheets)
+								Page {page} of {totalPages} ({total} entries)
 							</p>
 							<div className="flex gap-1">
 								<Button
 									variant="outline"
 									size="sm"
-									disabled={page <= 1}
-									onClick={() => setPage((p) => p - 1)}
+									disabled={page <= 1 || loading}
+									onClick={() => handlePageChange(page - 1)}
 								>
 									<ChevronLeft className="h-4 w-4" />
 								</Button>
 								<Button
 									variant="outline"
 									size="sm"
-									disabled={page >= totalPages}
-									onClick={() => setPage((p) => p + 1)}
+									disabled={page >= totalPages || loading}
+									onClick={() => handlePageChange(page + 1)}
 								>
 									<ChevronRight className="h-4 w-4" />
 								</Button>
@@ -686,142 +730,130 @@ export function AttendanceReviewClient({
 				</CardContent>
 			</Card>
 
-			{/* ==================== Detail Sheet (Side Panel) ==================== */}
+			{/* ==================== Detail Panel ==================== */}
 			<Sheet
-				open={detailSheet !== null}
-				onOpenChange={(open) => !open && setDetailSheet(null)}
+				open={detailEntry !== null}
+				onOpenChange={(open) => !open && setDetailEntry(null)}
 			>
 				<SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-					{detailSheet && (
+					{detailEntry && (
 						<>
 							<SheetHeader>
 								<SheetTitle className="flex items-center gap-2">
 									<CalendarDays className="h-5 w-5 text-hospital-primary" />
-									Attendance Details
+									Attendance Entry Detail
 								</SheetTitle>
 								<SheetDescription>
-									{detailSheet.user.firstName} {detailSheet.user.lastName}
+									{studentLabel(detailEntry)}
 									{" — "}
-									{weekLabel(detailSheet)}
+									{detailEntry.date ?
+										format(new Date(detailEntry.date), "dd MMM yyyy")
+									:	"—"}
 								</SheetDescription>
 							</SheetHeader>
 
 							<div className="mt-6 space-y-4">
-								{/* Header Info */}
+								{/* Detail Grid */}
 								<div className="grid grid-cols-2 gap-3 text-sm">
 									<div>
 										<span className="text-muted-foreground">Student:</span>
-										<p className="font-medium">
-											{detailSheet.user.firstName} {detailSheet.user.lastName}
-										</p>
+										<p className="font-medium">{studentLabel(detailEntry)}</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Batch:</span>
 										<p className="font-medium">
-											{detailSheet.user.batchRelation?.name ?? "—"}
+											{detailEntry.attendanceSheet.user.batchRelation?.name ??
+												"—"}
+										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">Date:</span>
+										<p className="font-medium">
+											{detailEntry.date ?
+												format(new Date(detailEntry.date), "EEEE, dd MMM yyyy")
+											:	"—"}
+										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">Attendance:</span>
+										<p className="font-medium mt-0.5">
+											{detailEntry.presentAbsent ?
+												<span
+													className={cn(
+														"px-2 py-0.5 rounded text-xs font-medium",
+														STATUS_COLOR[detailEntry.presentAbsent] ??
+															"bg-gray-100 text-gray-600",
+													)}
+												>
+													{detailEntry.presentAbsent}
+												</span>
+											:	"—"}
 										</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Department:</span>
 										<p className="font-medium flex items-center gap-1">
 											<Building2 className="h-3.5 w-3.5" />
-											{detailSheet.postedDepartment ?? "—"}
+											{detailEntry.attendanceSheet.postedDepartment ?? "—"}
 										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">HoD Name:</span>
+										<p className="font-medium">{detailEntry.hodName || "—"}</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Status:</span>
 										<div className="mt-0.5">
 											<StatusBadge
-												status={detailSheet.status as EntryStatus}
+												status={detailEntry.status as EntryStatus}
 												size="sm"
 											/>
 										</div>
 									</div>
+									<div>
+										<span className="text-muted-foreground">Marked At:</span>
+										<p className="font-medium">
+											{detailEntry.markedAt ?
+												format(
+													new Date(detailEntry.markedAt),
+													"dd MMM yyyy, HH:mm",
+												)
+											:	"—"}
+										</p>
+									</div>
 								</div>
 
 								{/* Faculty Remark */}
-								{detailSheet.facultyRemark && (
+								{detailEntry.facultyRemark && (
 									<div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-sm">
 										<p className="font-medium text-amber-800">
 											Faculty Remark:
 										</p>
 										<p className="text-amber-700 mt-0.5">
-											{detailSheet.facultyRemark}
+											{detailEntry.facultyRemark}
 										</p>
 									</div>
 								)}
 
-								{/* Day-by-day table */}
-								<div className="border rounded-lg overflow-hidden">
-									<Table>
-										<TableHeader>
-											<TableRow className="bg-muted/50">
-												<TableHead className="w-12 text-center font-bold">
-													#
-												</TableHead>
-												<TableHead className="font-bold">Day</TableHead>
-												<TableHead className="text-center font-bold">
-													Date
-												</TableHead>
-												<TableHead className="text-center font-bold">
-													Attendance
-												</TableHead>
-												<TableHead className="font-bold">HoD Name</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											{DAYS_ORDERED.map((day, idx) => {
-												const entry = detailSheet.entries.find(
-													(e) => e.day === day,
-												);
-												return (
-													<TableRow key={day}>
-														<TableCell className="text-center text-sm font-medium">
-															{idx + 1}
-														</TableCell>
-														<TableCell className="text-sm font-medium">
-															{DAY_LABELS[day]}
-														</TableCell>
-														<TableCell className="text-center text-sm">
-															{entry?.date ?
-																format(new Date(entry.date), "dd/MM/yy")
-															:	"—"}
-														</TableCell>
-														<TableCell className="text-center text-sm">
-															{entry?.presentAbsent ?
-																<span
-																	className={cn(
-																		"px-2 py-0.5 rounded text-xs font-medium",
-																		entry.presentAbsent === "Present" &&
-																			"bg-green-100 text-green-700",
-																		entry.presentAbsent === "Absent" &&
-																			"bg-red-100 text-red-700",
-																		entry.presentAbsent === "Leave" &&
-																			"bg-amber-100 text-amber-700",
-																		entry.presentAbsent === "Holiday" &&
-																			"bg-blue-100 text-blue-700",
-																	)}
-																>
-																	{entry.presentAbsent}
-																</span>
-															:	"—"}
-														</TableCell>
-														<TableCell className="text-sm">
-															{entry?.hodName || "—"}
-														</TableCell>
-													</TableRow>
-												);
-											})}
-										</TableBody>
-									</Table>
-								</div>
+								{/* Signed info */}
+								{detailEntry.signedAt && (
+									<div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm">
+										<p className="font-medium text-green-800">Signed</p>
+										<p className="text-green-700 mt-0.5">
+											{format(
+												new Date(detailEntry.signedAt),
+												"dd MMM yyyy, HH:mm",
+											)}
+										</p>
+									</div>
+								)}
 
 								{/* Action buttons in detail panel */}
-								{detailSheet.status === "SUBMITTED" && (
+								{detailEntry.status === "SUBMITTED" && (
 									<div className="flex gap-2 pt-2">
 										<Button
 											className="flex-1 bg-green-600 hover:bg-green-700"
-											onClick={() => openSign(detailSheet)}
+											onClick={() => openSign(detailEntry)}
 											disabled={isPending}
 										>
 											<CheckCircle2 className="h-4 w-4 mr-2" />
@@ -830,7 +862,7 @@ export function AttendanceReviewClient({
 										<Button
 											variant="destructive"
 											className="flex-1"
-											onClick={() => openReject(detailSheet)}
+											onClick={() => openReject(detailEntry)}
 											disabled={isPending}
 										>
 											<XCircle className="h-4 w-4 mr-2" />
@@ -851,13 +883,14 @@ export function AttendanceReviewClient({
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Sign Attendance Sheet</DialogTitle>
+						<DialogTitle>Sign Attendance Entry</DialogTitle>
 						<DialogDescription>
-							Sign the attendance sheet for{" "}
-							<strong>
-								{signTarget?.user.firstName} {signTarget?.user.lastName}
-							</strong>{" "}
-							— {signTarget ? weekLabel(signTarget) : ""}
+							Sign the attendance entry for{" "}
+							<strong>{signTarget ? studentLabel(signTarget) : ""}</strong>
+							{" — "}
+							{signTarget?.date ?
+								format(new Date(signTarget.date), "dd MMM yyyy")
+							:	""}
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-3">
@@ -900,10 +933,8 @@ export function AttendanceReviewClient({
 					<DialogHeader>
 						<DialogTitle>Request Revision</DialogTitle>
 						<DialogDescription>
-							Send the attendance sheet back to{" "}
-							<strong>
-								{rejectTarget?.user.firstName} {rejectTarget?.user.lastName}
-							</strong>{" "}
+							Send the attendance entry back to{" "}
+							<strong>{rejectTarget ? studentLabel(rejectTarget) : ""}</strong>{" "}
 							for revision. A remark is required.
 						</DialogDescription>
 					</DialogHeader>

@@ -1123,3 +1123,50 @@ export function exportAttendanceReviewExcel(sheets: AttendanceSheetExport[]) {
 		`Attendance_Review_${formatDateForFile()}.xlsx`,
 	);
 }
+
+// ======================== DAILY ATTENDANCE ENTRY — EXPORT ========================
+
+interface DailyAttendanceEntryExport {
+	id: string;
+	date: string | null;
+	day: string;
+	presentAbsent: string | null;
+	hodName: string | null;
+	status: string;
+	facultyRemark: string | null;
+	attendanceSheet: {
+		postedDepartment: string | null;
+	};
+}
+
+/**
+ * Export daily attendance entries to Excel (student view).
+ */
+export function exportDailyAttendanceExcel(
+	entries: DailyAttendanceEntryExport[],
+) {
+	const wb = XLSX.utils.book_new();
+
+	const rows = entries.map((entry) => ({
+		Date: formatShortDate(entry.date),
+		Day: DAY_LABELS_FULL[entry.day] ?? entry.day,
+		"Present/Absent": entry.presentAbsent ?? "—",
+		Department: entry.attendanceSheet?.postedDepartment ?? "—",
+		"HoD Name": entry.hodName ?? "—",
+		Status: entry.status,
+		Remark: entry.facultyRemark ?? "",
+	}));
+
+	const ws = XLSX.utils.json_to_sheet(
+		rows.length > 0 ? rows : [{ Date: "", Status: "No entries" }],
+	);
+	setColumnWidths(ws, [14, 12, 14, 20, 20, 12, 20]);
+	XLSX.utils.book_append_sheet(wb, ws, "Daily Attendance");
+
+	saveAs(
+		new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		}),
+		`Daily_Attendance_${formatDateForFile()}.xlsx`,
+	);
+}

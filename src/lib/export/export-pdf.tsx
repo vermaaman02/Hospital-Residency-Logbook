@@ -2128,3 +2128,104 @@ export async function exportAttendanceReviewPdf(sheets: AttendanceSheetPdf[]) {
 	).toBlob();
 	saveAs(blob, `Attendance_Review_${formatFileDate()}.pdf`);
 }
+
+// ======================== DAILY ATTENDANCE ENTRY — PDF EXPORT ========================
+
+interface DailyAttendanceEntryPdf {
+	id: string;
+	date: string | null;
+	day: string;
+	presentAbsent: string | null;
+	hodName: string | null;
+	status: string;
+	facultyRemark: string | null;
+	attendanceSheet: {
+		postedDepartment: string | null;
+	};
+}
+
+const DAY_LABELS_DAILY: Record<string, string> = {
+	MONDAY: "Monday",
+	TUESDAY: "Tuesday",
+	WEDNESDAY: "Wednesday",
+	THURSDAY: "Thursday",
+	FRIDAY: "Friday",
+	SATURDAY: "Saturday",
+	SUNDAY: "Sunday",
+};
+
+function DailyAttendancePdf({
+	entries,
+	title,
+}: {
+	entries: DailyAttendanceEntryPdf[];
+	title: string;
+}) {
+	return (
+		<Document>
+			<Page size="A4" style={styles.page}>
+				<View style={styles.header}>
+					<Text style={styles.title}>AIIMS Patna</Text>
+					<Text style={styles.subtitle}>{title}</Text>
+					<Text style={styles.subtitle}>
+						Generated: {new Date().toLocaleDateString("en-IN")}
+					</Text>
+				</View>
+				<View style={styles.table}>
+					<View style={[styles.tableRow, styles.tableHeader]}>
+						<Text style={[styles.tableCell, { width: "5%" }]}>#</Text>
+						<Text style={[styles.tableCell, { width: "18%" }]}>Date</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Day</Text>
+						<Text style={[styles.tableCell, { width: "14%" }]}>Attendance</Text>
+						<Text style={[styles.tableCell, { width: "22%" }]}>Department</Text>
+						<Text style={[styles.tableCell, { width: "15%" }]}>HoD Name</Text>
+						<Text style={[styles.tableCell, { width: "12%" }]}>Status</Text>
+					</View>
+					{entries.map((entry, idx) => (
+						<View
+							key={entry.id}
+							style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}
+						>
+							<Text style={[styles.tableCell, { width: "5%" }]}>{idx + 1}</Text>
+							<Text style={[styles.tableCell, { width: "18%" }]}>
+								{entry.date ? fmtShortDate(entry.date) : "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "14%" }]}>
+								{DAY_LABELS_DAILY[entry.day] ?? entry.day}
+							</Text>
+							<Text style={[styles.tableCell, { width: "14%" }]}>
+								{entry.presentAbsent ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "22%" }]}>
+								{entry.attendanceSheet?.postedDepartment ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "15%" }]}>
+								{entry.hodName ?? "—"}
+							</Text>
+							<Text style={[styles.tableCell, { width: "12%" }]}>
+								{entry.status}
+							</Text>
+						</View>
+					))}
+				</View>
+				<View style={{ marginTop: 10 }}>
+					<Text style={{ fontSize: 8, color: "#666" }}>
+						Total: {entries.length} entries
+					</Text>
+				</View>
+			</Page>
+		</Document>
+	);
+}
+
+/**
+ * Export daily attendance entries to PDF (student view).
+ */
+export async function exportDailyAttendancePdf(
+	entries: DailyAttendanceEntryPdf[],
+) {
+	const blob = await pdf(
+		<DailyAttendancePdf entries={entries} title="Daily Attendance Log" />,
+	).toBlob();
+	saveAs(blob, `Daily_Attendance_${formatFileDate()}.pdf`);
+}

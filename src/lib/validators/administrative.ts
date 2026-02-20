@@ -35,6 +35,9 @@ export const attendanceEntrySchema = z.object({
 	]),
 	presentAbsent: z.string().optional(),
 	hodName: z.string().optional(),
+	markedAt: z.coerce.date().optional(),
+	latitude: z.number().min(-90).max(90).optional(),
+	longitude: z.number().min(-180).max(180).optional(),
 });
 
 export const attendanceSheetSchema = z
@@ -80,6 +83,49 @@ export const attendanceSheetSchema = z
 	});
 
 export type AttendanceSheetInput = z.infer<typeof attendanceSheetSchema>;
+
+export const dailyAttendanceSchema = z.object({
+	date: z.coerce.date({ error: "Date is required" }),
+	presentAbsent: z.enum(["Present", "Absent", "Leave", "Holiday"], {
+		error: "Attendance status is required",
+	}),
+	hodName: z.string().optional(),
+	postedDepartment: z.string().optional(),
+	latitude: z.number().optional(),
+	longitude: z.number().optional(),
+});
+
+export type DailyAttendanceInput = z.infer<typeof dailyAttendanceSchema>;
+
+export const attendanceConfigSchema = z.object({
+	batchId: z.string().min(1, "Batch is required"),
+	academicYearStart: z.coerce.date().optional(),
+	academicYearEnd: z.coerce.date().optional(),
+	classStartTime: z
+		.string()
+		.regex(/^\d{2}:\d{2}$/, "Must be HH:MM format")
+		.optional(),
+	classEndTime: z
+		.string()
+		.regex(/^\d{2}:\d{2}$/, "Must be HH:MM format")
+		.optional(),
+	locationRestricted: z.boolean().default(false),
+	campusLatitude: z.number().min(-90).max(90).optional(),
+	campusLongitude: z.number().min(-180).max(180).optional(),
+	campusRadiusMeters: z.number().int().min(50).max(10000).optional(),
+	weeklyOffDays: z.array(z.string()).default([]),
+	minimumAttendancePct: z.number().int().min(0).max(100).default(75),
+});
+
+export type AttendanceConfigInput = z.infer<typeof attendanceConfigSchema>;
+
+export const attendanceHolidaySchema = z.object({
+	date: z.coerce.date({ error: "Date is required" }),
+	label: z.string().min(1, "Holiday label is required").max(100),
+	batchId: z.string().optional(),
+});
+
+export type AttendanceHolidayInput = z.infer<typeof attendanceHolidaySchema>;
 
 export const thesisSchema = z.object({
 	topic: z.string().min(1, "Thesis topic is required"),
