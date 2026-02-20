@@ -54,7 +54,7 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 
 	// Fetch signed/rejected entries from all modules in parallel
 	const [
-		attendanceSheets,
+		attendanceEntries,
 		rotations,
 		casePresentations,
 		seminars,
@@ -64,17 +64,18 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 		caseManagementLogs,
 		procedureLogs,
 	] = await Promise.all([
-		prisma.attendanceSheet.findMany({
+		prisma.attendanceEntry.findMany({
 			where: {
-				userId: user.id,
+				attendanceSheet: { userId: user.id },
 				status: { in: ["SIGNED", "NEEDS_REVISION"] as never[] },
+				presentAbsent: { not: null },
 			},
 			orderBy: { updatedAt: "desc" },
 			take: 5,
 			select: {
 				id: true,
-				weekStartDate: true,
-				weekEndDate: true,
+				date: true,
+				presentAbsent: true,
 				status: true,
 				facultyRemark: true,
 				updatedAt: true,
@@ -198,17 +199,24 @@ export async function getStudentNotifications(): Promise<StudentNotificationResu
 		}),
 	]);
 
-	// Map attendance sheets
-	for (const a of attendanceSheets) {
-		const weekLabel = `${a.weekStartDate.toLocaleDateString()} – ${a.weekEndDate.toLocaleDateString()}`;
+	// Map attendance entries
+	for (const a of attendanceEntries) {
+		const dateLabel =
+			a.date ?
+				a.date.toLocaleDateString("en-IN", {
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+				})
+			:	"Unknown date";
 		notifications.push({
 			id: a.id,
 			type: "attendance",
-			title: `Attendance: ${weekLabel}`,
+			title: `Attendance: ${dateLabel}`,
 			message:
 				a.status === "SIGNED" ?
-					"Attendance sheet approved"
-				:	"Revision needed for attendance sheet",
+					`Attendance entry approved (${a.presentAbsent})`
+				:	"Revision needed for attendance entry",
 			status: a.status as "SIGNED" | "NEEDS_REVISION",
 			remark: a.facultyRemark,
 			updatedAt: a.updatedAt.toISOString(),

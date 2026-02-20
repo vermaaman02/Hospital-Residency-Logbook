@@ -84,6 +84,19 @@ export const attendanceSheetSchema = z
 
 export type AttendanceSheetInput = z.infer<typeof attendanceSheetSchema>;
 
+export const dailyAttendanceSchema = z.object({
+	date: z.coerce.date({ error: "Date is required" }),
+	presentAbsent: z.enum(["Present", "Absent", "Leave", "Holiday"], {
+		error: "Attendance status is required",
+	}),
+	hodName: z.string().optional(),
+	postedDepartment: z.string().optional(),
+	latitude: z.number().optional(),
+	longitude: z.number().optional(),
+});
+
+export type DailyAttendanceInput = z.infer<typeof dailyAttendanceSchema>;
+
 export const attendanceConfigSchema = z.object({
 	batchId: z.string().min(1, "Batch is required"),
 	academicYearStart: z.coerce.date().optional(),
@@ -107,7 +120,7 @@ export const attendanceConfigSchema = z.object({
 export type AttendanceConfigInput = z.infer<typeof attendanceConfigSchema>;
 
 export const attendanceHolidaySchema = z.object({
-	date: z.coerce.date({ required_error: "Date is required" }),
+	date: z.coerce.date({ error: "Date is required" }),
 	label: z.string().min(1, "Holiday label is required").max(100),
 	batchId: z.string().optional(),
 });

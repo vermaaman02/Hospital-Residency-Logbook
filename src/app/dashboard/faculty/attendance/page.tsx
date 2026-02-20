@@ -1,15 +1,15 @@
 /**
  * @module Faculty Attendance Review Page
- * @description Server component that fetches attendance data for review.
- * Uses server-side pagination from getAttendanceForReview.
+ * @description Server component that fetches daily attendance entries for review.
+ * Uses server-side pagination from getDailyEntriesForReview.
  *
- * @see actions/attendance.ts — getAttendanceForReview
+ * @see actions/attendance.ts — getDailyEntriesForReview
  */
 
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { getAttendanceForReview } from "@/actions/attendance";
+import { getDailyEntriesForReview } from "@/actions/attendance";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { AttendanceReviewClient } from "./AttendanceReviewClient";
 
@@ -21,12 +21,12 @@ export default async function FacultyAttendancePage() {
 		redirect("/dashboard/student");
 	}
 
-	const [rawSheets, autoReviewSettings] = await Promise.all([
-		getAttendanceForReview({ page: 1, pageSize: 15 }),
+	const [rawEntries, autoReviewSettings] = await Promise.all([
+		getDailyEntriesForReview({ page: 1, pageSize: 20 }),
 		getAutoReviewSettings(),
 	]);
 
-	const sheets = JSON.parse(JSON.stringify(rawSheets));
+	const entries = JSON.parse(JSON.stringify(rawEntries));
 
 	return (
 		<div className="space-y-6">
@@ -34,8 +34,8 @@ export default async function FacultyAttendancePage() {
 				title="Attendance — Review"
 				description={
 					authResult.role === "hod" ?
-						"Review all student attendance sheets"
-					:	"Review attendance sheets from your assigned students"
+						"Review all student daily attendance entries"
+					:	"Review daily attendance entries from your assigned students"
 				}
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/faculty" },
@@ -43,7 +43,7 @@ export default async function FacultyAttendancePage() {
 				]}
 			/>
 			<AttendanceReviewClient
-				sheets={sheets}
+				entries={entries}
 				role={authResult.role as "faculty" | "hod"}
 				autoReviewSettings={autoReviewSettings}
 			/>

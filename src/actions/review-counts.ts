@@ -134,8 +134,13 @@ export async function getPendingReviewCounts(): Promise<PendingCounts> {
 		logbookReviews,
 		evaluationGraph,
 	] = await Promise.all([
-		prisma.attendanceSheet.count({
-			where: { ...studentFilter, status: "SUBMITTED" as never },
+		prisma.attendanceEntry.count({
+			where: {
+				attendanceSheet:
+					studentIds.length > 0 ? { userId: { in: studentIds } } : undefined,
+				status: "SUBMITTED" as never,
+				presentAbsent: { not: null },
+			},
 		}),
 		prisma.rotationPosting.count({
 			where: { ...studentFilter, status: "SUBMITTED" as never },

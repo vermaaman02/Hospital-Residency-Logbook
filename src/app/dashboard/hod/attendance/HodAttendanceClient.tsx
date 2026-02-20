@@ -98,6 +98,7 @@ import {
 	Plus,
 	CalendarIcon,
 	Percent,
+	ScanFace,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -107,11 +108,10 @@ import {
 	upsertAttendanceConfig,
 	addHoliday,
 	removeHoliday,
-	signAttendanceSheet,
-	rejectAttendanceSheet,
-	bulkSignAttendanceSheets,
-	getAttendanceForReview,
-	getStudentAttendanceAnalytics,
+	signDailyEntry,
+	rejectDailyEntry,
+	bulkSignDailyEntries,
+	getDailyEntriesForReview,
 } from "@/actions/attendance";
 import { toggleAutoReview } from "@/actions/auto-review";
 import type { AutoReviewSettings } from "@/actions/auto-review";
@@ -141,6 +141,8 @@ interface ConfigData {
 	locationRadiusMeters: number | null;
 	weeklyOffDays: string[];
 	minimumAttendancePct: number;
+	manualAttendanceEnabled: boolean;
+	faceRecognitionEnabled: boolean;
 }
 
 interface HolidayData {
@@ -165,36 +167,33 @@ interface StudentSummary {
 	attendancePct: number;
 	minimumPct: number;
 	meetsMinimum: boolean;
-	totalSheets: number;
-	signedSheets: number;
+	totalEntries: number;
+	signedEntries: number;
 }
 
-interface AttendanceEntryData {
+interface DailyEntryForReview {
 	id: string;
 	date: string | null;
 	day: string;
 	presentAbsent: string | null;
 	hodName: string | null;
-}
-
-interface SheetForReview {
-	id: string;
-	userId: string;
-	weekStartDate: string;
-	weekEndDate: string;
-	batch: string | null;
-	postedDepartment: string | null;
 	status: string;
 	facultyRemark: string | null;
-	entries: AttendanceEntryData[];
-	createdAt: string;
-	user: {
-		id: string;
-		firstName: string;
-		lastName: string;
-		batchRelation: { name: string } | null;
-		currentSemester: number | null;
-		profileImage: string | null;
+	signedAt: string | null;
+	signedBy: string | null;
+	markedAt: string | null;
+	attendanceSheet: {
+		userId: string;
+		batch: string | null;
+		postedDepartment: string | null;
+		user: {
+			id: string;
+			firstName: string;
+			lastName: string;
+			batchRelation: { name: string } | null;
+			currentSemester: number | null;
+			profileImage: string | null;
+		};
 	};
 }
 
@@ -203,8 +202,8 @@ interface HodAttendanceClientProps {
 	configs: ConfigData[];
 	holidays: HolidayData[];
 	studentSummaries: StudentSummary[];
-	initialSheets: {
-		data: SheetForReview[];
+	initialEntries: {
+		data: DailyEntryForReview[];
 		total: number;
 		page: number;
 		pageSize: number;
@@ -212,34 +211,11 @@ interface HodAttendanceClientProps {
 	autoReviewSettings: AutoReviewSettings;
 }
 
-const DAYS_ORDERED = [
-	"MONDAY",
-	"TUESDAY",
-	"WEDNESDAY",
-	"THURSDAY",
-	"FRIDAY",
-	"SATURDAY",
-	"SUNDAY",
-] as const;
-
-const DAY_LABELS: Record<string, string> = {
-	MONDAY: "Mon",
-	TUESDAY: "Tue",
-	WEDNESDAY: "Wed",
-	THURSDAY: "Thu",
-	FRIDAY: "Fri",
-	SATURDAY: "Sat",
-	SUNDAY: "Sun",
-};
-
-const FULL_DAY_LABELS: Record<string, string> = {
-	MONDAY: "Monday",
-	TUESDAY: "Tuesday",
-	WEDNESDAY: "Wednesday",
-	THURSDAY: "Thursday",
-	FRIDAY: "Friday",
-	SATURDAY: "Saturday",
-	SUNDAY: "Sunday",
+const STATUS_COLOR: Record<string, string> = {
+	Present: "bg-green-100 text-green-700",
+	Absent: "bg-red-100 text-red-700",
+	Leave: "bg-amber-100 text-amber-700",
+	Holiday: "bg-blue-100 text-blue-700",
 };
 
 // ======================== MAIN COMPONENT ========================
@@ -249,7 +225,7 @@ export function HodAttendanceClient({
 	configs: initialConfigs,
 	holidays: initialHolidays,
 	studentSummaries,
-	initialSheets,
+	initialEntries,
 	autoReviewSettings,
 }: HodAttendanceClientProps) {
 	const router = useRouter();
@@ -279,13 +255,14 @@ export function HodAttendanceClient({
 					students={studentSummaries}
 					isPending={isPending}
 					startTransition={startTransition}
+					router={router}
 				/>
 			</TabsContent>
 
 			<TabsContent value="review" className="space-y-6 mt-4">
 				<ReviewTab
 					batches={batches}
-					initialSheets={initialSheets}
+					initialEntries={initialEntries}
 					autoReviewSettings={autoReviewSettings}
 					isPending={isPending}
 					startTransition={startTransition}
@@ -322,20 +299,18 @@ function OverviewTab({
 	batches,
 	students,
 	isPending: _isPending,
-	startTransition,
+	startTransition: _startTransition,
+	router,
 }: {
 	batches: BatchData[];
 	students: StudentSummary[];
 	isPending: boolean;
 	startTransition: React.TransitionStartFunction;
+	router: ReturnType<typeof useRouter>;
 }) {
 	const [batchFilter, setBatchFilter] = useState("ALL");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [sortBy, setSortBy] = useState<"name" | "attendance">("attendance");
-	const [studentDetail, setStudentDetail] = useState<string | null>(null);
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const [studentAnalytics, setStudentAnalytics] = useState<any>(null);
-	const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
 	const filtered = useMemo(() => {
 		let result = students;
@@ -374,22 +349,11 @@ function OverviewTab({
 		return { total, belowMin, avgPct, totalPresent, totalWorking };
 	}, [students]);
 
-	const openStudentAnalytics = useCallback(
+	const openStudentDetail = useCallback(
 		(studentId: string) => {
-			setStudentDetail(studentId);
-			setLoadingAnalytics(true);
-			startTransition(async () => {
-				try {
-					const data = await getStudentAttendanceAnalytics(studentId);
-					setStudentAnalytics(JSON.parse(JSON.stringify(data)));
-				} catch {
-					toast.error("Failed to load student analytics");
-				} finally {
-					setLoadingAnalytics(false);
-				}
-			});
+			router.push(`/dashboard/hod/attendance/student/${studentId}`);
 		},
-		[startTransition],
+		[router],
 	);
 
 	return (
@@ -515,7 +479,7 @@ function OverviewTab({
 											Status
 										</TableHead>
 										<TableHead className="text-center font-bold">
-											Sheets
+											Entries
 										</TableHead>
 										<TableHead className="text-center font-bold w-20">
 											Action
@@ -527,7 +491,7 @@ function OverviewTab({
 										<TableRow
 											key={student.id}
 											className="cursor-pointer hover:bg-blue-50/40"
-											onClick={() => openStudentAnalytics(student.id)}
+											onClick={() => openStudentDetail(student.id)}
 										>
 											<TableCell>
 												<div className="flex items-center gap-2">
@@ -572,7 +536,7 @@ function OverviewTab({
 												}
 											</TableCell>
 											<TableCell className="text-center text-sm">
-												{student.signedSheets}/{student.totalSheets}
+												{student.signedEntries}/{student.totalEntries}
 											</TableCell>
 											<TableCell
 												className="text-center"
@@ -582,7 +546,7 @@ function OverviewTab({
 													variant="ghost"
 													size="icon"
 													className="h-7 w-7 text-blue-600"
-													onClick={() => openStudentAnalytics(student.id)}
+													onClick={() => openStudentDetail(student.id)}
 												>
 													<Eye className="h-3.5 w-3.5" />
 												</Button>
@@ -595,184 +559,6 @@ function OverviewTab({
 					}
 				</CardContent>
 			</Card>
-
-			{/* Student Detail Drawer */}
-			<Sheet
-				open={studentDetail !== null}
-				onOpenChange={(open) => {
-					if (!open) {
-						setStudentDetail(null);
-						setStudentAnalytics(null);
-					}
-				}}
-			>
-				<SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-					<SheetHeader>
-						<SheetTitle className="flex items-center gap-2">
-							<User className="h-5 w-5 text-hospital-primary" />
-							Student Attendance Detail
-						</SheetTitle>
-						<SheetDescription>
-							{studentAnalytics?.student ?
-								`${studentAnalytics.student.firstName} ${studentAnalytics.student.lastName}`
-							:	"Loading..."}
-						</SheetDescription>
-					</SheetHeader>
-					{loadingAnalytics ?
-						<div className="flex items-center justify-center py-12">
-							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-						</div>
-					: studentAnalytics ?
-						<div className="mt-6 space-y-6">
-							{/* Stats Grid */}
-							<div className="grid grid-cols-2 gap-3 text-sm">
-								<StatBox
-									label="Present Days"
-									value={studentAnalytics.presentDays}
-									color="green"
-								/>
-								<StatBox
-									label="Absent Days"
-									value={studentAnalytics.absentDays}
-									color="red"
-								/>
-								<StatBox
-									label="Leave Days"
-									value={studentAnalytics.leaveDays}
-									color="amber"
-								/>
-								<StatBox
-									label="Working Days"
-									value={studentAnalytics.workingDays}
-									color="blue"
-								/>
-							</div>
-							<div className="p-4 rounded-lg border text-center">
-								<div className="text-3xl font-bold">
-									<AttendancePctBadge
-										pct={studentAnalytics.attendancePct}
-										minPct={studentAnalytics.minimumPct}
-										size="lg"
-									/>
-								</div>
-								<p className="text-sm text-muted-foreground mt-1">
-									Attendance — Min: {studentAnalytics.minimumPct}%
-								</p>
-								{!studentAnalytics.meetsMinimum &&
-									studentAnalytics.workingDays > 0 && (
-										<p className="text-xs text-red-600 mt-1 font-medium">
-											Below minimum requirement
-										</p>
-									)}
-							</div>
-
-							{/* Weekly chart bars */}
-							{studentAnalytics.weeklyData &&
-								studentAnalytics.weeklyData.length > 0 && (
-									<Card>
-										<CardHeader className="pb-2">
-											<CardTitle className="text-sm">
-												Weekly Attendance (Last 12 Weeks)
-											</CardTitle>
-										</CardHeader>
-										<CardContent>
-											<div className="space-y-2">
-												{studentAnalytics.weeklyData.map(
-													(
-														w: {
-															week: string;
-															present: number;
-															absent: number;
-															leave: number;
-															holiday: number;
-														},
-														i: number,
-													) => {
-														const total =
-															w.present + w.absent + w.leave + w.holiday;
-														const pct =
-															total > 0 ?
-																Math.round(
-																	(w.present / (total - w.holiday || 1)) * 100,
-																)
-															:	0;
-														return (
-															<div
-																key={i}
-																className="flex items-center gap-2 text-xs"
-															>
-																<span className="w-16 text-muted-foreground">
-																	{w.week}
-																</span>
-																<div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
-																	{total > 0 && (
-																		<>
-																			<div
-																				className="bg-green-500 h-full"
-																				style={{
-																					width: `${(w.present / total) * 100}%`,
-																				}}
-																			/>
-																			<div
-																				className="bg-red-400 h-full"
-																				style={{
-																					width: `${(w.absent / total) * 100}%`,
-																				}}
-																			/>
-																			<div
-																				className="bg-amber-400 h-full"
-																				style={{
-																					width: `${(w.leave / total) * 100}%`,
-																				}}
-																			/>
-																			<div
-																				className="bg-blue-300 h-full"
-																				style={{
-																					width: `${(w.holiday / total) * 100}%`,
-																				}}
-																			/>
-																		</>
-																	)}
-																</div>
-																<span className="w-10 text-right font-medium">
-																	{pct}%
-																</span>
-															</div>
-														);
-													},
-												)}
-											</div>
-											<div className="flex gap-3 mt-3 text-xs text-muted-foreground justify-center">
-												<span className="flex items-center gap-1">
-													<span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-													Present
-												</span>
-												<span className="flex items-center gap-1">
-													<span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-													Absent
-												</span>
-												<span className="flex items-center gap-1">
-													<span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-													Leave
-												</span>
-												<span className="flex items-center gap-1">
-													<span className="w-2.5 h-2.5 rounded-full bg-blue-300" />
-													Holiday
-												</span>
-											</div>
-										</CardContent>
-									</Card>
-								)}
-
-							{/* Sheet summary */}
-							<div className="text-sm text-muted-foreground">
-								{studentAnalytics.totalSheets} sheets total ·{" "}
-								{studentAnalytics.signedSheets} signed
-							</div>
-						</div>
-					:	null}
-				</SheetContent>
-			</Sheet>
 		</>
 	);
 }
@@ -781,43 +567,49 @@ function OverviewTab({
 
 function ReviewTab({
 	batches,
-	initialSheets,
+	initialEntries,
 	autoReviewSettings,
 	isPending,
 	startTransition,
 	router,
 }: {
 	batches: BatchData[];
-	initialSheets: HodAttendanceClientProps["initialSheets"];
+	initialEntries: HodAttendanceClientProps["initialEntries"];
 	autoReviewSettings: AutoReviewSettings;
 	isPending: boolean;
 	startTransition: React.TransitionStartFunction;
 	router: ReturnType<typeof useRouter>;
 }) {
-	const [sheets, setSheets] = useState(initialSheets.data);
-	const [total, setTotal] = useState(initialSheets.total);
-	const [page, setPage] = useState(initialSheets.page);
-	const pageSize = initialSheets.pageSize;
+	const [entries, setEntries] = useState(initialEntries.data);
+	const [total, setTotal] = useState(initialEntries.total);
+	const [page, setPage] = useState(initialEntries.page);
+	const pageSize = initialEntries.pageSize;
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState("ALL");
 	const [batchFilter, setBatchFilter] = useState("ALL");
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-	const [detailSheet, setDetailSheet] = useState<SheetForReview | null>(null);
-	const [signTarget, setSignTarget] = useState<SheetForReview | null>(null);
+	const [detailEntry, setDetailEntry] = useState<DailyEntryForReview | null>(
+		null,
+	);
+	const [signTarget, setSignTarget] = useState<DailyEntryForReview | null>(
+		null,
+	);
 	const [signRemark, setSignRemark] = useState("");
-	const [rejectTarget, setRejectTarget] = useState<SheetForReview | null>(null);
+	const [rejectTarget, setRejectTarget] = useState<DailyEntryForReview | null>(
+		null,
+	);
 	const [rejectRemark, setRejectRemark] = useState("");
 	const [autoReview, setAutoReview] = useState(autoReviewSettings.attendance);
 	const [loading, setLoading] = useState(false);
 
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-	const fetchSheets = useCallback(
+	const fetchEntries = useCallback(
 		async (pg: number, status?: string, batch?: string, search?: string) => {
 			setLoading(true);
 			try {
-				const result = await getAttendanceForReview({
+				const result = await getDailyEntriesForReview({
 					page: pg,
 					pageSize,
 					status: status || undefined,
@@ -825,11 +617,11 @@ function ReviewTab({
 					search: search || undefined,
 				});
 				const serialized = JSON.parse(JSON.stringify(result));
-				setSheets(serialized.data);
+				setEntries(serialized.data);
 				setTotal(serialized.total);
 				setPage(serialized.page);
 			} catch {
-				toast.error("Failed to load attendance sheets");
+				toast.error("Failed to load attendance entries");
 			} finally {
 				setLoading(false);
 			}
@@ -838,7 +630,13 @@ function ReviewTab({
 	);
 
 	function handlePageChange(newPage: number) {
-		fetchSheets(newPage, statusFilter, batchFilter, searchQuery);
+		setSelectedIds(new Set());
+		fetchEntries(
+			newPage,
+			statusFilter !== "ALL" ? statusFilter : undefined,
+			batchFilter !== "ALL" ? batchFilter : undefined,
+			searchQuery || undefined,
+		);
 	}
 
 	function handleFilterChange(
@@ -850,21 +648,26 @@ function ReviewTab({
 		setBatchFilter(newBatch);
 		setSearchQuery(newSearch);
 		setSelectedIds(new Set());
-		fetchSheets(1, newStatus, newBatch, newSearch);
+		fetchEntries(
+			1,
+			newStatus !== "ALL" ? newStatus : undefined,
+			newBatch !== "ALL" ? newBatch : undefined,
+			newSearch || undefined,
+		);
 	}
 
 	const counts = useMemo(() => {
 		const c = { SUBMITTED: 0, SIGNED: 0, NEEDS_REVISION: 0, DRAFT: 0 };
-		for (const s of sheets) {
-			if (s.status in c) c[s.status as keyof typeof c]++;
+		for (const e of entries) {
+			if (e.status in c) c[e.status as keyof typeof c]++;
 		}
-		return { ...c, ALL: sheets.length };
-	}, [sheets]);
+		return { ...c, ALL: entries.length };
+	}, [entries]);
 
-	const submittedInView = sheets.filter((s) => s.status === "SUBMITTED");
+	const submittedInView = entries.filter((e) => e.status === "SUBMITTED");
 	const allSubmittedSelected =
 		submittedInView.length > 0 &&
-		submittedInView.every((s) => selectedIds.has(s.id));
+		submittedInView.every((e) => selectedIds.has(e.id));
 
 	function toggleSelect(id: string) {
 		setSelectedIds((prev) => {
@@ -876,25 +679,32 @@ function ReviewTab({
 	}
 	function toggleSelectAll() {
 		if (allSubmittedSelected) setSelectedIds(new Set());
-		else setSelectedIds(new Set(submittedInView.map((s) => s.id)));
+		else setSelectedIds(new Set(submittedInView.map((e) => e.id)));
+	}
+
+	function studentLabel(e: DailyEntryForReview) {
+		return `${e.attendanceSheet.user.firstName} ${e.attendanceSheet.user.lastName}`;
 	}
 
 	function confirmSign() {
 		if (!signTarget) return;
 		startTransition(async () => {
 			try {
-				await signAttendanceSheet(signTarget.id, signRemark || undefined);
-				toast.success(
-					`Signed attendance for ${signTarget.user.firstName} ${signTarget.user.lastName}`,
-				);
+				await signDailyEntry(signTarget.id, signRemark || undefined);
+				toast.success(`Signed attendance for ${studentLabel(signTarget)}`);
 				setSignTarget(null);
-				setDetailSheet(null);
+				setDetailEntry(null);
 				setSelectedIds((prev) => {
 					const next = new Set(prev);
 					next.delete(signTarget.id);
 					return next;
 				});
-				fetchSheets(page, statusFilter, batchFilter, searchQuery);
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Failed to sign");
 			}
@@ -908,11 +718,16 @@ function ReviewTab({
 		}
 		startTransition(async () => {
 			try {
-				await rejectAttendanceSheet(rejectTarget.id, rejectRemark);
+				await rejectDailyEntry(rejectTarget.id, rejectRemark);
 				toast.success(`Sent back for revision`);
 				setRejectTarget(null);
-				setDetailSheet(null);
-				fetchSheets(page, statusFilter, batchFilter, searchQuery);
+				setDetailEntry(null);
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch (error) {
 				toast.error(
 					error instanceof Error ? error.message : "Failed to reject",
@@ -926,10 +741,15 @@ function ReviewTab({
 		if (ids.length === 0) return;
 		startTransition(async () => {
 			try {
-				const result = await bulkSignAttendanceSheets(ids);
-				toast.success(`Signed ${result.signedCount} sheets`);
+				const result = await bulkSignDailyEntries(ids);
+				toast.success(`Signed ${result.signedCount} entries`);
 				setSelectedIds(new Set());
-				fetchSheets(page, statusFilter, batchFilter, searchQuery);
+				fetchEntries(
+					page,
+					statusFilter !== "ALL" ? statusFilter : undefined,
+					batchFilter !== "ALL" ? batchFilter : undefined,
+					searchQuery || undefined,
+				);
 			} catch {
 				toast.error("Bulk sign failed");
 			}
@@ -951,14 +771,6 @@ function ReviewTab({
 				);
 			}
 		});
-	}
-
-	function weekLabel(s: SheetForReview) {
-		return (
-			format(new Date(s.weekStartDate), "dd MMM") +
-			" – " +
-			format(new Date(s.weekEndDate), "dd MMM yyyy")
-		);
 	}
 
 	return (
@@ -1081,18 +893,26 @@ function ReviewTab({
 				<CardHeader className="pb-3">
 					<CardTitle className="text-lg flex items-center gap-2">
 						<ClipboardList className="h-5 w-5" />
-						Attendance Sheets ({total})
+						Daily Attendance Entries ({total})
 					</CardTitle>
+					<CardDescription>
+						Review individual daily attendance entries from all students
+					</CardDescription>
 				</CardHeader>
 				<CardContent className="p-0 sm:p-6 overflow-x-auto">
 					{loading ?
 						<div className="flex justify-center py-12">
 							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
 						</div>
-					: sheets.length === 0 ?
+					: entries.length === 0 ?
 						<div className="text-center py-12 text-muted-foreground">
 							<ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-							<p className="font-medium">No attendance sheets found</p>
+							<p className="font-medium">No attendance entries found</p>
+							<p className="text-sm mt-1">
+								{searchQuery || statusFilter !== "ALL" ?
+									"Try adjusting your search or filter"
+								:	"No attendance entries have been submitted yet"}
+							</p>
 						</div>
 					:	<div className="border rounded-lg">
 							<Table>
@@ -1106,7 +926,11 @@ function ReviewTab({
 										</TableHead>
 										<TableHead className="font-bold">Student</TableHead>
 										<TableHead className="text-center font-bold">
-											Week
+											Date
+										</TableHead>
+										<TableHead className="text-center font-bold">Day</TableHead>
+										<TableHead className="text-center font-bold">
+											Attendance
 										</TableHead>
 										<TableHead className="text-center font-bold">
 											Department
@@ -1120,24 +944,24 @@ function ReviewTab({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{sheets.map((sheet) => (
+									{entries.map((entry) => (
 										<TableRow
-											key={sheet.id}
+											key={entry.id}
 											className={cn(
 												"cursor-pointer transition-colors",
-												selectedIds.has(sheet.id) && "bg-blue-50/60",
-												sheet.status === "SIGNED" && "bg-green-50/40",
+												selectedIds.has(entry.id) && "bg-blue-50/60",
+												entry.status === "SIGNED" && "bg-green-50/40",
 											)}
-											onClick={() => setDetailSheet(sheet)}
+											onClick={() => setDetailEntry(entry)}
 										>
 											<TableCell
 												className="text-center"
 												onClick={(e) => e.stopPropagation()}
 											>
-												{sheet.status === "SUBMITTED" && (
+												{entry.status === "SUBMITTED" && (
 													<Checkbox
-														checked={selectedIds.has(sheet.id)}
-														onCheckedChange={() => toggleSelect(sheet.id)}
+														checked={selectedIds.has(entry.id)}
+														onCheckedChange={() => toggleSelect(entry.id)}
 													/>
 												)}
 											</TableCell>
@@ -1147,27 +971,57 @@ function ReviewTab({
 														<User className="h-4 w-4 text-hospital-primary" />
 													</div>
 													<div>
-														<div className="font-medium text-sm">
-															{sheet.user.firstName} {sheet.user.lastName}
-														</div>
+														<button
+															type="button"
+															className="font-medium text-sm text-hospital-primary hover:underline text-left"
+															onClick={(e) => {
+																e.stopPropagation();
+																router.push(
+																	`/dashboard/hod/attendance/student/${entry.attendanceSheet.user.id}`,
+																);
+															}}
+														>
+															{studentLabel(entry)}
+														</button>
 														<div className="text-xs text-muted-foreground">
-															{sheet.user.batchRelation?.name ?? "No batch"}
-															{sheet.user.currentSemester ?
-																` · Sem ${sheet.user.currentSemester}`
+															{entry.attendanceSheet.user.batchRelation?.name ??
+																"No batch"}
+															{entry.attendanceSheet.user.currentSemester ?
+																` · Sem ${entry.attendanceSheet.user.currentSemester}`
 															:	""}
 														</div>
 													</div>
 												</div>
 											</TableCell>
-											<TableCell className="text-center text-sm">
-												{weekLabel(sheet)}
+											<TableCell className="text-center text-sm font-medium">
+												{entry.date ?
+													format(new Date(entry.date), "dd MMM yyyy")
+												:	"—"}
 											</TableCell>
 											<TableCell className="text-center text-sm">
-												{sheet.postedDepartment ?? "—"}
+												{entry.day ?
+													entry.day.charAt(0) + entry.day.slice(1).toLowerCase()
+												:	"—"}
+											</TableCell>
+											<TableCell className="text-center">
+												{entry.presentAbsent ?
+													<span
+														className={cn(
+															"px-2 py-0.5 rounded text-xs font-medium",
+															STATUS_COLOR[entry.presentAbsent] ??
+																"bg-gray-100 text-gray-600",
+														)}
+													>
+														{entry.presentAbsent}
+													</span>
+												:	"—"}
+											</TableCell>
+											<TableCell className="text-center text-sm">
+												{entry.attendanceSheet.postedDepartment ?? "—"}
 											</TableCell>
 											<TableCell className="text-center">
 												<StatusBadge
-													status={sheet.status as EntryStatus}
+													status={entry.status as EntryStatus}
 													size="sm"
 												/>
 											</TableCell>
@@ -1180,18 +1034,18 @@ function ReviewTab({
 														variant="ghost"
 														size="icon"
 														className="h-7 w-7 text-blue-600"
-														onClick={() => setDetailSheet(sheet)}
+														onClick={() => setDetailEntry(entry)}
 													>
 														<Eye className="h-3.5 w-3.5" />
 													</Button>
-													{sheet.status === "SUBMITTED" && (
+													{entry.status === "SUBMITTED" && (
 														<>
 															<Button
 																variant="ghost"
 																size="icon"
 																className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
 																onClick={() => {
-																	setSignTarget(sheet);
+																	setSignTarget(entry);
 																	setSignRemark("");
 																}}
 																disabled={isPending}
@@ -1203,7 +1057,7 @@ function ReviewTab({
 																size="icon"
 																className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
 																onClick={() => {
-																	setRejectTarget(sheet);
+																	setRejectTarget(entry);
 																	setRejectRemark("");
 																}}
 																disabled={isPending}
@@ -1250,134 +1104,122 @@ function ReviewTab({
 				</CardContent>
 			</Card>
 
-			{/* Detail Sheet */}
+			{/* Detail Panel */}
 			<Sheet
-				open={detailSheet !== null}
-				onOpenChange={(open) => !open && setDetailSheet(null)}
+				open={detailEntry !== null}
+				onOpenChange={(open) => !open && setDetailEntry(null)}
 			>
 				<SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-					{detailSheet && (
+					{detailEntry && (
 						<>
 							<SheetHeader>
 								<SheetTitle className="flex items-center gap-2">
 									<CalendarDays className="h-5 w-5 text-hospital-primary" />
-									Attendance Details
+									Attendance Entry Detail
 								</SheetTitle>
 								<SheetDescription>
-									{detailSheet.user.firstName} {detailSheet.user.lastName} —{" "}
-									{weekLabel(detailSheet)}
+									{studentLabel(detailEntry)} —{" "}
+									{detailEntry.date ?
+										format(new Date(detailEntry.date), "dd MMM yyyy")
+									:	"—"}
 								</SheetDescription>
 							</SheetHeader>
 							<div className="mt-6 space-y-4">
 								<div className="grid grid-cols-2 gap-3 text-sm">
 									<div>
 										<span className="text-muted-foreground">Student:</span>
-										<p className="font-medium">
-											{detailSheet.user.firstName} {detailSheet.user.lastName}
-										</p>
+										<p className="font-medium">{studentLabel(detailEntry)}</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Batch:</span>
 										<p className="font-medium">
-											{detailSheet.user.batchRelation?.name ?? "—"}
+											{detailEntry.attendanceSheet.user.batchRelation?.name ??
+												"—"}
+										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">Date:</span>
+										<p className="font-medium">
+											{detailEntry.date ?
+												format(new Date(detailEntry.date), "EEEE, dd MMM yyyy")
+											:	"—"}
+										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">Attendance:</span>
+										<p className="font-medium mt-0.5">
+											{detailEntry.presentAbsent ?
+												<span
+													className={cn(
+														"px-2 py-0.5 rounded text-xs font-medium",
+														STATUS_COLOR[detailEntry.presentAbsent] ??
+															"bg-gray-100 text-gray-600",
+													)}
+												>
+													{detailEntry.presentAbsent}
+												</span>
+											:	"—"}
 										</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Department:</span>
 										<p className="font-medium flex items-center gap-1">
 											<Building2 className="h-3.5 w-3.5" />
-											{detailSheet.postedDepartment ?? "—"}
+											{detailEntry.attendanceSheet.postedDepartment ?? "—"}
 										</p>
+									</div>
+									<div>
+										<span className="text-muted-foreground">HoD Name:</span>
+										<p className="font-medium">{detailEntry.hodName || "—"}</p>
 									</div>
 									<div>
 										<span className="text-muted-foreground">Status:</span>
 										<div className="mt-0.5">
 											<StatusBadge
-												status={detailSheet.status as EntryStatus}
+												status={detailEntry.status as EntryStatus}
 												size="sm"
 											/>
 										</div>
 									</div>
+									<div>
+										<span className="text-muted-foreground">Marked At:</span>
+										<p className="font-medium">
+											{detailEntry.markedAt ?
+												format(
+													new Date(detailEntry.markedAt),
+													"dd MMM yyyy, HH:mm",
+												)
+											:	"—"}
+										</p>
+									</div>
 								</div>
-								{detailSheet.facultyRemark && (
+								{detailEntry.facultyRemark && (
 									<div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-sm">
 										<p className="font-medium text-amber-800">
 											Faculty Remark:
 										</p>
 										<p className="text-amber-700 mt-0.5">
-											{detailSheet.facultyRemark}
+											{detailEntry.facultyRemark}
 										</p>
 									</div>
 								)}
-								<div className="border rounded-lg overflow-hidden">
-									<Table>
-										<TableHeader>
-											<TableRow className="bg-muted/50">
-												<TableHead className="w-12 text-center font-bold">
-													#
-												</TableHead>
-												<TableHead className="font-bold">Day</TableHead>
-												<TableHead className="text-center font-bold">
-													Date
-												</TableHead>
-												<TableHead className="text-center font-bold">
-													Attendance
-												</TableHead>
-												<TableHead className="font-bold">HoD Name</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											{DAYS_ORDERED.map((day, idx) => {
-												const entry = detailSheet.entries.find(
-													(e) => e.day === day,
-												);
-												return (
-													<TableRow key={day}>
-														<TableCell className="text-center text-sm font-medium">
-															{idx + 1}
-														</TableCell>
-														<TableCell className="text-sm font-medium">
-															{DAY_LABELS[day]}
-														</TableCell>
-														<TableCell className="text-center text-sm">
-															{entry?.date ?
-																format(new Date(entry.date), "dd/MM/yy")
-															:	"—"}
-														</TableCell>
-														<TableCell className="text-center text-sm">
-															{entry?.presentAbsent ?
-																<span
-																	className={cn(
-																		"px-2 py-0.5 rounded text-xs font-medium",
-																		entry.presentAbsent === "Present" &&
-																			"bg-green-100 text-green-700",
-																		entry.presentAbsent === "Absent" &&
-																			"bg-red-100 text-red-700",
-																		entry.presentAbsent === "Leave" &&
-																			"bg-amber-100 text-amber-700",
-																		entry.presentAbsent === "Holiday" &&
-																			"bg-blue-100 text-blue-700",
-																	)}
-																>
-																	{entry.presentAbsent}
-																</span>
-															:	"—"}
-														</TableCell>
-														<TableCell className="text-sm">
-															{entry?.hodName || "—"}
-														</TableCell>
-													</TableRow>
-												);
-											})}
-										</TableBody>
-									</Table>
-								</div>
-								{detailSheet.status === "SUBMITTED" && (
+								{detailEntry.signedAt && (
+									<div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm">
+										<p className="font-medium text-green-800">Signed</p>
+										<p className="text-green-700 mt-0.5">
+											{format(
+												new Date(detailEntry.signedAt),
+												"dd MMM yyyy, HH:mm",
+											)}
+										</p>
+									</div>
+								)}
+								{detailEntry.status === "SUBMITTED" && (
 									<div className="flex gap-2 pt-2">
 										<Button
 											className="flex-1 bg-green-600 hover:bg-green-700"
 											onClick={() => {
-												setSignTarget(detailSheet);
+												setSignTarget(detailEntry);
 												setSignRemark("");
 											}}
 											disabled={isPending}
@@ -1388,7 +1230,7 @@ function ReviewTab({
 											variant="destructive"
 											className="flex-1"
 											onClick={() => {
-												setRejectTarget(detailSheet);
+												setRejectTarget(detailEntry);
 												setRejectRemark("");
 											}}
 											disabled={isPending}
@@ -1410,13 +1252,14 @@ function ReviewTab({
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Sign Attendance Sheet</DialogTitle>
+						<DialogTitle>Sign Attendance Entry</DialogTitle>
 						<DialogDescription>
-							Sign for{" "}
-							<strong>
-								{signTarget?.user.firstName} {signTarget?.user.lastName}
-							</strong>{" "}
-							— {signTarget ? weekLabel(signTarget) : ""}
+							Sign the attendance entry for{" "}
+							<strong>{signTarget ? studentLabel(signTarget) : ""}</strong>
+							{" — "}
+							{signTarget?.date ?
+								format(new Date(signTarget.date), "dd MMM yyyy")
+							:	""}
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-3">
@@ -1460,9 +1303,7 @@ function ReviewTab({
 						<DialogTitle>Request Revision</DialogTitle>
 						<DialogDescription>
 							Send back to{" "}
-							<strong>
-								{rejectTarget?.user.firstName} {rejectTarget?.user.lastName}
-							</strong>{" "}
+							<strong>{rejectTarget ? studentLabel(rejectTarget) : ""}</strong>{" "}
 							for revision.
 						</DialogDescription>
 					</DialogHeader>
@@ -1863,6 +1704,26 @@ function HolidaysTab({
 
 // ======================== CONFIG TAB ========================
 
+const DAYS_ORDERED = [
+	"MONDAY",
+	"TUESDAY",
+	"WEDNESDAY",
+	"THURSDAY",
+	"FRIDAY",
+	"SATURDAY",
+	"SUNDAY",
+] as const;
+
+const FULL_DAY_LABELS: Record<string, string> = {
+	MONDAY: "Monday",
+	TUESDAY: "Tuesday",
+	WEDNESDAY: "Wednesday",
+	THURSDAY: "Thursday",
+	FRIDAY: "Friday",
+	SATURDAY: "Saturday",
+	SUNDAY: "Sunday",
+};
+
 function ConfigTab({
 	batches,
 	configs: initialConfigs,
@@ -1905,6 +1766,8 @@ function ConfigTab({
 		new Set(["SUNDAY"]),
 	);
 	const [minPct, setMinPct] = useState("75");
+	const [manualAttendanceEnabled, setManualAttendanceEnabled] = useState(true);
+	const [faceRecognitionEnabled, setFaceRecognitionEnabled] = useState(false);
 
 	// Load config when batch changes — use a key to reset form
 	const configKey = currentConfig?.id ?? selectedBatch;
@@ -1921,6 +1784,12 @@ function ConfigTab({
 				setRadius(currentConfig.locationRadiusMeters?.toString() ?? "500");
 				setWeeklyOffDays(new Set(currentConfig.weeklyOffDays));
 				setMinPct(currentConfig.minimumAttendancePct.toString());
+				setManualAttendanceEnabled(
+					currentConfig.manualAttendanceEnabled ?? true,
+				);
+				setFaceRecognitionEnabled(
+					currentConfig.faceRecognitionEnabled ?? false,
+				);
 			} else if (selectedBatchData) {
 				setBatchStartDate(new Date(selectedBatchData.startDate));
 				setBatchEndDate(
@@ -1936,6 +1805,8 @@ function ConfigTab({
 				setRadius("500");
 				setWeeklyOffDays(new Set(["SUNDAY"]));
 				setMinPct("75");
+				setManualAttendanceEnabled(true);
+				setFaceRecognitionEnabled(false);
 			}
 		};
 		loadConfig();
@@ -1964,6 +1835,12 @@ function ConfigTab({
 			toast.error("Batch end date is required");
 			return;
 		}
+		if (!manualAttendanceEnabled && !faceRecognitionEnabled) {
+			toast.error(
+				"At least one attendance method must be enabled (manual or face recognition).",
+			);
+			return;
+		}
 
 		startTransition(async () => {
 			try {
@@ -1979,6 +1856,8 @@ function ConfigTab({
 					locationRadiusMeters: radius ? parseInt(radius) : null,
 					weeklyOffDays: Array.from(weeklyOffDays),
 					minimumAttendancePct: parseFloat(minPct) || 75,
+					manualAttendanceEnabled,
+					faceRecognitionEnabled,
 				});
 				if (result.success) {
 					toast.success("Configuration saved");
@@ -2150,6 +2029,41 @@ function ConfigTab({
 							</div>
 							{locationEnabled && (
 								<>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="w-full"
+										onClick={() => {
+											if (!navigator.geolocation) {
+												toast.error(
+													"Geolocation is not supported by your browser",
+												);
+												return;
+											}
+											toast.info("Capturing location…");
+											navigator.geolocation.getCurrentPosition(
+												(pos) => {
+													setLatitude(String(pos.coords.latitude));
+													setLongitude(String(pos.coords.longitude));
+													toast.success(
+														`Location captured: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`,
+													);
+												},
+												(err) => {
+													toast.error(
+														err.code === 1 ?
+															"Location permission denied. Please allow location access in your browser."
+														:	`Unable to capture location: ${err.message}`,
+													);
+												},
+												{ enableHighAccuracy: true, timeout: 10000 },
+											);
+										}}
+									>
+										<MapPin className="h-4 w-4 mr-1" />
+										Capture Campus Location
+									</Button>
 									<div>
 										<Label className="text-xs">Campus Latitude</Label>
 										<Input
@@ -2172,6 +2086,12 @@ function ConfigTab({
 											onChange={(e) => setLongitude(e.target.value)}
 										/>
 									</div>
+									{latitude && longitude && (
+										<p className="text-xs text-muted-foreground">
+											📍 {Number(latitude).toFixed(6)},{" "}
+											{Number(longitude).toFixed(6)}
+										</p>
+									)}
 									<div>
 										<Label className="text-xs">Allowed Radius (meters)</Label>
 										<Input
@@ -2234,6 +2154,114 @@ function ConfigTab({
 									Students below this % will be flagged
 								</p>
 							</div>
+						</CardContent>
+					</Card>
+
+					{/* Attendance Methods */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-sm flex items-center gap-2">
+								<ClipboardList className="h-4 w-4" /> Attendance Methods
+							</CardTitle>
+							<CardDescription>
+								Control which methods students can use to mark attendance. At
+								least one method must be enabled.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-5">
+							{/* Manual Attendance */}
+							<div className="space-y-2">
+								<div className="flex items-center gap-3">
+									<Switch
+										checked={manualAttendanceEnabled}
+										onCheckedChange={(checked) => {
+											if (!checked && !faceRecognitionEnabled) {
+												toast.error(
+													"At least one attendance method must remain enabled.",
+												);
+												return;
+											}
+											setManualAttendanceEnabled(checked);
+										}}
+									/>
+									<span className="text-sm font-medium">
+										Manual Attendance{" "}
+										<span className="font-normal text-muted-foreground">
+											— {manualAttendanceEnabled ? "Enabled" : "Disabled"}
+										</span>
+									</span>
+								</div>
+								{manualAttendanceEnabled && (
+									<p className="text-xs text-muted-foreground ml-11">
+										Students can manually select Present / Leave and submit
+										attendance via the form.
+									</p>
+								)}
+							</div>
+
+							{/* Face Recognition */}
+							<div className="space-y-2">
+								<div className="flex items-center gap-3">
+									<Switch
+										checked={faceRecognitionEnabled}
+										onCheckedChange={(checked) => {
+											if (!checked && !manualAttendanceEnabled) {
+												toast.error(
+													"At least one attendance method must remain enabled.",
+												);
+												return;
+											}
+											setFaceRecognitionEnabled(checked);
+										}}
+									/>
+									<span className="text-sm font-medium">
+										<ScanFace className="h-3.5 w-3.5 inline mr-1" />
+										Face Recognition{" "}
+										<span className="font-normal text-muted-foreground">
+											— {faceRecognitionEnabled ? "Enabled" : "Disabled"}
+										</span>
+									</span>
+								</div>
+								{faceRecognitionEnabled && (
+									<div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-700 space-y-1 ml-11">
+										<p className="font-medium">How it works:</p>
+										<ul className="list-disc ml-4 space-y-0.5">
+											<li>Students use their webcam to verify identity</li>
+											<li>Face is matched against their Clerk profile photo</li>
+											<li>
+												On successful match, attendance is marked automatically
+											</li>
+											<li>Minimum confidence threshold: 60%</li>
+										</ul>
+										<p className="mt-2 text-blue-600 font-medium">
+											Students must have a clear profile photo uploaded for this
+											to work.
+										</p>
+									</div>
+								)}
+							</div>
+
+							{/* Summary */}
+							{!manualAttendanceEnabled && faceRecognitionEnabled && (
+								<div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-700">
+									<AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+									Manual form is disabled — students can <strong>
+										only
+									</strong>{" "}
+									mark attendance via face recognition.
+								</div>
+							)}
+							{manualAttendanceEnabled && !faceRecognitionEnabled && (
+								<div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-muted-foreground">
+									Face recognition is off — students use the manual form only.
+								</div>
+							)}
+							{manualAttendanceEnabled && faceRecognitionEnabled && (
+								<div className="rounded-md bg-green-50 border border-green-200 p-3 text-xs text-green-700">
+									Both methods enabled — students can use either the manual form
+									or face recognition.
+								</div>
+							)}
 						</CardContent>
 					</Card>
 				</div>
@@ -2304,36 +2332,6 @@ function StatMini({
 		<div className="bg-white border rounded-lg px-4 py-3 text-center">
 			<div className={cn("text-2xl font-bold", colorClasses[color])}>
 				{count}
-			</div>
-			<div className="text-xs text-muted-foreground">{label}</div>
-		</div>
-	);
-}
-
-function StatBox({
-	label,
-	value,
-	color,
-}: {
-	label: string;
-	value: number;
-	color: string;
-}) {
-	const colorClasses: Record<string, string> = {
-		green: "text-green-600",
-		red: "text-red-600",
-		amber: "text-amber-600",
-		blue: "text-blue-600",
-	};
-	return (
-		<div className="p-3 border rounded-lg text-center">
-			<div
-				className={cn(
-					"text-xl font-bold",
-					colorClasses[color] ?? "text-foreground",
-				)}
-			>
-				{value}
 			</div>
 			<div className="text-xs text-muted-foreground">{label}</div>
 		</div>

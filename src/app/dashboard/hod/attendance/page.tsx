@@ -1,7 +1,7 @@
 /**
  * @module HOD Attendance Page
  * @description Comprehensive HOD attendance management with four tabs:
- * Overview (student summaries), Review (sign/reject sheets), Holidays, Config.
+ * Overview (student summaries), Review (sign/reject daily entries), Holidays, Config.
  *
  * @see HodAttendanceClient.tsx — main client component
  * @see actions/attendance.ts — all HOD attendance server actions
@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import {
 	getAllAttendanceConfigs,
 	getHolidays,
-	getAttendanceForReview,
+	getDailyEntriesForReview,
 	getBatchAttendanceSummary,
 } from "@/actions/attendance";
 import { getAutoReviewSettings } from "@/actions/auto-review";
@@ -31,14 +31,14 @@ export default async function HodAttendancePage() {
 		rawBatches,
 		rawConfigs,
 		rawHolidays,
-		rawSheets,
+		rawEntries,
 		rawSummaries,
 		autoReview,
 	] = await Promise.all([
 		getAllBatches(),
 		getAllAttendanceConfigs(),
 		getHolidays(),
-		getAttendanceForReview({ page: 1, pageSize: 15 }),
+		getDailyEntriesForReview({ page: 1, pageSize: 20 }),
 		getBatchAttendanceSummary(),
 		getAutoReviewSettings(),
 	]);
@@ -47,14 +47,14 @@ export default async function HodAttendancePage() {
 	const batches = JSON.parse(JSON.stringify(rawBatches));
 	const configs = JSON.parse(JSON.stringify(rawConfigs));
 	const holidays = JSON.parse(JSON.stringify(rawHolidays));
-	const sheets = JSON.parse(JSON.stringify(rawSheets));
+	const entries = JSON.parse(JSON.stringify(rawEntries));
 	const summaries = JSON.parse(JSON.stringify(rawSummaries));
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				title="Attendance Management"
-				description="Overview, review sheets, manage holidays, and configure attendance settings"
+				description="Overview, review daily entries, manage holidays, and configure attendance settings"
 				breadcrumbs={[
 					{ label: "Dashboard", href: "/dashboard/hod" },
 					{ label: "Attendance" },
@@ -65,7 +65,7 @@ export default async function HodAttendancePage() {
 				configs={configs}
 				holidays={holidays}
 				studentSummaries={summaries}
-				initialSheets={sheets}
+				initialEntries={entries}
 				autoReviewSettings={autoReview}
 			/>
 		</div>

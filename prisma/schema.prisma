@@ -246,6 +246,10 @@ model AttendanceConfig {
   // Minimum attendance criteria percentage
   minimumAttendancePct  Float    @default(75.0) // 75%
 
+  // Attendance method toggles (HOD controls which methods students can use)
+  manualAttendanceEnabled Boolean @default(true)   // manual form (default ON)
+  faceRecognitionEnabled  Boolean @default(false)  // face recognition (default OFF)
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -301,9 +305,17 @@ model AttendanceEntry {
   latitude          Float?          // Student's location when marked
   longitude         Float?          // Student's location when marked
   withinLocation    Boolean?        // Was student within allowed radius?
+  // Per-entry review fields (daily submission model)
+  status            EntryStatus     @default(DRAFT)
+  facultyRemark     String?
+  signedAt          DateTime?
+  signedBy          String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@index([attendanceSheetId])
   @@index([date])
+  @@index([status])
 }
 
 enum DayOfWeek {
