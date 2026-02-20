@@ -148,7 +148,7 @@ interface InlineForm {
 	batchId: string;
 	deadline: string;
 	publishAt: string;
-	semester: string; // "" means all
+	semester: string; // "all" means all semesters
 	maxMarks: string;
 	totalMarks: string;
 	resourceLinks: string;
@@ -162,7 +162,7 @@ const EMPTY_FORM: InlineForm = {
 	batchId: "",
 	deadline: "",
 	publishAt: "",
-	semester: "",
+	semester: "all",
 	maxMarks: "",
 	totalMarks: "",
 	resourceLinks: "",
@@ -281,7 +281,7 @@ export function HodAssessmentsClient({
 			batchId: a.batchId,
 			deadline: a.deadline ? a.deadline.slice(0, 16) : "",
 			publishAt: a.publishAt ? a.publishAt.slice(0, 16) : "",
-			semester: a.semester?.toString() ?? "",
+			semester: a.semester?.toString() ?? "all",
 			maxMarks: a.maxMarks?.toString() ?? "",
 			totalMarks: a.totalMarks?.toString() ?? "",
 			resourceLinks: a.resourceLinks.join("\n"),
@@ -319,7 +319,10 @@ export function HodAssessmentsClient({
 			batchId: form.batchId,
 			deadline: form.deadline || undefined,
 			publishAt: form.publishAt || undefined,
-			semester: form.semester ? parseInt(form.semester) : null,
+			semester:
+				form.semester && form.semester !== "all" ?
+					parseInt(form.semester)
+				:	null,
 			resourceLinks: form.resourceLinks
 				.split("\n")
 				.map((l) => l.trim())
@@ -561,7 +564,7 @@ export function HodAssessmentsClient({
 										<SelectValue placeholder="All Semesters" />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="">All Semesters</SelectItem>
+										<SelectItem value="all">All Semesters</SelectItem>
 										{SEMESTERS.map((s) => (
 											<SelectItem key={s} value={s.toString()}>
 												Semester {s}

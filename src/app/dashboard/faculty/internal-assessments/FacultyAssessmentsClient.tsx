@@ -143,7 +143,7 @@ const EMPTY_FORM: InlineForm = {
 	batchId: "",
 	deadline: "",
 	publishAt: "",
-	semester: "",
+	semester: "all",
 	maxMarks: "",
 	totalMarks: "",
 	resourceLinks: "",
@@ -183,17 +183,21 @@ export function FacultyAssessmentsClient({
 	const formRef = useRef<HTMLDivElement>(null);
 
 	// Detail sheet state
-	const [detailAssessment, setDetailAssessment] = useState<AssessmentRow | null>(null);
-	const [subStatusFilter, setSubStatusFilter] = useState<SubmissionStatusFilter>("all");
+	const [detailAssessment, setDetailAssessment] =
+		useState<AssessmentRow | null>(null);
+	const [subStatusFilter, setSubStatusFilter] =
+		useState<SubmissionStatusFilter>("all");
 
 	// Evaluate dialog
-	const [evaluatingSubmission, setEvaluatingSubmission] = useState<SubmissionInfo | null>(null);
+	const [evaluatingSubmission, setEvaluatingSubmission] =
+		useState<SubmissionInfo | null>(null);
 	const [evalMarks, setEvalMarks] = useState("");
 	const [evalGrade, setEvalGrade] = useState("");
 	const [evalFeedback, setEvalFeedback] = useState("");
 
 	// Reject dialog
-	const [rejectingSubmission, setRejectingSubmission] = useState<SubmissionInfo | null>(null);
+	const [rejectingSubmission, setRejectingSubmission] =
+		useState<SubmissionInfo | null>(null);
 	const [rejectReason, setRejectReason] = useState("");
 
 	// ======================== FILTERS ========================
@@ -208,8 +212,10 @@ export function FacultyAssessmentsClient({
 					a.batch.name.toLowerCase().includes(q),
 			);
 		}
-		if (batchFilter !== "all") result = result.filter((a) => a.batchId === batchFilter);
-		if (typeFilter !== "all") result = result.filter((a) => a.assessmentType === typeFilter);
+		if (batchFilter !== "all")
+			result = result.filter((a) => a.batchId === batchFilter);
+		if (typeFilter !== "all")
+			result = result.filter((a) => a.assessmentType === typeFilter);
 		return result;
 	}, [assessments, searchQuery, batchFilter, typeFilter]);
 
@@ -226,7 +232,11 @@ export function FacultyAssessmentsClient({
 		setEditingId(null);
 		setForm(EMPTY_FORM);
 		setShowInlineForm(true);
-		setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+		setTimeout(
+			() =>
+				formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+			100,
+		);
 	}, []);
 
 	const openEdit = useCallback((a: AssessmentRow) => {
@@ -238,14 +248,18 @@ export function FacultyAssessmentsClient({
 			batchId: a.batchId,
 			deadline: a.deadline ? a.deadline.slice(0, 16) : "",
 			publishAt: a.publishAt ? a.publishAt.slice(0, 16) : "",
-			semester: a.semester?.toString() ?? "",
+			semester: a.semester?.toString() ?? "all",
 			maxMarks: a.maxMarks?.toString() ?? "",
 			totalMarks: a.totalMarks?.toString() ?? "",
 			resourceLinks: a.resourceLinks.join("\n"),
 			isPublished: a.isPublished,
 		});
 		setShowInlineForm(true);
-		setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+		setTimeout(
+			() =>
+				formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+			100,
+		);
 	}, []);
 
 	const cancelForm = useCallback(() => {
@@ -255,18 +269,31 @@ export function FacultyAssessmentsClient({
 	}, []);
 
 	const handleSave = useCallback(() => {
-		if (!form.title.trim()) { toast.error("Title is required"); return; }
-		if (!form.batchId) { toast.error("Please select a batch"); return; }
+		if (!form.title.trim()) {
+			toast.error("Title is required");
+			return;
+		}
+		if (!form.batchId) {
+			toast.error("Please select a batch");
+			return;
+		}
 
 		const input: CreateAssessmentInput = {
 			title: form.title.trim(),
 			description: form.description.trim() || undefined,
-			assessmentType: form.assessmentType as CreateAssessmentInput["assessmentType"],
+			assessmentType:
+				form.assessmentType as CreateAssessmentInput["assessmentType"],
 			batchId: form.batchId,
 			deadline: form.deadline || undefined,
 			publishAt: form.publishAt || undefined,
-			semester: form.semester ? parseInt(form.semester) : null,
-			resourceLinks: form.resourceLinks.split("\n").map((l) => l.trim()).filter(Boolean),
+			semester:
+				form.semester && form.semester !== "all" ?
+					parseInt(form.semester)
+				:	null,
+			resourceLinks: form.resourceLinks
+				.split("\n")
+				.map((l) => l.trim())
+				.filter(Boolean),
 			maxMarks: form.maxMarks ? parseInt(form.maxMarks) : undefined,
 			totalMarks: form.totalMarks ? parseFloat(form.totalMarks) : undefined,
 			isPublished: form.isPublished,
@@ -288,17 +315,20 @@ export function FacultyAssessmentsClient({
 		});
 	}, [form, editingId, cancelForm]);
 
-	const handleDelete = useCallback((id: string) => {
-		startTransition(async () => {
-			try {
-				await deleteAssessment(id);
-				toast.success("Assessment deleted");
-				if (editingId === id) cancelForm();
-			} catch (err) {
-				toast.error(err instanceof Error ? err.message : "Failed to delete");
-			}
-		});
-	}, [editingId, cancelForm]);
+	const handleDelete = useCallback(
+		(id: string) => {
+			startTransition(async () => {
+				try {
+					await deleteAssessment(id);
+					toast.success("Assessment deleted");
+					if (editingId === id) cancelForm();
+				} catch (err) {
+					toast.error(err instanceof Error ? err.message : "Failed to delete");
+				}
+			});
+		},
+		[editingId, cancelForm],
+	);
 
 	const handleTogglePublish = useCallback((id: string) => {
 		startTransition(async () => {
@@ -323,7 +353,9 @@ export function FacultyAssessmentsClient({
 				});
 				toast.success("Submission evaluated");
 				setEvaluatingSubmission(null);
-				setEvalMarks(""); setEvalGrade(""); setEvalFeedback("");
+				setEvalMarks("");
+				setEvalGrade("");
+				setEvalFeedback("");
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : "Failed to evaluate");
 			}
@@ -377,7 +409,8 @@ export function FacultyAssessmentsClient({
 				<Card>
 					<CardContent className="py-12 text-center">
 						<p className="text-muted-foreground">
-							You have no batch assignments. Contact the HOD to get assigned to a batch.
+							You have no batch assignments. Contact the HOD to get assigned to
+							a batch.
 						</p>
 					</CardContent>
 				</Card>
@@ -387,11 +420,16 @@ export function FacultyAssessmentsClient({
 				<>
 					{/* ======================== INLINE CREATE/EDIT FORM ======================== */}
 					{showInlineForm && (
-						<Card ref={formRef} className="border-2 border-hospital-primary/30 shadow-md">
+						<Card
+							ref={formRef}
+							className="border-2 border-hospital-primary/30 shadow-md"
+						>
 							<CardHeader className="pb-3">
 								<div className="flex items-center justify-between">
 									<CardTitle className="text-lg flex items-center gap-2">
-										{editingId ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+										{editingId ?
+											<Edit className="h-5 w-5" />
+										:	<Plus className="h-5 w-5" />}
 										{editingId ? "Edit Assessment" : "Create New Assessment"}
 									</CardTitle>
 									<Button variant="ghost" size="icon" onClick={cancelForm}>
@@ -402,7 +440,9 @@ export function FacultyAssessmentsClient({
 							<CardContent className="space-y-4">
 								{/* Row 1: Title */}
 								<div className="space-y-2">
-									<Label htmlFor="form-title">Title <span className="text-red-500">*</span></Label>
+									<Label htmlFor="form-title">
+										Title <span className="text-red-500">*</span>
+									</Label>
 									<Input
 										id="form-title"
 										value={form.title}
@@ -414,13 +454,23 @@ export function FacultyAssessmentsClient({
 								{/* Row 2: Batch, Semester, Type */}
 								<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 									<div className="space-y-2">
-										<Label>Batch <span className="text-red-500">*</span></Label>
-										<Select value={form.batchId} onValueChange={(v) => updateForm({ batchId: v })}>
-											<SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+										<Label>
+											Batch <span className="text-red-500">*</span>
+										</Label>
+										<Select
+											value={form.batchId}
+											onValueChange={(v) => updateForm({ batchId: v })}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="Select batch" />
+											</SelectTrigger>
 											<SelectContent>
 												{batches.map((b) => (
 													<SelectItem key={b.id} value={b.id}>
-														{b.name} {b.currentSemester ? `(Sem ${b.currentSemester})` : ""}
+														{b.name}{" "}
+														{b.currentSemester ?
+															`(Sem ${b.currentSemester})`
+														:	""}
 													</SelectItem>
 												))}
 											</SelectContent>
@@ -428,23 +478,37 @@ export function FacultyAssessmentsClient({
 									</div>
 									<div className="space-y-2">
 										<Label>Semester</Label>
-										<Select value={form.semester} onValueChange={(v) => updateForm({ semester: v })}>
-											<SelectTrigger><SelectValue placeholder="All Semesters" /></SelectTrigger>
+										<Select
+											value={form.semester}
+											onValueChange={(v) => updateForm({ semester: v })}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="All Semesters" />
+											</SelectTrigger>
 											<SelectContent>
-												<SelectItem value="">All Semesters</SelectItem>
+												<SelectItem value="all">All Semesters</SelectItem>
 												{SEMESTERS.map((s) => (
-													<SelectItem key={s} value={s.toString()}>Semester {s}</SelectItem>
+													<SelectItem key={s} value={s.toString()}>
+														Semester {s}
+													</SelectItem>
 												))}
 											</SelectContent>
 										</Select>
 									</div>
 									<div className="space-y-2">
 										<Label>Assessment Type</Label>
-										<Select value={form.assessmentType} onValueChange={(v) => updateForm({ assessmentType: v })}>
-											<SelectTrigger><SelectValue /></SelectTrigger>
+										<Select
+											value={form.assessmentType}
+											onValueChange={(v) => updateForm({ assessmentType: v })}
+										>
+											<SelectTrigger>
+												<SelectValue />
+											</SelectTrigger>
 											<SelectContent>
 												{ASSESSMENT_TYPES.map((t) => (
-													<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+													<SelectItem key={t.value} value={t.value}>
+														{t.label}
+													</SelectItem>
 												))}
 											</SelectContent>
 										</Select>
@@ -468,9 +532,13 @@ export function FacultyAssessmentsClient({
 											id="form-publishAt"
 											type="datetime-local"
 											value={form.publishAt}
-											onChange={(e) => updateForm({ publishAt: e.target.value })}
+											onChange={(e) =>
+												updateForm({ publishAt: e.target.value })
+											}
 										/>
-										<p className="text-xs text-muted-foreground">Schedule when to publish</p>
+										<p className="text-xs text-muted-foreground">
+											Schedule when to publish
+										</p>
 									</div>
 									<div className="space-y-2">
 										<Label htmlFor="form-maxMarks">Max Marks</Label>
@@ -491,7 +559,9 @@ export function FacultyAssessmentsClient({
 											min={0}
 											step="0.1"
 											value={form.totalMarks}
-											onChange={(e) => updateForm({ totalMarks: e.target.value })}
+											onChange={(e) =>
+												updateForm({ totalMarks: e.target.value })
+											}
 											placeholder="200"
 										/>
 									</div>
@@ -510,12 +580,21 @@ export function FacultyAssessmentsClient({
 
 								{/* Row 5: Resource Links */}
 								<div className="space-y-2">
-									<Label htmlFor="form-links">Resource Links <span className="text-xs text-muted-foreground">(one per line)</span></Label>
+									<Label htmlFor="form-links">
+										Resource Links{" "}
+										<span className="text-xs text-muted-foreground">
+											(one per line)
+										</span>
+									</Label>
 									<Textarea
 										id="form-links"
 										value={form.resourceLinks}
-										onChange={(e) => updateForm({ resourceLinks: e.target.value })}
-										placeholder={"https://example.com/study-material\nhttps://example.com/reference"}
+										onChange={(e) =>
+											updateForm({ resourceLinks: e.target.value })
+										}
+										placeholder={
+											"https://example.com/study-material\nhttps://example.com/reference"
+										}
 										rows={3}
 									/>
 								</div>
@@ -529,15 +608,23 @@ export function FacultyAssessmentsClient({
 											onCheckedChange={(v) => updateForm({ isPublished: v })}
 										/>
 										<Label htmlFor="form-published" className="cursor-pointer">
-											{form.isPublished ? "Published — visible to students" : "Draft — not visible to students"}
+											{form.isPublished ?
+												"Published — visible to students"
+											:	"Draft — not visible to students"}
 										</Label>
 									</div>
 									<div className="flex gap-2">
-										<Button variant="outline" onClick={cancelForm} disabled={isPending}>
+										<Button
+											variant="outline"
+											onClick={cancelForm}
+											disabled={isPending}
+										>
 											Cancel
 										</Button>
 										<Button onClick={handleSave} disabled={isPending}>
-											{isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+											{isPending ?
+												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											:	<Save className="mr-2 h-4 w-4" />}
 											{editingId ? "Update Assessment" : "Create Assessment"}
 										</Button>
 									</div>
@@ -555,29 +642,48 @@ export function FacultyAssessmentsClient({
 									<Input
 										placeholder="Search assessments..."
 										value={searchQuery}
-										onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+										onChange={(e) => {
+											setSearchQuery(e.target.value);
+											setPage(1);
+										}}
 										className="pl-10"
 									/>
 								</div>
-								<Select value={batchFilter} onValueChange={(v) => { setBatchFilter(v); setPage(1); }}>
+								<Select
+									value={batchFilter}
+									onValueChange={(v) => {
+										setBatchFilter(v);
+										setPage(1);
+									}}
+								>
 									<SelectTrigger className="w-45">
 										<SelectValue placeholder="Batch" />
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Batches</SelectItem>
 										{batches.map((b) => (
-											<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+											<SelectItem key={b.id} value={b.id}>
+												{b.name}
+											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
-								<Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
+								<Select
+									value={typeFilter}
+									onValueChange={(v) => {
+										setTypeFilter(v);
+										setPage(1);
+									}}
+								>
 									<SelectTrigger className="w-40">
 										<SelectValue placeholder="Type" />
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Types</SelectItem>
 										{ASSESSMENT_TYPES.map((t) => (
-											<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+											<SelectItem key={t.value} value={t.value}>
+												{t.label}
+											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
@@ -588,17 +694,20 @@ export function FacultyAssessmentsClient({
 					{/* Table */}
 					<Card>
 						<CardHeader>
-							<CardTitle className="text-lg">Assessments ({filtered.length})</CardTitle>
+							<CardTitle className="text-lg">
+								Assessments ({filtered.length})
+							</CardTitle>
 						</CardHeader>
 						<CardContent>
-							{filtered.length === 0 ? (
+							{filtered.length === 0 ?
 								<div className="text-center py-12 text-muted-foreground">
 									<FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
 									<p className="text-lg font-medium">No assessments found</p>
-									<p className="text-sm mt-1">Create your first assessment to get started</p>
+									<p className="text-sm mt-1">
+										Create your first assessment to get started
+									</p>
 								</div>
-							) : (
-								<>
+							:	<>
 									<div className="rounded-md border overflow-x-auto">
 										<Table>
 											<TableHeader>
@@ -608,19 +717,32 @@ export function FacultyAssessmentsClient({
 													<TableHead>Batch</TableHead>
 													<TableHead>Semester</TableHead>
 													<TableHead>Deadline</TableHead>
-													<TableHead className="text-center">Submissions</TableHead>
+													<TableHead className="text-center">
+														Submissions
+													</TableHead>
 													<TableHead className="text-center">Status</TableHead>
 													<TableHead className="text-right">Actions</TableHead>
 												</TableRow>
 											</TableHeader>
 											<TableBody>
 												{paginated.map((a) => {
-													const submittedCount = a.submissions.filter((s) => s.status !== "DRAFT").length;
-													const evaluatedCount = a.submissions.filter((s) => s.status === "SIGNED").length;
+													const submittedCount = a.submissions.filter(
+														(s) => s.status !== "DRAFT",
+													).length;
+													const evaluatedCount = a.submissions.filter(
+														(s) => s.status === "SIGNED",
+													).length;
 													const isBeingEdited = editingId === a.id;
 
 													return (
-														<TableRow key={a.id} className={isBeingEdited ? "bg-blue-50/50 ring-1 ring-blue-200" : ""}>
+														<TableRow
+															key={a.id}
+															className={
+																isBeingEdited ?
+																	"bg-blue-50/50 ring-1 ring-blue-200"
+																:	""
+															}
+														>
 															<TableCell>
 																<button
 																	onClick={() => setDetailAssessment(a)}
@@ -631,41 +753,79 @@ export function FacultyAssessmentsClient({
 															</TableCell>
 															<TableCell>
 																<Badge variant="outline" className="text-xs">
-																	{ASSESSMENT_TYPES.find((t) => t.value === a.assessmentType)?.label ?? a.assessmentType}
+																	{ASSESSMENT_TYPES.find(
+																		(t) => t.value === a.assessmentType,
+																	)?.label ?? a.assessmentType}
 																</Badge>
 															</TableCell>
-															<TableCell className="text-sm">{a.batch.name}</TableCell>
+															<TableCell className="text-sm">
+																{a.batch.name}
+															</TableCell>
 															<TableCell className="text-sm">
 																{a.semester ? `Sem ${a.semester}` : "All"}
 															</TableCell>
 															<TableCell className="text-sm">
-																{a.deadline ? format(new Date(a.deadline), "dd MMM yyyy") : "—"}
+																{a.deadline ?
+																	format(new Date(a.deadline), "dd MMM yyyy")
+																:	"—"}
 															</TableCell>
 															<TableCell className="text-center">
-																<span className="text-sm font-medium">{submittedCount}</span>
+																<span className="text-sm font-medium">
+																	{submittedCount}
+																</span>
 																{evaluatedCount > 0 && (
-																	<span className="text-xs text-green-600 ml-1">({evaluatedCount} graded)</span>
+																	<span className="text-xs text-green-600 ml-1">
+																		({evaluatedCount} graded)
+																	</span>
 																)}
 															</TableCell>
 															<TableCell className="text-center">
-																{a.isPublished ? (
-																	<Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">Published</Badge>
-																) : (
-																	<Badge variant="secondary" className="text-xs">Draft</Badge>
-																)}
+																{a.isPublished ?
+																	<Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+																		Published
+																	</Badge>
+																:	<Badge variant="secondary" className="text-xs">
+																		Draft
+																	</Badge>
+																}
 															</TableCell>
 															<TableCell className="text-right">
 																<div className="flex justify-end gap-1">
-																	<Button variant="ghost" size="icon" onClick={() => setDetailAssessment(a)} title="View">
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => setDetailAssessment(a)}
+																		title="View"
+																	>
 																		<Eye className="h-4 w-4" />
 																	</Button>
-																	<Button variant="ghost" size="icon" onClick={() => openEdit(a)} title="Edit">
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => openEdit(a)}
+																		title="Edit"
+																	>
 																		<Edit className="h-4 w-4" />
 																	</Button>
-																	<Button variant="ghost" size="icon" onClick={() => handleTogglePublish(a.id)} disabled={isPending} title={a.isPublished ? "Unpublish" : "Publish"}>
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => handleTogglePublish(a.id)}
+																		disabled={isPending}
+																		title={
+																			a.isPublished ? "Unpublish" : "Publish"
+																		}
+																	>
 																		<Globe className="h-4 w-4" />
 																	</Button>
-																	<Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)} disabled={isPending} title="Delete" className="text-red-500 hover:text-red-700">
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => handleDelete(a.id)}
+																		disabled={isPending}
+																		title="Delete"
+																		className="text-red-500 hover:text-red-700"
+																	>
 																		<Trash2 className="h-4 w-4" />
 																	</Button>
 																</div>
@@ -680,43 +840,74 @@ export function FacultyAssessmentsClient({
 									{totalPages > 1 && (
 										<div className="flex items-center justify-between mt-4">
 											<p className="text-sm text-muted-foreground">
-												Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+												Showing {(page - 1) * PAGE_SIZE + 1}–
+												{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
+												{filtered.length}
 											</p>
 											<div className="flex gap-2">
-												<Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() => setPage((p) => Math.max(1, p - 1))}
+													disabled={page === 1}
+												>
 													<ChevronLeft className="h-4 w-4" />
 												</Button>
-												<span className="flex items-center px-3 text-sm">{page} / {totalPages}</span>
-												<Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+												<span className="flex items-center px-3 text-sm">
+													{page} / {totalPages}
+												</span>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() =>
+														setPage((p) => Math.min(totalPages, p + 1))
+													}
+													disabled={page === totalPages}
+												>
 													<ChevronRight className="h-4 w-4" />
 												</Button>
 											</div>
 										</div>
 									)}
 								</>
-							)}
+							}
 						</CardContent>
 					</Card>
 				</>
 			)}
 
 			{/* ======================== DETAIL SHEET ======================== */}
-			<Sheet open={!!detailAssessment} onOpenChange={(v) => { if (!v) setDetailAssessment(null); }}>
+			<Sheet
+				open={!!detailAssessment}
+				onOpenChange={(v) => {
+					if (!v) setDetailAssessment(null);
+				}}
+			>
 				<SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
 					{detailAssessment && (
 						<>
 							<SheetHeader>
-								<SheetTitle className="text-xl">{detailAssessment.title}</SheetTitle>
+								<SheetTitle className="text-xl">
+									{detailAssessment.title}
+								</SheetTitle>
 								<SheetDescription>
 									{detailAssessment.batch.name}
-									{detailAssessment.semester && ` • Semester ${detailAssessment.semester}`}
+									{detailAssessment.semester &&
+										` • Semester ${detailAssessment.semester}`}
 									{" • "}
-									{ASSESSMENT_TYPES.find((t) => t.value === detailAssessment.assessmentType)?.label}
-									{detailAssessment.isPublished ? (
-										<Badge className="ml-2 bg-green-100 text-green-700 hover:bg-green-100 text-xs">Published</Badge>
-									) : (
-										<Badge variant="secondary" className="ml-2 text-xs">Draft</Badge>
-									)}
+									{
+										ASSESSMENT_TYPES.find(
+											(t) => t.value === detailAssessment.assessmentType,
+										)?.label
+									}
+									{detailAssessment.isPublished ?
+										<Badge className="ml-2 bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+											Published
+										</Badge>
+									:	<Badge variant="secondary" className="ml-2 text-xs">
+											Draft
+										</Badge>
+									}
 								</SheetDescription>
 							</SheetHeader>
 
@@ -727,13 +918,23 @@ export function FacultyAssessmentsClient({
 											<p className="text-muted-foreground flex items-center gap-1">
 												<Calendar className="h-3 w-3" /> Deadline
 											</p>
-											<p className="font-medium">{format(new Date(detailAssessment.deadline), "dd MMM yyyy, hh:mm a")}</p>
+											<p className="font-medium">
+												{format(
+													new Date(detailAssessment.deadline),
+													"dd MMM yyyy, hh:mm a",
+												)}
+											</p>
 										</div>
 									)}
 									{detailAssessment.publishAt && (
 										<div>
 											<p className="text-muted-foreground">Scheduled Publish</p>
-											<p className="font-medium">{format(new Date(detailAssessment.publishAt), "dd MMM yyyy, hh:mm a")}</p>
+											<p className="font-medium">
+												{format(
+													new Date(detailAssessment.publishAt),
+													"dd MMM yyyy, hh:mm a",
+												)}
+											</p>
 										</div>
 									)}
 									{detailAssessment.maxMarks && (
@@ -745,7 +946,9 @@ export function FacultyAssessmentsClient({
 									{detailAssessment.totalMarks && (
 										<div>
 											<p className="text-muted-foreground">Total Marks</p>
-											<p className="font-medium">{detailAssessment.totalMarks}</p>
+											<p className="font-medium">
+												{detailAssessment.totalMarks}
+											</p>
 										</div>
 									)}
 								</div>
@@ -755,7 +958,9 @@ export function FacultyAssessmentsClient({
 										<p className="text-sm font-medium mb-2">Instructions</p>
 										<div
 											className="prose prose-sm max-w-none rounded-md border p-3 bg-muted/30"
-											dangerouslySetInnerHTML={{ __html: renderMarkdown(detailAssessment.description) }}
+											dangerouslySetInnerHTML={{
+												__html: renderMarkdown(detailAssessment.description),
+											}}
 										/>
 									</div>
 								)}
@@ -765,8 +970,15 @@ export function FacultyAssessmentsClient({
 										<p className="text-sm font-medium mb-2">Resource Links</p>
 										<div className="space-y-1">
 											{detailAssessment.resourceLinks.map((link, i) => (
-												<a key={i} href={link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-hospital-primary hover:underline">
-													<ExternalLink className="h-3 w-3" />{link}
+												<a
+													key={i}
+													href={link}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline"
+												>
+													<ExternalLink className="h-3 w-3" />
+													{link}
 												</a>
 											))}
 										</div>
@@ -777,9 +989,15 @@ export function FacultyAssessmentsClient({
 								<div>
 									<div className="flex items-center justify-between mb-3">
 										<p className="text-sm font-medium">
-											Student Submissions ({detailAssessment.submissions.length})
+											Student Submissions ({detailAssessment.submissions.length}
+											)
 										</p>
-										<Select value={subStatusFilter} onValueChange={(v) => setSubStatusFilter(v as SubmissionStatusFilter)}>
+										<Select
+											value={subStatusFilter}
+											onValueChange={(v) =>
+												setSubStatusFilter(v as SubmissionStatusFilter)
+											}
+										>
 											<SelectTrigger className="w-40 h-8 text-xs">
 												<SelectValue placeholder="Filter" />
 											</SelectTrigger>
@@ -787,18 +1005,27 @@ export function FacultyAssessmentsClient({
 												<SelectItem value="all">All</SelectItem>
 												<SelectItem value="SUBMITTED">Submitted</SelectItem>
 												<SelectItem value="SIGNED">Evaluated</SelectItem>
-												<SelectItem value="NEEDS_REVISION">Needs Revision</SelectItem>
+												<SelectItem value="NEEDS_REVISION">
+													Needs Revision
+												</SelectItem>
 											</SelectContent>
 										</Select>
 									</div>
 
 									{(() => {
-										const subs = subStatusFilter === "all"
-											? detailAssessment.submissions
-											: detailAssessment.submissions.filter((s) => s.status === subStatusFilter);
+										const subs =
+											subStatusFilter === "all" ?
+												detailAssessment.submissions
+											:	detailAssessment.submissions.filter(
+													(s) => s.status === subStatusFilter,
+												);
 
 										if (subs.length === 0) {
-											return <p className="text-sm text-muted-foreground text-center py-6">No submissions found</p>;
+											return (
+												<p className="text-sm text-muted-foreground text-center py-6">
+													No submissions found
+												</p>
+											);
 										}
 
 										return (
@@ -808,9 +1035,15 @@ export function FacultyAssessmentsClient({
 														<TableRow>
 															<TableHead>Student</TableHead>
 															<TableHead>Status</TableHead>
-															<TableHead className="text-center">Marks</TableHead>
-															<TableHead className="text-center">Grade</TableHead>
-															<TableHead className="text-right">Actions</TableHead>
+															<TableHead className="text-center">
+																Marks
+															</TableHead>
+															<TableHead className="text-center">
+																Grade
+															</TableHead>
+															<TableHead className="text-right">
+																Actions
+															</TableHead>
 														</TableRow>
 													</TableHeader>
 													<TableBody>
@@ -820,11 +1053,16 @@ export function FacultyAssessmentsClient({
 																	{sub.student.firstName} {sub.student.lastName}
 																</TableCell>
 																<TableCell>
-																	<StatusBadge status={sub.status as EntryStatus} size="sm" />
+																	<StatusBadge
+																		status={sub.status as EntryStatus}
+																		size="sm"
+																	/>
 																</TableCell>
 																<TableCell className="text-center">
 																	{sub.evaluation?.marks ?? "—"}
-																	{detailAssessment.maxMarks ? ` / ${detailAssessment.maxMarks}` : ""}
+																	{detailAssessment.maxMarks ?
+																		` / ${detailAssessment.maxMarks}`
+																	:	""}
 																</TableCell>
 																<TableCell className="text-center">
 																	{sub.evaluation?.grade ?? "—"}
@@ -838,12 +1076,18 @@ export function FacultyAssessmentsClient({
 																					variant="outline"
 																					onClick={() => {
 																						setEvaluatingSubmission(sub);
-																						setEvalMarks(sub.evaluation?.marks?.toString() ?? "");
-																						setEvalGrade(sub.evaluation?.grade ?? "");
+																						setEvalMarks(
+																							sub.evaluation?.marks?.toString() ??
+																								"",
+																						);
+																						setEvalGrade(
+																							sub.evaluation?.grade ?? "",
+																						);
 																						setEvalFeedback("");
 																					}}
 																				>
-																					<CheckCircle2 className="mr-1 h-3 w-3" />Evaluate
+																					<CheckCircle2 className="mr-1 h-3 w-3" />
+																					Evaluate
 																				</Button>
 																				<Button
 																					size="sm"
@@ -854,7 +1098,8 @@ export function FacultyAssessmentsClient({
 																						setRejectReason("");
 																					}}
 																				>
-																					<XCircle className="mr-1 h-3 w-3" />Reject
+																					<XCircle className="mr-1 h-3 w-3" />
+																					Reject
 																				</Button>
 																			</>
 																		)}
@@ -864,12 +1109,18 @@ export function FacultyAssessmentsClient({
 																				variant="ghost"
 																				onClick={() => {
 																					setEvaluatingSubmission(sub);
-																					setEvalMarks(sub.evaluation?.marks?.toString() ?? "");
-																					setEvalGrade(sub.evaluation?.grade ?? "");
+																					setEvalMarks(
+																						sub.evaluation?.marks?.toString() ??
+																							"",
+																					);
+																					setEvalGrade(
+																						sub.evaluation?.grade ?? "",
+																					);
 																					setEvalFeedback("");
 																				}}
 																			>
-																				<Edit className="mr-1 h-3 w-3" />Edit
+																				<Edit className="mr-1 h-3 w-3" />
+																				Edit
 																			</Button>
 																		)}
 																	</div>
@@ -889,13 +1140,21 @@ export function FacultyAssessmentsClient({
 			</Sheet>
 
 			{/* ======================== EVALUATE DIALOG ======================== */}
-			<Dialog open={!!evaluatingSubmission} onOpenChange={(v) => { if (!v) setEvaluatingSubmission(null); }}>
+			<Dialog
+				open={!!evaluatingSubmission}
+				onOpenChange={(v) => {
+					if (!v) setEvaluatingSubmission(null);
+				}}
+			>
 				<DialogContent className="max-w-lg">
 					<DialogHeader>
 						<DialogTitle>Evaluate Submission</DialogTitle>
 						<DialogDescription>
 							{evaluatingSubmission && (
-								<>Student: {evaluatingSubmission.student.firstName} {evaluatingSubmission.student.lastName}</>
+								<>
+									Student: {evaluatingSubmission.student.firstName}{" "}
+									{evaluatingSubmission.student.lastName}
+								</>
 							)}
 						</DialogDescription>
 					</DialogHeader>
@@ -905,7 +1164,9 @@ export function FacultyAssessmentsClient({
 								<Label htmlFor="evalMarks">
 									Marks{" "}
 									{detailAssessment?.maxMarks && (
-										<span className="text-xs text-muted-foreground">(out of {detailAssessment.maxMarks})</span>
+										<span className="text-xs text-muted-foreground">
+											(out of {detailAssessment.maxMarks})
+										</span>
 									)}
 								</Label>
 								<Input
@@ -941,7 +1202,12 @@ export function FacultyAssessmentsClient({
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setEvaluatingSubmission(null)}>Cancel</Button>
+						<Button
+							variant="outline"
+							onClick={() => setEvaluatingSubmission(null)}
+						>
+							Cancel
+						</Button>
 						<Button onClick={handleEvaluate} disabled={isPending}>
 							{isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
 							Save Evaluation
@@ -951,13 +1217,23 @@ export function FacultyAssessmentsClient({
 			</Dialog>
 
 			{/* ======================== REJECT DIALOG ======================== */}
-			<Dialog open={!!rejectingSubmission} onOpenChange={(v) => { if (!v) setRejectingSubmission(null); }}>
+			<Dialog
+				open={!!rejectingSubmission}
+				onOpenChange={(v) => {
+					if (!v) setRejectingSubmission(null);
+				}}
+			>
 				<DialogContent className="max-w-lg">
 					<DialogHeader>
-						<DialogTitle className="text-red-600">Reject Submission</DialogTitle>
+						<DialogTitle className="text-red-600">
+							Reject Submission
+						</DialogTitle>
 						<DialogDescription>
 							{rejectingSubmission && (
-								<>Student: {rejectingSubmission.student.firstName} {rejectingSubmission.student.lastName}</>
+								<>
+									Student: {rejectingSubmission.student.firstName}{" "}
+									{rejectingSubmission.student.lastName}
+								</>
 							)}
 						</DialogDescription>
 					</DialogHeader>
@@ -976,8 +1252,17 @@ export function FacultyAssessmentsClient({
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setRejectingSubmission(null)}>Cancel</Button>
-						<Button variant="destructive" onClick={handleReject} disabled={isPending || !rejectReason.trim()}>
+						<Button
+							variant="outline"
+							onClick={() => setRejectingSubmission(null)}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={handleReject}
+							disabled={isPending || !rejectReason.trim()}
+						>
 							{isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
 							Reject
 						</Button>
