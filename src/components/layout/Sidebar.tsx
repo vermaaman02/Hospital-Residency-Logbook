@@ -455,12 +455,12 @@ const hodNavSections: NavSection[] = [
 				icon: <UserCog className="h-4 w-4" />,
 				roles: ["hod"],
 			},
-			{
-				title: "Assignments",
-				href: "/dashboard/hod/assignments",
-				icon: <ClipboardList className="h-4 w-4" />,
-				roles: ["hod"],
-			},
+			// {
+			// 	title: "Assignments",
+			// 	href: "/dashboard/hod/assignments",
+			// 	icon: <ClipboardList className="h-4 w-4" />,
+			// 	roles: ["hod"],
+			// },
 			{
 				title: "Analytics",
 				href: "/dashboard/hod/analytics",
