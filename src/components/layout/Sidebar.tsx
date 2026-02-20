@@ -120,6 +120,12 @@ const studentNavSections: NavSection[] = [
 				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["student"],
 			},
+			{
+				title: "Internal Assessments",
+				href: "/dashboard/student/internal-assessments",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["student"],
+			},
 		],
 	},
 	{
@@ -276,6 +282,12 @@ const facultyNavSections: NavSection[] = [
 				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["faculty"],
 				badgeKey: "journalClubs",
+			},
+			{
+				title: "Internal Assessments",
+				href: "/dashboard/faculty/internal-assessments",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["faculty"],
 			},
 		],
 	},
@@ -492,6 +504,12 @@ const hodNavSections: NavSection[] = [
 				icon: <FlaskConical className="h-4 w-4" />,
 				roles: ["hod"],
 				badgeKey: "journalClubs",
+			},
+			{
+				title: "Internal Assessments",
+				href: "/dashboard/hod/internal-assessments",
+				icon: <FileText className="h-4 w-4" />,
+				roles: ["hod"],
 			},
 		],
 	},

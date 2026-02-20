@@ -200,6 +200,7 @@ export async function getAvailableCaseManagementFaculty() {
 export async function updateCaseManagementEntry(
 	id: string,
 	data: {
+		caseSubCategory?: string | null;
 		date?: string | null;
 		patientName?: string | null;
 		patientAge?: number | null;
@@ -227,6 +228,10 @@ export async function updateCaseManagementEntry(
 	const entry = await prisma.caseManagementLog.update({
 		where: { id },
 		data: {
+			caseSubCategory:
+				data.caseSubCategory !== undefined ?
+					(data.caseSubCategory ?? existing.caseSubCategory)
+				:	existing.caseSubCategory,
 			date: data.date ? new Date(data.date) : null,
 			patientName: data.patientName,
 			patientAge: data.patientAge,
@@ -258,6 +263,21 @@ export async function submitCaseManagementEntry(id: string) {
 	}
 	if (existing.status === "SIGNED") {
 		throw new Error("Entry is already signed");
+	}
+
+	// ── Server-side field validation ──
+	const missing: string[] = [];
+	if (!existing.caseSubCategory?.trim()) missing.push("Case Category");
+	if (!existing.date) missing.push("Date");
+	if (!existing.patientName?.trim()) missing.push("Patient Name");
+	if (existing.patientAge == null) missing.push("Age");
+	if (!existing.patientSex?.trim()) missing.push("Sex");
+	if (!existing.uhid?.trim()) missing.push("UHID");
+	if (!existing.completeDiagnosis?.trim()) missing.push("Complete Diagnosis");
+	if (!existing.competencyLevel) missing.push("Competency Level");
+	if (!existing.facultyId) missing.push("Faculty Sign");
+	if (missing.length > 0) {
+		throw new Error(`Cannot submit — fill: ${missing.join(", ")}`);
 	}
 
 	const autoReview = await isAutoReviewEnabled("caseManagement");

@@ -67,6 +67,11 @@ model User {
   signedEntries    DigitalSignature[]
   facultyBatchAssignments FacultyBatchAssignment[] @relation("FacultyBatchAssignments")
 
+  // Assessment relations
+  assessmentsCreated      InternalAssessment[]      @relation("AssessmentsCreated")
+  assessmentSubmissions   AssessmentSubmission[]     @relation("AssessmentSubmissions")
+  assessmentEvaluations   AssessmentEvaluation[]     @relation("AssessmentEvaluations")
+
   @@index([clerkId])
   @@index([role])
   @@index([status])
@@ -103,6 +108,7 @@ model Batch {
   facultyAssignments FacultyBatchAssignment[]
   attendanceConfig   AttendanceConfig?
   attendanceHolidays AttendanceHoliday[]
+  assessments        InternalAssessment[]
 
   @@index([isActive])
 }
@@ -931,6 +937,80 @@ model TrainingMentoringRecord {
   @@index([userId])
   @@index([evaluatedById])
   @@index([status])
+}
+
+// ======================== MODULE 15: INTERNAL ASSESSMENTS ========================
+
+model InternalAssessment {
+  id              String             @id @default(cuid())
+  title           String
+  description     String?            // Markdown instructions
+  assessmentType  AssessmentType     @default(OTHER)
+  batchId         String
+  batch           Batch              @relation(fields: [batchId], references: [id])
+  createdById     String
+  createdBy       User               @relation("AssessmentsCreated", fields: [createdById], references: [id])
+  deadline        DateTime?
+  resourceLinks   String[]           // Array of embedded links
+  maxMarks        Int?
+  totalMarks      Float?
+  isPublished     Boolean            @default(false)
+  publishAt       DateTime?          // Scheduled publish date
+  semester        Int?               // Target semester (null = all semesters)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  submissions     AssessmentSubmission[]
+
+  @@index([batchId])
+  @@index([createdById])
+  @@index([isPublished])
+}
+
+model AssessmentSubmission {
+  id             String             @id @default(cuid())
+  assessmentId   String
+  assessment     InternalAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        User               @relation("AssessmentSubmissions", fields: [studentId], references: [id])
+  content        String?            // Student's submission text (markdown)
+  submittedAt    DateTime?
+  status         EntryStatus        @default(DRAFT)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  evaluation     AssessmentEvaluation?
+
+  @@unique([assessmentId, studentId])
+  @@index([assessmentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model AssessmentEvaluation {
+  id             String               @id @default(cuid())
+  submissionId   String               @unique
+  submission     AssessmentSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  evaluatedById  String
+  evaluatedBy    User                 @relation("AssessmentEvaluations", fields: [evaluatedById], references: [id])
+  marks          Float?
+  grade          String?              // e.g., "A+", "B", "Pass", etc.
+  feedback       String?              // Markdown feedback
+  rejectionReason String?
+  evaluatedAt    DateTime             @default(now())
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([evaluatedById])
+}
+
+enum AssessmentType {
+  THEORY
+  PRACTICAL
+  VIVA
+  ASSIGNMENT
+  PROJECT
+  OTHER
 }
 
 // ======================== SHARED ENUMS ========================
