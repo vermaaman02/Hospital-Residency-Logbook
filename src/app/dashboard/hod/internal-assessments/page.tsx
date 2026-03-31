@@ -13,6 +13,7 @@ import {
 	getAvailableBatches,
 	getAssessmentStats,
 } from "@/actions/assessments";
+import { prisma } from "@/lib/prisma";
 import { HodAssessmentsClient } from "./HodAssessmentsClient";
 import { Loader2 } from "lucide-react";
 
@@ -21,10 +22,15 @@ export const dynamic = "force-dynamic";
 async function Content() {
 	await requireRole(["hod"]);
 
-	const [assessments, batches, stats] = await Promise.all([
+	const [assessments, batches, stats, facultyList] = await Promise.all([
 		getAllAssessments(),
 		getAvailableBatches(),
 		getAssessmentStats(),
+		prisma.user.findMany({
+			where: { role: "FACULTY" },
+			select: { id: true, firstName: true, lastName: true },
+			orderBy: { firstName: "asc" },
+		}),
 	]);
 
 	// Serialize Date fields
@@ -37,6 +43,7 @@ async function Content() {
 			assessments={serialized}
 			batches={serializedBatches}
 			stats={serializedStats}
+			facultyList={facultyList}
 		/>
 	);
 }

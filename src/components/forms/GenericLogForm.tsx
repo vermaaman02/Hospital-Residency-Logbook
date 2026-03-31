@@ -64,6 +64,7 @@ import { CompetencyLevelSelector } from "@/components/shared/CompetencyLevelSele
 import { ConfidenceLevelSelector } from "@/components/shared/ConfidenceLevelSelector";
 import { SkillLevelSelector } from "@/components/shared/SkillLevelSelector";
 import { CprSkillLevelSelector } from "@/components/shared/CprSkillLevelSelector";
+import { CloudinaryUpload } from "@/components/shared/CloudinaryUpload";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useState, useCallback, useEffect, useRef } from "react";
 
@@ -395,6 +396,15 @@ function renderField(
 			return (
 				<CprSkillLevelSelector
 					field={fieldProps}
+					disabled={disabled || config.disabled}
+				/>
+			);
+
+		case "file-upload":
+			return (
+				<CloudinaryUpload
+					value={(field.value as string[]) ?? []}
+					onChange={field.onChange as (urls: string[]) => void}
 					disabled={disabled || config.disabled}
 				/>
 			);

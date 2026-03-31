@@ -71,6 +71,7 @@ model User {
   assessmentsCreated      InternalAssessment[]      @relation("AssessmentsCreated")
   assessmentSubmissions   AssessmentSubmission[]     @relation("AssessmentSubmissions")
   assessmentEvaluations   AssessmentEvaluation[]     @relation("AssessmentEvaluations")
+  assignedFacultyAssessments InternalAssessment[]    @relation("AssessmentAssignedFaculty")
 
   @@index([clerkId])
   @@index([role])
@@ -620,6 +621,7 @@ model DiagnosticSkill {
   totalTimesPerformed     Int                @default(0)
   facultyId               String?
   facultyRemark           String?
+  imageUrls               String[]           @default([])  // ECG/ABG image uploads
   status                  EntryStatus        @default(DRAFT)
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
@@ -654,6 +656,7 @@ model ImagingLog {
   skillLevel           SkillLevel?
   facultyId            String?
   facultyRemark        String?
+  imageUrls            String[]        @default([])  // X-RAY/imaging uploads
   totalProcedureTally  Int             @default(0)
   status               EntryStatus     @default(DRAFT)
   createdAt            DateTime        @default(now())
@@ -884,6 +887,7 @@ model ResidentEvaluation {
   user                 User        @relation(fields: [userId], references: [id])
   semester             Int         // 1-6
   reviewNo             Int         // 1 or 2 per semester
+  assignedFacultyId    String?     // Faculty assigned to evaluate this student
 
   // 5 domains, each scored 1-5
   knowledgeScore       Int?        // 1-5
@@ -906,6 +910,7 @@ model ResidentEvaluation {
   @@index([userId])
   @@index([semester])
   @@index([status])
+  @@index([assignedFacultyId])
 }
 
 // ======================== MODULE 14: TRAINING & MENTORING / EVALUATION GRAPH ========================
@@ -957,6 +962,8 @@ model InternalAssessment {
   isPublished     Boolean            @default(false)
   publishAt       DateTime?          // Scheduled publish date
   semester        Int?               // Target semester (null = all semesters)
+  assignedFacultyId String?          // Optional: Restrict evaluation to specific faculty
+  assignedFaculty   User?            @relation("AssessmentAssignedFaculty", fields: [assignedFacultyId], references: [id])
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -965,6 +972,7 @@ model InternalAssessment {
   @@index([batchId])
   @@index([createdById])
   @@index([isPublished])
+  @@index([assignedFacultyId])
 }
 
 model AssessmentSubmission {
@@ -997,6 +1005,7 @@ model AssessmentEvaluation {
   grade          String?              // e.g., "A+", "B", "Pass", etc.
   feedback       String?              // Markdown feedback
   rejectionReason String?
+  isMarksLocked  Boolean              @default(false)  // Locked after first edit by HOD
   evaluatedAt    DateTime             @default(now())
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt

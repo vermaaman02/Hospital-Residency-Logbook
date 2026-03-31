@@ -172,6 +172,7 @@ export async function updateImagingLogEntry(
 		skillLevel?: string | null;
 		totalProcedureTally?: number;
 		facultyId?: string | null;
+		imageUrls?: string[];
 	},
 ) {
 	const clerkId = await requireAuth();
@@ -199,6 +200,7 @@ export async function updateImagingLogEntry(
 			skillLevel: data.skillLevel as never,
 			totalProcedureTally: data.totalProcedureTally,
 			facultyId: data.facultyId,
+			imageUrls: data.imageUrls ?? existing.imageUrls,
 			status: existing.status === "NEEDS_REVISION" ? "DRAFT" : existing.status,
 		},
 	});

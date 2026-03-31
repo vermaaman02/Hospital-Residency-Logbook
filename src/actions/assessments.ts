@@ -34,6 +34,7 @@ export interface CreateAssessmentInput {
 	maxMarks?: number;
 	totalMarks?: number;
 	isPublished?: boolean;
+	assignedFacultyId?: string;
 }
 
 export interface EvaluateSubmissionInput {
@@ -87,6 +88,7 @@ export async function createAssessment(input: CreateAssessmentInput) {
 			maxMarks: input.maxMarks ?? null,
 			totalMarks: input.totalMarks ?? null,
 			isPublished: input.isPublished ?? false,
+			assignedFacultyId: input.assignedFacultyId ?? null,
 		},
 	});
 
@@ -196,6 +198,7 @@ export async function getAllAssessments() {
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
+			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
 			submissions: {
 				select: {
 					id: true,
@@ -228,6 +231,7 @@ export async function getFacultyAssessments() {
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
+			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
 			submissions: {
 				select: {
 					id: true,
@@ -418,9 +422,24 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 
 	const submission = await prisma.assessmentSubmission.findUnique({
 		where: { id: input.submissionId },
-		include: { assessment: true },
+		include: { assessment: true, evaluation: true },
 	});
 	if (!submission) throw new Error("Submission not found");
+
+	// Feature 5 constraint: If a specific faculty is assigned, only they can evaluate (for faculty)
+	const { role } = await requireRole(["hod", "faculty"]);
+	if (
+		role === "faculty" &&
+		submission.assessment.assignedFacultyId &&
+		submission.assessment.assignedFacultyId !== user.id
+	) {
+		throw new Error("You are not the designated evaluator for this assessment");
+	}
+
+	// Check if marks are locked (Feature 6: lock after one edit)
+	if (submission.evaluation?.isMarksLocked) {
+		throw new Error("Marks are locked and cannot be changed after the first evaluation.");
+	}
 
 	// Verify max marks
 	if (input.marks !== undefined && submission.assessment.maxMarks) {
@@ -432,7 +451,7 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 		}
 	}
 
-	// Upsert evaluation
+	// Upsert evaluation — lock marks after first evaluation
 	const evaluation = await prisma.assessmentEvaluation.upsert({
 		where: { submissionId: input.submissionId },
 		create: {
@@ -441,6 +460,7 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 			marks: input.marks ?? null,
 			grade: input.grade ?? null,
 			feedback: input.feedback ?? null,
+			isMarksLocked: true, // Lock on first evaluation
 			evaluatedAt: new Date(),
 		},
 		update: {
@@ -448,6 +468,7 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 			marks: input.marks ?? null,
 			grade: input.grade ?? null,
 			feedback: input.feedback ?? null,
+			isMarksLocked: true, // Lock after HOD/faculty edits
 			evaluatedAt: new Date(),
 		},
 	});
@@ -469,8 +490,19 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 
 	const submission = await prisma.assessmentSubmission.findUnique({
 		where: { id: input.submissionId },
+		include: { assessment: true },
 	});
 	if (!submission) throw new Error("Submission not found");
+
+	// Feature 5 constraint: If a specific faculty is assigned, only they can reject (for faculty)
+	const { role } = await requireRole(["hod", "faculty"]);
+	if (
+		role === "faculty" &&
+		submission.assessment.assignedFacultyId &&
+		submission.assessment.assignedFacultyId !== user.id
+	) {
+		throw new Error("You are not the designated evaluator for this assessment");
+	}
 
 	// Upsert evaluation with rejection
 	await prisma.assessmentEvaluation.upsert({

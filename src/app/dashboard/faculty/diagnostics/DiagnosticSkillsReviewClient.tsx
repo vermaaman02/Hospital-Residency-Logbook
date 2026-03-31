@@ -112,6 +112,7 @@ import {
 	CONFIDENCE_LEVEL_LABELS,
 } from "@/lib/constants/diagnostic-types";
 import type { EntryStatus } from "@/types";
+import { ImageGallery } from "@/components/shared/CloudinaryUpload";
 
 // ======================== TYPES ========================
 
@@ -125,6 +126,7 @@ export interface DiagnosticSkillSubmission {
 	totalTimesPerformed: number;
 	facultyId: string | null;
 	facultyRemark: string | null;
+	imageUrls: string[];
 	status: string;
 	createdAt: string;
 	user: {
@@ -757,6 +759,13 @@ export function DiagnosticSkillsReviewClient({
 												__html: renderMarkdown(detailEntry.facultyRemark),
 											}}
 										/>
+									</DetailSection>
+								)}
+
+								{/* Uploaded Images (Feature 4) */}
+								{detailEntry.imageUrls && detailEntry.imageUrls.length > 0 && (
+									<DetailSection title="Uploaded Images" icon={Activity}>
+										<ImageGallery urls={detailEntry.imageUrls} maxDisplay={6} />
 									</DetailSection>
 								)}
 

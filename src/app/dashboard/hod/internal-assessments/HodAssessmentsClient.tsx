@@ -116,6 +116,8 @@ interface AssessmentRow {
 	isPublished: boolean;
 	createdAt: string;
 	updatedAt: string;
+	assignedFacultyId?: string | null;
+	assignedFaculty?: { id: string; firstName: string; lastName: string } | null;
 	submissions: SubmissionInfo[];
 }
 
@@ -139,6 +141,7 @@ interface HodAssessmentsClientProps {
 	assessments: AssessmentRow[];
 	batches: BatchInfo[];
 	stats: StatsData;
+	facultyList: { id: string; firstName: string; lastName: string }[];
 }
 
 interface InlineForm {
@@ -153,6 +156,7 @@ interface InlineForm {
 	totalMarks: string;
 	resourceLinks: string;
 	isPublished: boolean;
+	assignedFacultyId: string; // "none" means all assigned faculty can evaluate
 }
 
 const EMPTY_FORM: InlineForm = {
@@ -167,6 +171,7 @@ const EMPTY_FORM: InlineForm = {
 	totalMarks: "",
 	resourceLinks: "",
 	isPublished: false,
+	assignedFacultyId: "none",
 };
 
 const ASSESSMENT_TYPES = [
@@ -195,6 +200,7 @@ export function HodAssessmentsClient({
 	assessments,
 	batches,
 	stats,
+	facultyList,
 }: HodAssessmentsClientProps) {
 	const [isPending, startTransition] = useTransition();
 	const [searchQuery, setSearchQuery] = useState("");
@@ -286,6 +292,7 @@ export function HodAssessmentsClient({
 			totalMarks: a.totalMarks?.toString() ?? "",
 			resourceLinks: a.resourceLinks.join("\n"),
 			isPublished: a.isPublished,
+			assignedFacultyId: a.assignedFacultyId ?? "none",
 		});
 		setShowInlineForm(true);
 		setTimeout(
@@ -330,6 +337,7 @@ export function HodAssessmentsClient({
 			maxMarks: form.maxMarks ? parseInt(form.maxMarks) : undefined,
 			totalMarks: form.totalMarks ? parseFloat(form.totalMarks) : undefined,
 			isPublished: form.isPublished,
+			assignedFacultyId: form.assignedFacultyId !== "none" ? form.assignedFacultyId : undefined,
 		};
 
 		startTransition(async () => {
@@ -531,8 +539,8 @@ export function HodAssessmentsClient({
 							/>
 						</div>
 
-						{/* Row 2: Batch, Semester, Type */}
-						<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+						{/* Row 2: Batch, Semester, Type, Assigned Faculty */}
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 							<div className="space-y-2">
 								<Label>
 									Batch <span className="text-red-500">*</span>
@@ -586,6 +594,25 @@ export function HodAssessmentsClient({
 										{ASSESSMENT_TYPES.map((t) => (
 											<SelectItem key={t.value} value={t.value}>
 												{t.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-2">
+								<Label>Assigned Evaluator</Label>
+								<Select
+									value={form.assignedFacultyId}
+									onValueChange={(v) => updateForm({ assignedFacultyId: v })}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="All Available Faculty" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="none">All Available Faculty</SelectItem>
+										{facultyList.map((f) => (
+											<SelectItem key={f.id} value={f.id}>
+												{f.firstName} {f.lastName}
 											</SelectItem>
 										))}
 									</SelectContent>
