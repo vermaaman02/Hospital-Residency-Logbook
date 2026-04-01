@@ -49,13 +49,18 @@ import {
 	ShieldCheck,
 	ClipboardCheck,
 	X,
+	Network,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
 	getPendingReviewCounts,
 	type PendingCounts,
 } from "@/actions/review-counts";
+import {
+	getActiveFormsForUser,
+	type ActiveForm,
+} from "@/actions/form-definitions";
 
 interface NavItem {
 	title: string;
@@ -455,6 +460,12 @@ const hodNavSections: NavSection[] = [
 				icon: <UserCog className="h-4 w-4" />,
 				roles: ["hod"],
 			},
+			{
+				title: "System Management",
+				href: "/dashboard/hod/manage-system",
+				icon: <Network className="h-4 w-4" />,
+				roles: ["hod"],
+			},
 			// {
 			// 	title: "Assignments",
 			// 	href: "/dashboard/hod/assignments",
@@ -668,6 +679,7 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 	const [pendingCounts, setPendingCounts] = useState<PendingCounts | null>(
 		null,
 	);
+	const [activeForms, setActiveForms] = useState<ActiveForm[] | null>(null);
 
 	// Fetch pending counts for faculty/hod
 	useEffect(() => {
@@ -680,10 +692,62 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 		}
 	}, [role]);
 
-	const navSections =
+	// Fetch department-aware active forms for students/faculty
+	useEffect(() => {
+		if (role === "student" || role === "faculty") {
+			getActiveFormsForUser()
+				.then(setActiveForms)
+				.catch(() => {
+					setActiveForms([]);
+				});
+		}
+	}, [role]);
+
+	// Build active route slugs set for filtering
+	const activeRouteSlugs = useMemo(() => {
+		if (!activeForms) return null; // still loading
+		return new Set(activeForms.map((f) => f.route));
+	}, [activeForms]);
+
+	/** Filter nav sections for student/faculty based on department form access */
+	function filterSections(sections: NavSection[]): NavSection[] {
+		// HOD always sees everything
+		if (role === "hod" || !activeRouteSlugs) return sections;
+
+		return sections
+			.map((section) => {
+				// Always show Overview, Account, and Support sections
+				if (["Overview", "Account", "Support"].includes(section.title)) {
+					return section;
+				}
+
+				// Keep the "Administrative" section always (dashboard, profile, attendance, rotation)
+				if (section.title === "Administrative") {
+					return section;
+				}
+
+				// Filter items: keep items whose href route segment matches a FormDefinition route
+				const filteredItems = section.items.filter((item) => {
+					// Extract the route segment after /dashboard/{role}/
+					const segments = item.href.split("/");
+					const routeSegment = "/" + (segments[3] || ""); // e.g. /case-presentations
+
+					// Check if this route is in the active forms
+					return activeRouteSlugs.has(routeSegment);
+				});
+
+				if (filteredItems.length === 0) return null;
+				return { ...section, items: filteredItems };
+			})
+			.filter(Boolean) as NavSection[];
+	}
+
+	const rawNavSections =
 		role === "hod" ? hodNavSections
 		: role === "faculty" ? facultyNavSections
 		: studentNavSections;
+
+	const navSections = filterSections(rawNavSections);
 
 	/** Determine if a sidebar link is currently active */
 	function isLinkActive(href: string): boolean {
