@@ -235,6 +235,32 @@ export async function isUserSetupComplete(): Promise<{
 		return { isComplete: true, missingDepartment: false, missingBatch: false };
 	}
 
+	// Faculty logic
+	if (user.role === "FACULTY") {
+		const assignments = await prisma.facultyBatchAssignment.findMany({
+			where: { facultyId: user.id },
+			select: { batchId: true },
+		});
+
+		const missingBatch = assignments.length === 0;
+		if (missingBatch) {
+			return { isComplete: false, missingDepartment: true, missingBatch: true };
+		}
+
+		const batchIds = assignments.map((a) => a.batchId);
+		const deptAssignment = await prisma.departmentBatch.findFirst({
+			where: { batchId: { in: batchIds } },
+		});
+		const missingDepartment = !deptAssignment;
+
+		return {
+			isComplete: !missingDepartment,
+			missingDepartment,
+			missingBatch: false,
+		};
+	}
+
+	// Student logic
 	const missingBatch = !user.batchId;
 
 	// Check if their batch is linked to any department
