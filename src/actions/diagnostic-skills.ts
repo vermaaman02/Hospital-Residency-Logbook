@@ -65,7 +65,7 @@ export async function createDiagnosticSkillEntry(data: DiagnosticSkillInput) {
 			representativeDiagnosis: validated.representativeDiagnosis ?? null,
 			confidenceLevel: validated.confidenceLevel as never,
 			totalTimesPerformed: validated.totalTimesPerformed ?? 0,
-			imageUrls: (validated as Record<string, unknown>).imageUrls as string[] ?? [],
+			imageUrls: validated.imageUrls ?? [],
 			status: "DRAFT" as never,
 		},
 	});
@@ -97,7 +97,7 @@ export async function updateDiagnosticSkillEntry(
 			representativeDiagnosis: validated.representativeDiagnosis ?? null,
 			confidenceLevel: validated.confidenceLevel as never,
 			totalTimesPerformed: validated.totalTimesPerformed ?? 0,
-			imageUrls: (validated as Record<string, unknown>).imageUrls as string[] ?? existing.imageUrls,
+			imageUrls: validated.imageUrls ?? existing.imageUrls,
 			status: "DRAFT" as never,
 		},
 	});

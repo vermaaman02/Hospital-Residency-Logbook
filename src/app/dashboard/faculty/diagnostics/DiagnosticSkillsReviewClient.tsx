@@ -96,6 +96,7 @@ import {
 	HeartPulse,
 	Stethoscope,
 	BookOpen,
+	Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -763,11 +764,15 @@ export function DiagnosticSkillsReviewClient({
 								)}
 
 								{/* Uploaded Images (Feature 4) */}
-								{detailEntry.imageUrls && detailEntry.imageUrls.length > 0 && (
-									<DetailSection title="Uploaded Images" icon={Activity}>
+								<DetailSection title="Uploaded Images" icon={ImageIcon}>
+									{detailEntry.imageUrls && detailEntry.imageUrls.length > 0 ? (
 										<ImageGallery urls={detailEntry.imageUrls} maxDisplay={6} />
-									</DetailSection>
-								)}
+									) : (
+										<div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md">
+											No images were attached to this entry.
+										</div>
+									)}
+								</DetailSection>
 
 								{/* Action Buttons */}
 								{detailEntry.status === "SUBMITTED" && (

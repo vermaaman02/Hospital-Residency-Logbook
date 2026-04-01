@@ -534,34 +534,46 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 																	<X className="h-3 w-3" />
 																</button>
 															</div>
-														:	<button
-																className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-																onClick={() => openBatchDialog(user)}
-															>
-																<FolderPlus className="h-3 w-3" />
-																Assign Batch
-															</button>
+														:	<div className="flex flex-col items-start gap-1">
+																<Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider">
+																	Unassigned
+																</Badge>
+																<button
+																	className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
+																	onClick={() => openBatchDialog(user)}
+																>
+																	<FolderPlus className="h-3 w-3" />
+																	Assign Batch
+																</button>
+															</div>
 														}
-														<p className="text-xs text-muted-foreground">
-															Semester {user.currentSemester ?? 1}
-														</p>
+														{user.batchName && (
+															<p className="text-xs text-muted-foreground mt-1">
+																Semester {user.currentSemester ?? 1}
+															</p>
+														)}
 													</div>
-												: (
-													user.role === "faculty" &&
-													user.assignedBatches.length > 0
-												) ?
-													<div className="flex flex-wrap gap-1">
-														{user.assignedBatches.map((ab) => (
-															<Badge
-																key={ab.id}
-																variant="outline"
-																className="text-xs"
-															>
-																{ab.name}
-															</Badge>
-														))}
-													</div>
-												:	<span className="text-muted-foreground">—</span>}
+												: user.role === "faculty" ? (
+													user.assignedBatches.length > 0 ? (
+														<div className="flex flex-wrap gap-1">
+															{user.assignedBatches.map((ab) => (
+																<Badge
+																	key={ab.id}
+																	variant="outline"
+																	className="text-xs"
+																>
+																	{ab.name}
+																</Badge>
+															))}
+														</div>
+													) : (
+														<Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider">
+															Unassigned
+														</Badge>
+													)
+												) : (
+													<span className="text-muted-foreground">—</span>
+												)}
 											</TableCell>
 
 											{/* Actions */}

@@ -94,13 +94,13 @@ export function DepartmentsTab({
 
 	// Batch assignment dialog
 	const [batchDialogOpen, setBatchDialogOpen] = useState(false);
-	const [batchDeptTarget, setBatchDeptTarget] =
-		useState<DepartmentData | null>(null);
+	const [batchDeptId, setBatchDeptId] = useState<string | null>(null);
+	const batchDeptTarget = departments.find((d) => d.id === batchDeptId) || null;
 
 	// Forms management dialog
 	const [formsDialogOpen, setFormsDialogOpen] = useState(false);
-	const [formsDeptTarget, setFormsDeptTarget] =
-		useState<DepartmentData | null>(null);
+	const [formsDeptId, setFormsDeptId] = useState<string | null>(null);
+	const formsDeptTarget = departments.find((d) => d.id === formsDeptId) || null;
 
 	function updateForm(field: keyof DeptFormState, value: string) {
 		setFormState((prev) => ({ ...prev, [field]: value }));
@@ -217,9 +217,8 @@ export function DepartmentsTab({
 		});
 	}
 
-	// ====== BATCH ASSIGNMENT ======
 	function openBatchDialog(dept: DepartmentData) {
-		setBatchDeptTarget(dept);
+		setBatchDeptId(dept.id);
 		setBatchDialogOpen(true);
 	}
 
@@ -263,9 +262,8 @@ export function DepartmentsTab({
 		});
 	}
 
-	// ====== FORMS MANAGEMENT ======
 	function openFormsDialog(dept: DepartmentData) {
-		setFormsDeptTarget(dept);
+		setFormsDeptId(dept.id);
 		setFormsDialogOpen(true);
 	}
 
@@ -706,7 +704,7 @@ export function DepartmentsTab({
 							{isPending && <Loader2 className="h-3 w-3 animate-spin" />}
 							Enable All Forms
 						</Button>
-						<ScrollArea className="max-h-80">
+						<ScrollArea className="h-[400px] sm:max-h-[60vh] pr-4">
 							<div className="space-y-1">
 								{formDefinitions
 									.filter((f) => f.isActive)

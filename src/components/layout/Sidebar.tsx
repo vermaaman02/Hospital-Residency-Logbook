@@ -716,18 +716,18 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 
 		return sections
 			.map((section) => {
-				// Always show Overview, Account, and Support sections
+				// Keep the "Overview", "Account", and "Support" sections completely untouched
 				if (["Overview", "Account", "Support"].includes(section.title)) {
 					return section;
 				}
 
-				// Keep the "Administrative" section always (dashboard, profile, attendance, rotation)
-				if (section.title === "Administrative") {
-					return section;
-				}
-
-				// Filter items: keep items whose href route segment matches a FormDefinition route
+				// Filter items: keep non-form static items OR items whose href route segment matches a FormDefinition route
 				const filteredItems = section.items.filter((item) => {
+					// Static items that are always active regardless of active forms
+					if (item.href === `/dashboard/${role}` || item.href === `/dashboard/${role}/profile`) {
+						return true;
+					}
+
 					// Extract the route segment after /dashboard/{role}/
 					const segments = item.href.split("/");
 					const routeSegment = "/" + (segments[3] || ""); // e.g. /case-presentations

@@ -172,6 +172,7 @@ export function DiagnosticSkillTable({
 					representativeDiagnosis: addData.representativeDiagnosis || undefined,
 					confidenceLevel: addData.confidenceLevel as "VC" | "FC" | "SC" | "NC",
 					totalTimesPerformed: addData.totalTimesPerformed,
+					imageUrls: addData.imageUrls,
 				});
 				toast.success(`Added: ${addData.skillName}`);
 				setAddingNew(false);
@@ -216,6 +217,7 @@ export function DiagnosticSkillTable({
 						| "SC"
 						| "NC",
 					totalTimesPerformed: editData.totalTimesPerformed,
+					imageUrls: editData.imageUrls,
 				});
 				toast.success("Entry updated (saved as Draft)");
 				setEditingId(null);

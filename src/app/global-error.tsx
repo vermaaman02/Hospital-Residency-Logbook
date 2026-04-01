@@ -24,52 +24,42 @@ export default function GlobalError({
 	return (
 		<html lang="en">
 			<body>
-				<div
-					style={{
-						display: "flex",
-						flexDirection: "column",
-						alignItems: "center",
-						justifyContent: "center",
-						minHeight: "100vh",
-						fontFamily: "Inter, system-ui, sans-serif",
-						gap: "1rem",
-						padding: "2rem",
-						textAlign: "center",
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="48"
-						height="48"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="#dc2626"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-					>
-						<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-						<path d="M12 9v4" />
-						<path d="M12 17h.01" />
-					</svg>
-					<h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
-						Something went wrong
-					</h1>
-					<p style={{ color: "#6b7280", maxWidth: "400px" }}>
-						A critical error occurred. Please try refreshing the page or contact
-						support if the problem persists.
-					</p>
+				<div className="flex flex-col items-center justify-center min-h-screen p-4 bg-slate-50 text-center font-sans space-y-6">
+					<div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="32"
+							height="32"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+							<path d="M12 9v4" />
+							<path d="M12 17h.01" />
+						</svg>
+					</div>
+					
+					<div className="space-y-2 max-w-md w-full">
+						<h1 className="text-2xl font-bold text-slate-900">
+							Oops! Something went wrong
+						</h1>
+						<p className="text-slate-600">
+							An unexpected error occurred. Please try refreshing or contact support if the problem persists.
+						</p>
+					</div>
+
+					<div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg w-full max-w-lg text-left overflow-auto">
+						<p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-1">Error Details:</p>
+						<p className="font-mono text-sm break-words">{error.message || "Unknown Application Error"}</p>
+					</div>
+
 					<button
 						onClick={reset}
-						style={{
-							padding: "0.5rem 1.5rem",
-							border: "1px solid #e5e7eb",
-							borderRadius: "0.375rem",
-							cursor: "pointer",
-							fontSize: "0.875rem",
-							fontWeight: 500,
-							background: "white",
-						}}
+						className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow-sm transition-colors"
 					>
 						Try Again
 					</button>
