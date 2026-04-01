@@ -74,6 +74,7 @@ model User {
   assessmentSubmissions   AssessmentSubmission[]     @relation("AssessmentSubmissions")
   assessmentEvaluations   AssessmentEvaluation[]     @relation("AssessmentEvaluations")
   assignedFacultyAssessments InternalAssessment[]    @relation("AssessmentAssignedFaculty")
+  specificAssessments     InternalAssessment[]      @relation("AssessmentAssignedSpecificStudents")
 
   @@index([clerkId])
   @@index([role])
@@ -968,6 +969,8 @@ model InternalAssessment {
   semester        Int?               // Target semester (null = all semesters)
   assignedFacultyId String?          // Optional: Restrict evaluation to specific faculty
   assignedFaculty   User?            @relation("AssessmentAssignedFaculty", fields: [assignedFacultyId], references: [id])
+  assignedStudents  User[]           @relation("AssessmentAssignedSpecificStudents")
+  attachments       String[]         @default([]) // Uploaded Cloudinary resources
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -986,6 +989,7 @@ model AssessmentSubmission {
   studentId      String
   student        User               @relation("AssessmentSubmissions", fields: [studentId], references: [id])
   content        String?            // Student's submission text (markdown)
+  attachments    String[]           @default([]) // Student uploaded files
   submittedAt    DateTime?
   status         EntryStatus        @default(DRAFT)
   createdAt      DateTime           @default(now())

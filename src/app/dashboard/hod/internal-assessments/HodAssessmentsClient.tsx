@@ -45,6 +45,10 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CloudinaryUpload } from "@/components/shared/CloudinaryUpload";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
 	MarkdownEditor,
@@ -95,6 +99,10 @@ interface BatchInfo {
 interface SubmissionInfo {
 	id: string;
 	status: string;
+	content: string | null;
+	attachments: string[];
+	submittedAt: string | null;
+	updatedAt: string | null;
 	student: { id: string; firstName: string; lastName: string };
 	evaluation?: { marks: number | null; grade: string | null } | null;
 }
@@ -111,6 +119,7 @@ interface AssessmentRow {
 	publishAt: string | null;
 	semester: number | null;
 	resourceLinks: string[];
+	attachments: string[];
 	maxMarks: number | null;
 	totalMarks: number | null;
 	isPublished: boolean;
@@ -118,6 +127,7 @@ interface AssessmentRow {
 	updatedAt: string;
 	assignedFacultyId?: string | null;
 	assignedFaculty?: { id: string; firstName: string; lastName: string } | null;
+	assignedStudents: { id: string; firstName: string; lastName: string }[];
 	submissions: SubmissionInfo[];
 }
 
@@ -142,6 +152,7 @@ interface HodAssessmentsClientProps {
 	batches: BatchInfo[];
 	stats: StatsData;
 	facultyList: { id: string; firstName: string; lastName: string }[];
+	students: { id: string; firstName: string; lastName: string; batchId: string; currentSemester: number | null }[];
 }
 
 interface InlineForm {
@@ -155,6 +166,8 @@ interface InlineForm {
 	maxMarks: string;
 	totalMarks: string;
 	resourceLinks: string;
+	attachments: string[];
+	assignedStudentIds: string[];
 	isPublished: boolean;
 	assignedFacultyId: string; // "none" means all assigned faculty can evaluate
 }
@@ -170,6 +183,8 @@ const EMPTY_FORM: InlineForm = {
 	maxMarks: "",
 	totalMarks: "",
 	resourceLinks: "",
+	attachments: [],
+	assignedStudentIds: [],
 	isPublished: false,
 	assignedFacultyId: "none",
 };
@@ -201,6 +216,7 @@ export function HodAssessmentsClient({
 	batches,
 	stats,
 	facultyList,
+	students,
 }: HodAssessmentsClientProps) {
 	const [isPending, startTransition] = useTransition();
 	const [searchQuery, setSearchQuery] = useState("");
@@ -235,6 +251,11 @@ export function HodAssessmentsClient({
 
 	// ======================== FILTERS ========================
 
+	const getExternalUrl = (url: string) => {
+		if (!url) return "#";
+		return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+	};
+
 	const filtered = useMemo(() => {
 		let result = [...assessments];
 		if (searchQuery) {
@@ -257,6 +278,18 @@ export function HodAssessmentsClient({
 			result = result.filter((a) => !a.isPublished);
 		return result;
 	}, [assessments, searchQuery, batchFilter, typeFilter, statusFilter]);
+
+	const pendingEvaluations = useMemo(() => {
+		const all: { assessmentTitle: string, submission: SubmissionInfo, assessmentId: string, maxMarks: number | null, assessmentDeadline: string | null }[] = [];
+		assessments.forEach(a => {
+			a.submissions.forEach(sub => {
+				if (sub.status === "SUBMITTED" || sub.status === "NEEDS_REVISION") {
+					all.push({ assessmentTitle: a.title, submission: sub, assessmentId: a.id, maxMarks: a.maxMarks, assessmentDeadline: a.deadline });
+				}
+			});
+		});
+		return all.sort((a, b) => new Date(a.submission.status).getTime() - new Date(b.submission.status).getTime()); // Basic sort
+	}, [assessments]);
 
 	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 	const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -291,6 +324,8 @@ export function HodAssessmentsClient({
 			maxMarks: a.maxMarks?.toString() ?? "",
 			totalMarks: a.totalMarks?.toString() ?? "",
 			resourceLinks: a.resourceLinks.join("\n"),
+			attachments: a.attachments ?? [],
+			assignedStudentIds: a.assignedStudents?.map(s => s.id) ?? [],
 			isPublished: a.isPublished,
 			assignedFacultyId: a.assignedFacultyId ?? "none",
 		});
@@ -334,6 +369,8 @@ export function HodAssessmentsClient({
 				.split("\n")
 				.map((l) => l.trim())
 				.filter(Boolean),
+			attachments: form.attachments,
+			assignedStudentIds: form.assignedStudentIds,
 			maxMarks: form.maxMarks ? parseInt(form.maxMarks) : undefined,
 			totalMarks: form.totalMarks ? parseFloat(form.totalMarks) : undefined,
 			isPublished: form.isPublished,
@@ -438,12 +475,6 @@ export function HodAssessmentsClient({
 						Create, manage, and evaluate internal assessments across all batches
 					</p>
 				</div>
-				{!showInlineForm && (
-					<Button onClick={openCreate} disabled={isPending}>
-						<Plus className="mr-2 h-4 w-4" />
-						Create Assessment
-					</Button>
-				)}
 			</div>
 
 			{/* Stats Cards */}
@@ -493,7 +524,7 @@ export function HodAssessmentsClient({
 					<CardContent className="pt-4 pb-4">
 						<div className="flex items-center gap-3">
 							<div className="rounded-lg bg-blue-100 p-2">
-								<Award className="h-5 w-5 text-blue-600" />
+								<CheckCircle2 className="h-5 w-5 text-blue-600" />
 							</div>
 							<div>
 								<p className="text-2xl font-bold">
@@ -506,14 +537,38 @@ export function HodAssessmentsClient({
 				</Card>
 			</div>
 
-			{/* ======================== INLINE CREATE/EDIT FORM ======================== */}
-			{showInlineForm && (
-				<Card
-					ref={formRef}
-					className="border-2 border-hospital-primary/30 shadow-md"
-				>
-					<CardHeader className="pb-3">
-						<div className="flex items-center justify-between">
+			<Tabs defaultValue="assessments" className="w-full">
+				<div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+					<TabsList className="grid w-full sm:w-[400px] grid-cols-2">
+						<TabsTrigger value="assessments">Assessments</TabsTrigger>
+						<TabsTrigger value="evaluations" className="relative group">
+							<span className="flex items-center gap-2">
+								Evaluations
+								{pendingEvaluations.length > 0 && (
+									<span className="flex items-center justify-center bg-red-500 text-white text-[10px] h-4 w-4 rounded-full font-bold group-data-[state=active]:bg-red-600 transition-colors">
+										{pendingEvaluations.length}
+									</span>
+								)}
+							</span>
+						</TabsTrigger>
+					</TabsList>
+					{!showInlineForm && (
+						<Button onClick={openCreate} disabled={isPending}>
+							<Plus className="mr-2 h-4 w-4" />
+							Create Assessment
+						</Button>
+					)}
+				</div>
+
+				<TabsContent value="assessments" className="space-y-6 focus-visible:outline-none focus:outline-none">
+					{/* ======================== INLINE CREATE/EDIT FORM ======================== */}
+					{showInlineForm && (
+						<Card
+							ref={formRef}
+							className="border-2 border-hospital-primary/30 shadow-md"
+						>
+							<CardHeader className="pb-3">
+								<div className="flex items-center justify-between">
 							<CardTitle className="text-lg flex items-center gap-2">
 								{editingId ?
 									<Edit className="h-5 w-5" />
@@ -696,6 +751,57 @@ export function HodAssessmentsClient({
 								}
 								rows={3}
 							/>
+						</div>
+
+						{/* Row 5 B: Cloudinary Attachments */}
+						<div className="space-y-2 pt-2 border-t">
+							<Label>Attachments (PDFs, Images, Docs)</Label>
+							<CloudinaryUpload
+								maxFiles={5}
+								accept=".jpg,.jpeg,.png,.pdf,.docx,.doc"
+								value={form.attachments}
+								onChange={(urls) => updateForm({ attachments: urls })}
+							/>
+							<p className="text-xs text-muted-foreground mt-1">
+								Upload resources that students can download.
+							</p>
+						</div>
+
+						{/* Row 5 C: Assignees */}
+						<div className="space-y-2 border-t pt-4 pb-2">
+							<Label>Assign To Details (Specific Students)</Label>
+							<div className="border rounded-md p-2 bg-background">
+								<ScrollArea className="h-40">
+									{form.batchId ? (
+										<div className="space-y-2 p-1">
+											{students.filter(s => s.batchId === form.batchId && (form.semester === "all" || s.currentSemester === parseInt(form.semester))).length === 0 ? (
+												<p className="text-sm text-muted-foreground py-2">No students found.</p>
+											) : (
+												students.filter(s => s.batchId === form.batchId && (form.semester === "all" || s.currentSemester === parseInt(form.semester))).map(student => (
+													<div key={student.id} className="flex items-center space-x-2">
+														<Checkbox id={`student-${student.id}`} 
+															checked={form.assignedStudentIds.includes(student.id)}
+															onCheckedChange={(checked) => {
+																if (checked === true) {
+																	updateForm({ assignedStudentIds: [...form.assignedStudentIds, student.id] });
+																} else {
+																	updateForm({ assignedStudentIds: form.assignedStudentIds.filter(id => id !== student.id) });
+																}
+															}}
+														/>
+														<label htmlFor={`student-${student.id}`} className="text-sm font-medium leading-none cursor-pointer">
+															{student.firstName} {student.lastName}
+														</label>
+													</div>
+												))
+											)}
+										</div>
+									) : (
+										<p className="text-sm text-muted-foreground p-2">Select a batch first.</p>
+									)}
+								</ScrollArea>
+							</div>
+							<p className="text-xs text-muted-foreground mt-1">Leave all unchecked to assign to the entire batch/semester.</p>
 						</div>
 
 						{/* Row 6: Publish toggle + Save */}
@@ -984,7 +1090,77 @@ export function HodAssessmentsClient({
 					}
 				</CardContent>
 			</Card>
+			</TabsContent>
 
+			{/* ======================== PENDING EVALUATIONS TAB ======================== */}
+			<TabsContent value="evaluations" className="focus-visible:outline-none focus:outline-none mt-6">
+				<Card>
+					<CardHeader>
+						<CardTitle className="text-lg">Pending Submissions</CardTitle>
+					</CardHeader>
+					<CardContent>
+						{pendingEvaluations.length === 0 ? (
+							<div className="text-center py-12 text-muted-foreground">
+								<CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30 text-green-500" />
+								<p className="text-lg font-medium">All caught up!</p>
+								<p className="text-sm mt-1">There are no pending submissions requiring your review.</p>
+							</div>
+						) : (
+							<div className="rounded-md border overflow-x-auto">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>Student</TableHead>
+											<TableHead>Assessment Title</TableHead>
+											<TableHead>Date Submitted</TableHead>
+											<TableHead>Assigned Status</TableHead>
+											<TableHead className="text-right">Actions</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{pendingEvaluations.map((evalItem) => (
+											<TableRow key={evalItem.submission.id}>
+												<TableCell className="font-medium">
+													{evalItem.submission.student.firstName} {evalItem.submission.student.lastName}
+												</TableCell>
+												<TableCell>
+													<span className="text-hospital-secondary text-sm font-medium">{evalItem.assessmentTitle}</span>
+												</TableCell>
+												<TableCell className="text-sm">
+													{evalItem.assessmentDeadline ? format(new Date(evalItem.submission.submittedAt || evalItem.submission.updatedAt || new Date()), "dd MMM yyyy") : "—"}
+												</TableCell>
+												<TableCell>
+													<StatusBadge status={evalItem.submission.status as EntryStatus} size="sm" />
+												</TableCell>
+												<TableCell className="text-right">
+													<div className="flex justify-end gap-2">
+														<Button
+															size="sm"
+															variant="default"
+															className="bg-hospital-primary hover:bg-hospital-primary/90"
+															onClick={() => {
+																setDetailAssessment(assessments.find(a => a.id === evalItem.assessmentId) || null);
+																setEvaluatingSubmission(evalItem.submission);
+																setEvalMarks(evalItem.submission.evaluation?.marks?.toString() ?? "");
+																setEvalGrade(evalItem.submission.evaluation?.grade ?? "");
+																setEvalFeedback("");
+															}}
+														>
+															<CheckCircle2 className="mr-2 h-4 w-4" />
+															Evaluate
+														</Button>
+													</div>
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							</div>
+						)}
+					</CardContent>
+				</Card>
+			</TabsContent>
+		</Tabs>
 			{/* ======================== DETAIL SHEET ======================== */}
 			<Sheet
 				open={!!detailAssessment}
@@ -1079,21 +1255,23 @@ export function HodAssessmentsClient({
 									</div>
 								)}
 
-								{/* Resource Links */}
-								{detailAssessment.resourceLinks.length > 0 && (
+								{/* Attachments */}
+								{detailAssessment.attachments && detailAssessment.attachments.length > 0 && (
 									<div>
-										<p className="text-sm font-medium mb-2">Resource Links</p>
-										<div className="space-y-1">
-											{detailAssessment.resourceLinks.map((link, i) => (
+										<p className="text-sm font-medium mb-2">
+											Attachments ({detailAssessment.attachments.length})
+										</p>
+										<div className="space-y-2">
+											{detailAssessment.attachments.map((link, i) => (
 												<a
 													key={i}
-													href={link}
+													href={getExternalUrl(link)}
 													target="_blank"
 													rel="noopener noreferrer"
-													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline"
+													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background flex-wrap break-all"
 												>
-													<ExternalLink className="h-3 w-3" />
-													{link}
+													<ExternalLink className="h-3 w-3 shrink-0" />
+													<span className="truncate">View Attachment {i + 1}</span>
 												</a>
 											))}
 										</div>
@@ -1274,7 +1452,43 @@ export function HodAssessmentsClient({
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4 py-2">
-						<div className="grid grid-cols-2 gap-4">
+						{/* View Student's Submission Data */}
+						{evaluatingSubmission && (
+							<div className="rounded-md border p-3 bg-muted/20">
+								<p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+									Student's Submission
+								</p>
+								<div className="prose prose-sm max-w-none text-sm mb-3">
+									{evaluatingSubmission.content ? 
+										<div dangerouslySetInnerHTML={{ __html: renderMarkdown(evaluatingSubmission.content) }} />
+									: <p className="text-muted-foreground italic">No written content provided.</p>}
+								</div>
+								
+								{evaluatingSubmission.attachments && evaluatingSubmission.attachments.length > 0 && (
+									<div>
+										<p className="text-xs font-semibold text-muted-foreground uppercase mb-1">
+											Attachments ({evaluatingSubmission.attachments.length})
+										</p>
+										<div className="space-y-1">
+											{evaluatingSubmission.attachments.map((link, i) => (
+												<a
+													key={i}
+													href={getExternalUrl(link)}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background border rounded px-2 py-1 inline-flex w-fit"
+												>
+													<ExternalLink className="h-3 w-3" />
+													View Attachment {i + 1}
+												</a>
+											))}
+										</div>
+									</div>
+								)}
+							</div>
+						)}
+
+						<div className="grid grid-cols-2 gap-4 border-t pt-4">
 							<div className="space-y-2">
 								<Label htmlFor="evalMarks">
 									Marks{" "}

@@ -31,10 +31,12 @@ export interface CreateAssessmentInput {
 	publishAt?: string; // ISO date string — scheduled publish date
 	semester?: number | null; // null = all semesters
 	resourceLinks?: string[];
+	attachments?: string[];
 	maxMarks?: number;
 	totalMarks?: number;
 	isPublished?: boolean;
 	assignedFacultyId?: string;
+	assignedStudentIds?: string[];
 }
 
 export interface EvaluateSubmissionInput {
@@ -85,10 +87,16 @@ export async function createAssessment(input: CreateAssessmentInput) {
 			publishAt: input.publishAt ? new Date(input.publishAt) : null,
 			semester: input.semester ?? null,
 			resourceLinks: input.resourceLinks ?? [],
+			attachments: input.attachments ?? [],
 			maxMarks: input.maxMarks ?? null,
 			totalMarks: input.totalMarks ?? null,
 			isPublished: input.isPublished ?? false,
 			assignedFacultyId: input.assignedFacultyId ?? null,
+			...(input.assignedStudentIds && input.assignedStudentIds.length > 0 ? {
+				assignedStudents: {
+					connect: input.assignedStudentIds.map(id => ({ id }))
+				}
+			} : {})
 		},
 	});
 
@@ -133,14 +141,17 @@ export async function updateAssessment(
 				publishAt: input.publishAt ? new Date(input.publishAt) : null,
 			}),
 			...(input.semester !== undefined && { semester: input.semester }),
-			...(input.resourceLinks !== undefined && {
-				resourceLinks: input.resourceLinks,
-			}),
+			...(input.resourceLinks !== undefined && { resourceLinks: input.resourceLinks }),
+			...(input.attachments !== undefined && { attachments: input.attachments }),
 			...(input.maxMarks !== undefined && { maxMarks: input.maxMarks }),
 			...(input.totalMarks !== undefined && { totalMarks: input.totalMarks }),
-			...(input.isPublished !== undefined && {
-				isPublished: input.isPublished,
-			}),
+			...(input.isPublished !== undefined && { isPublished: input.isPublished }),
+			...(input.assignedFacultyId !== undefined && { assignedFacultyId: input.assignedFacultyId }),
+			...(input.assignedStudentIds !== undefined && {
+				assignedStudents: {
+					set: input.assignedStudentIds.map(id => ({ id })) // OVERWRITES existing connect lists with the new array
+				}
+			})
 		},
 	});
 
@@ -199,10 +210,15 @@ export async function getAllAssessments() {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
 			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
+			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
 			submissions: {
 				select: {
 					id: true,
 					status: true,
+					attachments: true,
+					content: true,
+					submittedAt: true,
+					updatedAt: true,
 					student: { select: { id: true, firstName: true, lastName: true } },
 					evaluation: {
 						select: { marks: true, grade: true },
@@ -226,16 +242,27 @@ export async function getFacultyAssessments() {
 	const batchIds = assignments.map((a) => a.batchId);
 
 	return prisma.internalAssessment.findMany({
-		where: { batchId: { in: batchIds } },
+		where: { 
+			batchId: { in: batchIds },
+			OR: [
+				{ assignedFacultyId: user.id },
+				{ assignedFacultyId: null }
+			]
+		},
 		orderBy: { createdAt: "desc" },
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
 			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
+			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
 			submissions: {
 				select: {
 					id: true,
 					status: true,
+					attachments: true,
+					content: true,
+					submittedAt: true,
+					updatedAt: true,
 					student: { select: { id: true, firstName: true, lastName: true } },
 					evaluation: {
 						select: { marks: true, grade: true },
@@ -256,18 +283,25 @@ export async function getStudentAssessments() {
 		where: {
 			batchId: user.batchId,
 			isPublished: true,
+			OR: [
+				{ assignedStudents: { some: { id: user.id } } }, // specifically for this student
+				{ assignedStudents: { none: {} } } // OR fallback: no specific students = entire batch
+			]
 		},
 		orderBy: { createdAt: "desc" },
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
+			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
 			submissions: {
 				where: { studentId: user.id },
 				select: {
 					id: true,
 					status: true,
 					content: true,
+					attachments: true,
 					submittedAt: true,
+					student: { select: { id: true, firstName: true, lastName: true } },
 					evaluation: {
 						select: {
 							marks: true,
@@ -286,7 +320,7 @@ export async function getStudentAssessments() {
 
 /** Get detailed view of a single assessment with all submissions (for HOD/Faculty) */
 export async function getAssessmentDetail(assessmentId: string) {
-	await requireRole(["hod", "faculty"]);
+	const { role } = await requireRole(["hod", "faculty"]);
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
 
@@ -321,8 +355,12 @@ export async function getAssessmentDetail(assessmentId: string) {
 
 	if (!assessment) throw new Error("Assessment not found");
 
+	// Enforce strict faculty scoping
+	if (role === "faculty" && assessment.assignedFacultyId && assessment.assignedFacultyId !== user.id) {
+		throw new Error("You are not authorized to view this specific assessment detail");
+	}
+
 	// Faculty: verify batch assignment
-	const { role } = await requireRole(["hod", "faculty"]);
 	if (role === "faculty") {
 		const assignment = await prisma.facultyBatchAssignment.findUnique({
 			where: {
@@ -338,7 +376,7 @@ export async function getAssessmentDetail(assessmentId: string) {
 
 // ======================== STUDENT SUBMISSION ACTIONS ========================
 
-export async function submitAssessment(assessmentId: string, content?: string) {
+export async function submitAssessment(assessmentId: string, content?: string, attachments?: string[]) {
 	await requireAuth();
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
@@ -346,10 +384,17 @@ export async function submitAssessment(assessmentId: string, content?: string) {
 	// Verify published and batch match
 	const assessment = await prisma.internalAssessment.findUnique({
 		where: { id: assessmentId },
+		include: { assignedStudents: { select: { id: true } } }
 	});
 	if (!assessment || !assessment.isPublished)
 		throw new Error("Assessment not available");
-	if (assessment.batchId !== user.batchId) throw new Error("Not authorized");
+	
+	if (assessment.assignedStudents.length > 0) {
+		const isAssigned = assessment.assignedStudents.some(s => s.id === user.id);
+		if (!isAssigned) throw new Error("Not specifically configured for you");
+	} else if (assessment.batchId !== user.batchId) {
+		throw new Error("Not authorized for your batch");
+	}
 
 	// Check deadline
 	if (assessment.deadline && new Date() > assessment.deadline) {
@@ -364,11 +409,13 @@ export async function submitAssessment(assessmentId: string, content?: string) {
 			assessmentId,
 			studentId: user.id,
 			content: content ?? null,
+			attachments: attachments ?? [],
 			status: "SUBMITTED",
 			submittedAt: new Date(),
 		},
 		update: {
 			content: content ?? null,
+			...(attachments !== undefined && { attachments }),
 			status: "SUBMITTED",
 			submittedAt: new Date(),
 		},
@@ -381,6 +428,7 @@ export async function submitAssessment(assessmentId: string, content?: string) {
 export async function saveDraftSubmission(
 	assessmentId: string,
 	content?: string,
+	attachments?: string[]
 ) {
 	await requireAuth();
 	const user = await ensureUserInDb();
@@ -388,10 +436,17 @@ export async function saveDraftSubmission(
 
 	const assessment = await prisma.internalAssessment.findUnique({
 		where: { id: assessmentId },
+		include: { assignedStudents: { select: { id: true } } }
 	});
 	if (!assessment || !assessment.isPublished)
 		throw new Error("Assessment not available");
-	if (assessment.batchId !== user.batchId) throw new Error("Not authorized");
+	
+	if (assessment.assignedStudents.length > 0) {
+		const isAssigned = assessment.assignedStudents.some(s => s.id === user.id);
+		if (!isAssigned) throw new Error("Not explicitly assigned to you");
+	} else if (assessment.batchId !== user.batchId) {
+		throw new Error("Not authorized for your batch");
+	}
 
 	const submission = await prisma.assessmentSubmission.upsert({
 		where: {
@@ -401,10 +456,12 @@ export async function saveDraftSubmission(
 			assessmentId,
 			studentId: user.id,
 			content: content ?? null,
+			attachments: attachments ?? [],
 			status: "DRAFT",
 		},
 		update: {
 			content: content ?? null,
+			...(attachments !== undefined && { attachments }),
 			status: "DRAFT",
 		},
 	});

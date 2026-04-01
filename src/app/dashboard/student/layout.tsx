@@ -1,5 +1,6 @@
 import { isUserSetupComplete } from "@/actions/form-definitions";
 import { SetupRequiredView } from "@/components/dashboard/SetupRequiredView";
+import { PendingAssessmentPopup } from "@/components/dashboard/PendingAssessmentPopup";
 
 export default async function StudentLayout({
 	children,
@@ -18,5 +19,10 @@ export default async function StudentLayout({
 		);
 	}
 
-	return <>{children}</>;
+	return (
+		<>
+			<PendingAssessmentPopup role="student" />
+			{children}
+		</>
+	);
 }

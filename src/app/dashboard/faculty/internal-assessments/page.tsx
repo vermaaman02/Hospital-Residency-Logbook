@@ -5,7 +5,8 @@
  */
 
 import { Suspense } from "react";
-import { requireRole } from "@/lib/auth";
+import { requireRole, ensureUserInDb } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
 	getFacultyAssessments,
 	getAvailableBatches,
@@ -17,19 +18,33 @@ export const dynamic = "force-dynamic";
 
 async function Content() {
 	await requireRole(["faculty", "hod"]);
+	const user = await ensureUserInDb();
+	if (!user) throw new Error("User not found");
 
-	const [assessments, batches] = await Promise.all([
+	const [assessments, batches, students, faculty] = await Promise.all([
 		getFacultyAssessments(),
 		getAvailableBatches(),
+		prisma.user.findMany({
+			where: { role: "STUDENT", status: "ACTIVE" },
+			select: { id: true, firstName: true, lastName: true, batchId: true, currentSemester: true }
+		}),
+		prisma.user.findMany({
+			where: { role: "FACULTY", status: "ACTIVE", departmentId: user.departmentId },
+			select: { id: true, firstName: true, lastName: true }
+		})
 	]);
 
 	const serialized = JSON.parse(JSON.stringify(assessments));
 	const serializedBatches = JSON.parse(JSON.stringify(batches));
+	const serializedStudents = JSON.parse(JSON.stringify(students));
+	const serializedFaculty = JSON.parse(JSON.stringify(faculty));
 
 	return (
 		<FacultyAssessmentsClient
 			assessments={serialized}
 			batches={serializedBatches}
+			students={serializedStudents}
+			faculty={serializedFaculty}
 		/>
 	);
 }

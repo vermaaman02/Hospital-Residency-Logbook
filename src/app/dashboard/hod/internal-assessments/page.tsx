@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 async function Content() {
 	await requireRole(["hod"]);
 
-	const [assessments, batches, stats, facultyList] = await Promise.all([
+	const [assessments, batches, stats, facultyList, students] = await Promise.all([
 		getAllAssessments(),
 		getAvailableBatches(),
 		getAssessmentStats(),
@@ -31,12 +31,17 @@ async function Content() {
 			select: { id: true, firstName: true, lastName: true },
 			orderBy: { firstName: "asc" },
 		}),
+		prisma.user.findMany({
+			where: { role: "STUDENT", status: "ACTIVE" },
+			select: { id: true, firstName: true, lastName: true, batchId: true, currentSemester: true }
+		}),
 	]);
 
 	// Serialize Date fields
 	const serialized = JSON.parse(JSON.stringify(assessments));
 	const serializedBatches = JSON.parse(JSON.stringify(batches));
 	const serializedStats = JSON.parse(JSON.stringify(stats));
+	const serializedStudents = JSON.parse(JSON.stringify(students));
 
 	return (
 		<HodAssessmentsClient
@@ -44,6 +49,7 @@ async function Content() {
 			batches={serializedBatches}
 			stats={serializedStats}
 			facultyList={facultyList}
+			students={serializedStudents}
 		/>
 	);
 }
