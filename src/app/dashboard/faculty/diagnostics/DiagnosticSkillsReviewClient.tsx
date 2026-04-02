@@ -100,7 +100,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
 	signDiagnosticSkillEntry,
@@ -181,8 +181,11 @@ export function DiagnosticSkillsReviewClient({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
+	const searchParams = useSearchParams();
+	const initialTab = searchParams.get("tab") || "ABG_ANALYSIS";
+
 	// Active tab (category)
-	const [activeTab, setActiveTab] = useState<string>("ABG_ANALYSIS");
+	const [activeTab, setActiveTab] = useState<string>(initialTab);
 
 	// Auto-review
 	const [autoReview, setAutoReview] = useState(autoReviewEnabled ?? false);

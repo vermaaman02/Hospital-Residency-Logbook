@@ -43,6 +43,7 @@ import {
 import { markNotificationsSeen } from "@/actions/mark-notifications-seen";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
 
 interface TopBarProps {
 	onMobileMenuToggle?: () => void;
@@ -143,8 +144,14 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 				</div>
 			</div>
 
-			{/* Right: Role badge + Notifications + User */}
-			<div className="flex items-center gap-2 sm:gap-3">
+			{/* Right: Search + Role badge + Notifications + User */}
+			<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
+				{isLoaded && role && (
+					<div className="hidden sm:block mr-2">
+						<GlobalSearch />
+					</div>
+				)}
+
 				{isLoaded && role && (
 					<Badge variant="secondary" className="hidden sm:flex text-xs">
 						{roleLabel}

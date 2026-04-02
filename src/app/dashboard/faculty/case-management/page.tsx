@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { getCaseManagementForReview } from "@/actions/case-management";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { CaseManagementReviewClient } from "./CaseManagementReviewClient";
+import { Suspense } from "react";
 
 export default async function FacultyCaseManagementPage() {
 	let authResult: { userId: string; role: string };
@@ -48,11 +49,13 @@ export default async function FacultyCaseManagementPage() {
 					{ label: "Case Management" },
 				]}
 			/>
-			<CaseManagementReviewClient
-				submissions={submissions}
-				role={authResult.role as "faculty" | "hod"}
-				autoReviewEnabled={autoReviewSettings.caseManagement}
-			/>
+			<Suspense fallback={<div>Loading...</div>}>
+				<CaseManagementReviewClient
+					submissions={submissions}
+					role={authResult.role as "faculty" | "hod"}
+					autoReviewEnabled={autoReviewSettings.caseManagement}
+				/>
+			</Suspense>
 		</div>
 	);
 }

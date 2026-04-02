@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { getProcedureLogsForReview } from "@/actions/procedure-logs";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { ProcedureLogsReviewClient } from "./ProcedureLogsReviewClient";
+import { Suspense } from "react";
 
 export default async function FacultyProceduresPage() {
 	let authResult: { userId: string; role: string };
@@ -48,11 +49,13 @@ export default async function FacultyProceduresPage() {
 					{ label: "Procedures" },
 				]}
 			/>
-			<ProcedureLogsReviewClient
-				submissions={submissions}
-				role={authResult.role as "faculty" | "hod"}
-				autoReviewEnabled={autoReviewSettings.procedureLogs}
-			/>
+			<Suspense fallback={<div>Loading...</div>}>
+				<ProcedureLogsReviewClient
+					submissions={submissions}
+					role={authResult.role as "faculty" | "hod"}
+					autoReviewEnabled={autoReviewSettings.procedureLogs}
+				/>
+			</Suspense>
 		</div>
 	);
 }
