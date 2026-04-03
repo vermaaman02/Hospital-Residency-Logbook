@@ -50,6 +50,12 @@ export interface EvaluationGraphEntry {
 		currentSemester: number | null;
 		batchRelation?: { id: string; name: string } | null;
 	};
+	signatureDetails?: {
+		signedById: string;
+		signedByName: string;
+		signedAt: Date;
+		remark: string | null;
+	}[];
 }
 
 // ======================== FACULTY/HOD: GET STUDENTS FOR EVALUATION ========================
@@ -212,7 +218,36 @@ export async function getAllEvaluationGraphRecords() {
 		},
 	});
 
-	return records;
+	// Feature 3: Fetch sign-off details for HOD traceability
+	const recordIds = records.map((r) => r.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "TrainingMentoringRecord",
+			entityId: { in: recordIds },
+		},
+		include: {
+			signedBy: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+		},
+	});
+
+	const signatureMap = new Map<string, typeof signatures>();
+	for (const sig of signatures) {
+		const existing = signatureMap.get(sig.entityId) ?? [];
+		existing.push(sig);
+		signatureMap.set(sig.entityId, existing);
+	}
+
+	return records.map((r) => ({
+		...r,
+		signatureDetails: (signatureMap.get(r.id) ?? []).map((s) => ({
+			signedById: s.signedBy.id,
+			signedByName: `${s.signedBy.firstName} ${s.signedBy.lastName}`,
+			signedAt: s.signedAt,
+			remark: s.remark,
+		})),
+	}));
 }
 
 /**

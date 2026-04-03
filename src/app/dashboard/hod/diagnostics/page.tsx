@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { getDiagnosticSkillsForReview } from "@/actions/diagnostic-skills";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { DiagnosticSkillsReviewClient } from "../../faculty/diagnostics/DiagnosticSkillsReviewClient";
+import { Suspense } from "react";
 
 export default async function HodDiagnosticsPage() {
 	try {
@@ -37,11 +38,13 @@ export default async function HodDiagnosticsPage() {
 					{ label: "Diagnostic Skills" },
 				]}
 			/>
-			<DiagnosticSkillsReviewClient
-				submissions={submissions}
-				role="hod"
-				autoReviewEnabled={autoReviewSettings.diagnosticSkills}
-			/>
+			<Suspense fallback={<div>Loading...</div>}>
+				<DiagnosticSkillsReviewClient
+					submissions={submissions}
+					role="hod"
+					autoReviewEnabled={autoReviewSettings.diagnosticSkills}
+				/>
+			</Suspense>
 		</div>
 	);
 }

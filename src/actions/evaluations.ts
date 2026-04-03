@@ -29,10 +29,13 @@ export async function createPeriodicReview(data: ResidentEvaluationInput) {
 	const userId = await requireAuth();
 	const validated = residentEvaluationSchema.parse(data);
 
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
 	// Check if review already exists for this semester + reviewNo
 	const existing = await prisma.residentEvaluation.findFirst({
 		where: {
-			userId,
+			userId: user.id,
 			semester: validated.semester,
 			reviewNo: validated.reviewNo,
 		},
@@ -44,13 +47,23 @@ export async function createPeriodicReview(data: ResidentEvaluationInput) {
 		);
 	}
 
+	// Auto-assign faculty from FacultyStudentAssignment for this semester
+	const assignment = await prisma.facultyStudentAssignment.findFirst({
+		where: {
+			studentId: user.id,
+			semester: validated.semester,
+		},
+		select: { facultyId: true },
+	});
+
 	const entry = await prisma.residentEvaluation.create({
 		data: {
-			userId,
+			userId: user.id,
 			semester: validated.semester,
 			reviewNo: validated.reviewNo,
 			description: validated.description ?? null,
 			roleInActivity: validated.roleInActivity ?? null,
+			assignedFacultyId: assignment?.facultyId ?? null,
 			status: "DRAFT" as never,
 		},
 	});
@@ -134,14 +147,24 @@ export async function getMyEvaluations() {
 }
 
 export async function getStudentEvaluations(studentId: string) {
-	await requireRole(["faculty", "hod"]);
+	const { role, userId } = await requireRole(["faculty", "hod"]);
 
-	const evaluations = await prisma.residentEvaluation.findMany({
+	// Faculty can only see evaluations assigned to them
+	if (role === "faculty") {
+		const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+		if (!user) throw new Error("User not found");
+
+		return prisma.residentEvaluation.findMany({
+			where: { userId: studentId, assignedFacultyId: user.id },
+			orderBy: [{ semester: "asc" }, { reviewNo: "asc" }],
+		});
+	}
+
+	// HOD sees all
+	return prisma.residentEvaluation.findMany({
 		where: { userId: studentId },
 		orderBy: [{ semester: "asc" }, { reviewNo: "asc" }],
 	});
-
-	return evaluations;
 }
 
 export async function getAllStudentEvaluations() {
@@ -162,7 +185,37 @@ export async function getAllStudentEvaluations() {
 		},
 	});
 
-	return evaluations;
+	// Feature 3: Fetch sign-off details for each evaluation
+	const evaluationIds = evaluations.map((e) => e.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "ResidentEvaluation",
+			entityId: { in: evaluationIds },
+		},
+		include: {
+			signedBy: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+		},
+	});
+
+	// Map signatures by entityId for quick lookup
+	const signatureMap = new Map<string, typeof signatures>();
+	for (const sig of signatures) {
+		const existing = signatureMap.get(sig.entityId) ?? [];
+		existing.push(sig);
+		signatureMap.set(sig.entityId, existing);
+	}
+
+	return evaluations.map((e) => ({
+		...e,
+		signatureDetails: (signatureMap.get(e.id) ?? []).map((s) => ({
+			signedById: s.signedBy.id,
+			signedByName: `${s.signedBy.firstName} ${s.signedBy.lastName}`,
+			signedAt: s.signedAt,
+			remark: s.remark,
+		})),
+	}));
 }
 
 // ═══════════════ I2: EVALUATION SCORES (Faculty fills) ═══════════════
@@ -177,12 +230,26 @@ export async function setEvaluationScores(
 		researchScore: number;
 	},
 ) {
-	await requireRole(["faculty", "hod"]);
+	const { role, userId } = await requireRole(["faculty", "hod"]);
 
 	// Validate scores 1-5
 	for (const [key, val] of Object.entries(scores)) {
 		if (val < 1 || val > 5) {
 			throw new Error(`${key} must be between 1 and 5`);
+		}
+	}
+
+	// Verify faculty assignment (faculty can only score evaluations assigned to them)
+	if (role === "faculty") {
+		const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+		if (!user) throw new Error("User not found");
+
+		const evaluation = await prisma.residentEvaluation.findUnique({
+			where: { id: evaluationId },
+		});
+		if (!evaluation) throw new Error("Evaluation not found");
+		if (evaluation.assignedFacultyId && evaluation.assignedFacultyId !== user.id) {
+			throw new Error("You are not assigned to evaluate this student");
 		}
 	}
 
@@ -227,7 +294,21 @@ export async function setEndSemesterAssessment(
 // ═══════════════ SIGN / REJECT (Faculty/HOD) ═══════════════
 
 export async function signEvaluation(id: string, _remark?: string) {
-	await requireRole(["faculty", "hod"]);
+	const { role, userId } = await requireRole(["faculty", "hod"]);
+
+	// Verify faculty assignment
+	if (role === "faculty") {
+		const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+		if (!user) throw new Error("User not found");
+
+		const evaluation = await prisma.residentEvaluation.findUnique({
+			where: { id },
+		});
+		if (!evaluation) throw new Error("Evaluation not found");
+		if (evaluation.assignedFacultyId && evaluation.assignedFacultyId !== user.id) {
+			throw new Error("You are not assigned to evaluate this student");
+		}
+	}
 
 	const entry = await prisma.residentEvaluation.update({
 		where: { id },

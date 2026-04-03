@@ -31,7 +31,8 @@ export type FormFieldType =
 	| "confidence"
 	| "skill-level"
 	| "cpr-skill-level"
-	| "checkbox";
+	| "checkbox"
+	| "file-upload";
 
 export interface FormFieldConfig {
 	name: string;

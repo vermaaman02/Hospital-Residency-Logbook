@@ -17,6 +17,7 @@ export {
 	CASE_CATEGORY_LABELS,
 	getSubCategories,
 	TOTAL_CASE_SUB_TYPES,
+	categoryEnumToSlug,
 	type CaseCategoryConfig,
 } from "./case-categories";
 

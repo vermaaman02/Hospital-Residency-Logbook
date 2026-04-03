@@ -53,6 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { CloudinaryUpload, ImageGallery } from "@/components/shared/CloudinaryUpload";
 import {
 	createDiagnosticSkillEntry,
 	updateDiagnosticSkillEntry,
@@ -76,6 +77,7 @@ interface DiagnosticEntry {
 	confidenceLevel: string | null;
 	totalTimesPerformed: number;
 	facultyRemark: string | null;
+	imageUrls: string[];
 	status: string;
 }
 
@@ -104,6 +106,7 @@ export function DiagnosticSkillTable({
 		representativeDiagnosis: "",
 		confidenceLevel: "",
 		totalTimesPerformed: 0,
+		imageUrls: [] as string[],
 	});
 
 	// Inline add row state — appears at bottom of table
@@ -113,6 +116,7 @@ export function DiagnosticSkillTable({
 		representativeDiagnosis: "",
 		confidenceLevel: "NC",
 		totalTimesPerformed: 0,
+		imageUrls: [] as string[],
 	});
 
 	// Delete confirmation (only dialog kept)
@@ -146,6 +150,7 @@ export function DiagnosticSkillTable({
 			representativeDiagnosis: "",
 			confidenceLevel: "NC",
 			totalTimesPerformed: 0,
+			imageUrls: [],
 		});
 		setAddingNew(true);
 	}
@@ -167,6 +172,7 @@ export function DiagnosticSkillTable({
 					representativeDiagnosis: addData.representativeDiagnosis || undefined,
 					confidenceLevel: addData.confidenceLevel as "VC" | "FC" | "SC" | "NC",
 					totalTimesPerformed: addData.totalTimesPerformed,
+					imageUrls: addData.imageUrls,
 				});
 				toast.success(`Added: ${addData.skillName}`);
 				setAddingNew(false);
@@ -189,6 +195,7 @@ export function DiagnosticSkillTable({
 			representativeDiagnosis: entry.representativeDiagnosis ?? "",
 			confidenceLevel: entry.confidenceLevel ?? "NC",
 			totalTimesPerformed: entry.totalTimesPerformed,
+			imageUrls: entry.imageUrls ?? [],
 		});
 	}
 
@@ -210,6 +217,7 @@ export function DiagnosticSkillTable({
 						| "SC"
 						| "NC",
 					totalTimesPerformed: editData.totalTimesPerformed,
+					imageUrls: editData.imageUrls,
 				});
 				toast.success("Entry updated (saved as Draft)");
 				setEditingId(null);
@@ -318,6 +326,9 @@ export function DiagnosticSkillTable({
 									</TableHead>
 									<TableHead className="w-36">Level of Confidence</TableHead>
 									<TableHead className="w-20 text-center">Tally</TableHead>
+									{(categoryEnum === "ECG_ANALYSIS" || categoryEnum === "ABG_ANALYSIS") && (
+										<TableHead className="w-36">Images</TableHead>
+									)}
 									<TableHead className="min-w-36">Faculty Remark</TableHead>
 									<TableHead className="w-28 text-center">Status</TableHead>
 									<TableHead className="w-32 text-center">Actions</TableHead>
@@ -345,6 +356,7 @@ export function DiagnosticSkillTable({
 											onSave={() => saveEdit(entry)}
 											onCancel={cancelEdit}
 											isPending={isPending}
+											categoryEnum={categoryEnum}
 										/>
 									:	<ReadRow
 											key={entry.id}
@@ -353,6 +365,7 @@ export function DiagnosticSkillTable({
 											onSubmit={() => handleSubmit(entry.id)}
 											onDelete={() => setDeleteId(entry.id)}
 											isPending={isPending}
+											categoryEnum={categoryEnum}
 										/>,
 								)}
 
@@ -366,6 +379,7 @@ export function DiagnosticSkillTable({
 										onCancel={cancelAdd}
 										isPending={isPending}
 										nextSlNo={totalCount + 1}
+										categoryEnum={categoryEnum}
 									/>
 								)}
 							</TableBody>
@@ -422,12 +436,14 @@ function InlineAddRow({
 	onCancel,
 	isPending,
 	nextSlNo,
+	categoryEnum,
 }: {
 	addData: {
 		skillName: string;
 		representativeDiagnosis: string;
 		confidenceLevel: string;
 		totalTimesPerformed: number;
+		imageUrls: string[];
 	};
 	setAddData: React.Dispatch<
 		React.SetStateAction<{
@@ -435,6 +451,7 @@ function InlineAddRow({
 			representativeDiagnosis: string;
 			confidenceLevel: string;
 			totalTimesPerformed: number;
+			imageUrls: string[];
 		}>
 	>;
 	availableSkills: DiagnosticSkillConfig[];
@@ -442,6 +459,7 @@ function InlineAddRow({
 	onCancel: () => void;
 	isPending: boolean;
 	nextSlNo: number;
+	categoryEnum: string;
 }) {
 	return (
 		<TableRow className="bg-emerald-50/50 border-t-2 border-emerald-200">
@@ -514,6 +532,15 @@ function InlineAddRow({
 					className="w-20 text-center"
 				/>
 			</TableCell>
+			{(categoryEnum === "ECG_ANALYSIS" || categoryEnum === "ABG_ANALYSIS") && (
+				<TableCell>
+					<CloudinaryUpload
+						value={addData.imageUrls}
+						onChange={(urls) => setAddData((prev) => ({ ...prev, imageUrls: urls }))}
+						maxFiles={3}
+					/>
+				</TableCell>
+			)}
 			<TableCell className="text-sm text-muted-foreground">—</TableCell>
 			<TableCell className="text-center">
 				<Badge variant="outline" className="text-xs bg-emerald-50">
@@ -557,6 +584,7 @@ function EditRow({
 	onSave,
 	onCancel,
 	isPending,
+	categoryEnum,
 }: {
 	entry: DiagnosticEntry;
 	editData: {
@@ -564,6 +592,7 @@ function EditRow({
 		representativeDiagnosis: string;
 		confidenceLevel: string;
 		totalTimesPerformed: number;
+		imageUrls: string[];
 	};
 	setEditData: React.Dispatch<
 		React.SetStateAction<{
@@ -571,11 +600,13 @@ function EditRow({
 			representativeDiagnosis: string;
 			confidenceLevel: string;
 			totalTimesPerformed: number;
+			imageUrls: string[];
 		}>
 	>;
 	onSave: () => void;
 	onCancel: () => void;
 	isPending: boolean;
+	categoryEnum: string;
 }) {
 	return (
 		<TableRow className="bg-blue-50/40">
@@ -630,6 +661,15 @@ function EditRow({
 					className="w-20 text-center"
 				/>
 			</TableCell>
+			{(categoryEnum === "ECG_ANALYSIS" || categoryEnum === "ABG_ANALYSIS") && (
+				<TableCell>
+					<CloudinaryUpload
+						value={editData.imageUrls}
+						onChange={(urls) => setEditData((prev) => ({ ...prev, imageUrls: urls }))}
+						maxFiles={3}
+					/>
+				</TableCell>
+			)}
 			<TableCell className="text-sm text-muted-foreground">
 				{entry.facultyRemark || "—"}
 			</TableCell>
@@ -672,12 +712,14 @@ function ReadRow({
 	onSubmit,
 	onDelete,
 	isPending,
+	categoryEnum,
 }: {
 	entry: DiagnosticEntry;
 	onEdit: () => void;
 	onSubmit: () => void;
 	onDelete: () => void;
 	isPending: boolean;
+	categoryEnum: string;
 }) {
 	const isEditable =
 		entry.status === "DRAFT" || entry.status === "NEEDS_REVISION";
@@ -720,6 +762,15 @@ function ReadRow({
 			<TableCell className="text-center font-mono">
 				{entry.totalTimesPerformed}
 			</TableCell>
+			{(categoryEnum === "ECG_ANALYSIS" || categoryEnum === "ABG_ANALYSIS") && (
+				<TableCell>
+					{entry.imageUrls && entry.imageUrls.length > 0 ? (
+						<ImageGallery urls={entry.imageUrls} maxDisplay={2} />
+					) : (
+						<span className="text-muted-foreground text-xs">No images</span>
+					)}
+				</TableCell>
+			)}
 			<TableCell className="text-sm">
 				{isRejected && entry.facultyRemark ?
 					<div className="flex items-start gap-1.5">

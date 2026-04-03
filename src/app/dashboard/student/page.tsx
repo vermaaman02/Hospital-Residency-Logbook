@@ -15,6 +15,7 @@ import {
 	StudentDashboardClient,
 	type StudentDashboardData,
 } from "./StudentDashboardClient";
+import { AssessmentNotificationPopup } from "@/components/shared/AssessmentNotificationPopup";
 
 /* helper: count 3 statuses in one go */
 async function moduleCounts(
@@ -414,6 +415,43 @@ export default async function StudentDashboardPage() {
 		streakDays,
 	};
 
+	/* ── Pending Assessments for Popup (Feature 5) ── */
+	const pendingAssessments = user.batchId
+		? await prisma.internalAssessment.findMany({
+				where: {
+					batchId: user.batchId,
+					isPublished: true,
+					submissions: {
+						none: {
+							studentId: uid,
+							status: { in: ["SUBMITTED", "SIGNED"] },
+						},
+					},
+				},
+				orderBy: { createdAt: "desc" },
+				take: 5,
+				select: {
+					id: true,
+					title: true,
+					assessmentType: true,
+					deadline: true,
+					maxMarks: true,
+					createdBy: { select: { firstName: true, lastName: true } },
+					batch: { select: { name: true } },
+				},
+			})
+		: [];
+
+	const popupAssessments = pendingAssessments.map((a) => ({
+		id: a.id,
+		title: a.title,
+		assessmentType: a.assessmentType,
+		deadline: a.deadline?.toISOString() ?? null,
+		maxMarks: a.maxMarks,
+		createdBy: `${a.createdBy.firstName} ${a.createdBy.lastName}`,
+		batchName: a.batch.name,
+	}));
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -424,6 +462,7 @@ export default async function StudentDashboardPage() {
 					{ label: "Student" },
 				]}
 			/>
+			<AssessmentNotificationPopup assessments={popupAssessments} />
 			<StudentDashboardClient data={JSON.parse(JSON.stringify(data))} />
 		</div>
 	);

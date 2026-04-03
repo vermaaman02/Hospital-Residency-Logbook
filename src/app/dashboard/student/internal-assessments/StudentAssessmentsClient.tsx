@@ -29,6 +29,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { CloudinaryUpload } from "@/components/shared/CloudinaryUpload";
 import {
 	MarkdownEditor,
 	renderMarkdown,
@@ -71,6 +72,7 @@ interface SubmissionInfo {
 	id: string;
 	status: string;
 	content: string | null;
+	attachments: string[];
 	submittedAt: string | null;
 	evaluation: EvaluationInfo | null;
 }
@@ -84,6 +86,7 @@ interface AssessmentRow {
 	createdBy: { id: string; firstName: string; lastName: string };
 	deadline: string | null;
 	resourceLinks: string[];
+	attachments: string[];
 	maxMarks: number | null;
 	totalMarks: number | null;
 	isPublished: boolean;
@@ -124,6 +127,7 @@ export function StudentAssessmentsClient({
 	const [submitAssessmentData, setSubmitAssessmentData] =
 		useState<AssessmentRow | null>(null);
 	const [submissionContent, setSubmissionContent] = useState("");
+	const [submissionAttachments, setSubmissionAttachments] = useState<string[]>([]);
 
 	// View detail dialog
 	const [viewingAssessment, setViewingAssessment] =
@@ -207,27 +211,29 @@ export function StudentAssessmentsClient({
 		const existing = a.submissions[0];
 		setSubmitAssessmentData(a);
 		setSubmissionContent(existing?.content ?? "");
+		setSubmissionAttachments(existing?.attachments ?? []);
 	}, []);
 
 	const handleSubmit = useCallback(() => {
 		if (!submitAssessmentData) return;
 		startTransition(async () => {
 			try {
-				await submitAssessment(submitAssessmentData.id, submissionContent);
+				await submitAssessment(submitAssessmentData.id, submissionContent, submissionAttachments);
 				toast.success("Assessment submitted successfully!");
 				setSubmitAssessmentData(null);
 				setSubmissionContent("");
+				setSubmissionAttachments([]);
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : "Failed to submit");
 			}
 		});
-	}, [submitAssessmentData, submissionContent]);
+	}, [submitAssessmentData, submissionContent, submissionAttachments]);
 
 	const handleSaveDraft = useCallback(() => {
 		if (!submitAssessmentData) return;
 		startTransition(async () => {
 			try {
-				await saveDraftSubmission(submitAssessmentData.id, submissionContent);
+				await saveDraftSubmission(submitAssessmentData.id, submissionContent, submissionAttachments);
 				toast.success("Draft saved");
 			} catch (err) {
 				toast.error(
@@ -235,9 +241,14 @@ export function StudentAssessmentsClient({
 				);
 			}
 		});
-	}, [submitAssessmentData, submissionContent]);
+	}, [submitAssessmentData, submissionContent, submissionAttachments]);
 
 	// ======================== HELPERS ========================
+
+	const getExternalUrl = (url: string) => {
+		if (!url) return "#";
+		return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+	};
 
 	function getSubmissionStatusInfo(a: AssessmentRow) {
 		const sub = a.submissions[0];
@@ -805,13 +816,53 @@ export function StudentAssessmentsClient({
 											{viewingAssessment.resourceLinks.map((link, i) => (
 												<a
 													key={i}
-													href={link}
+													href={getExternalUrl(link)}
 													target="_blank"
 													rel="noopener noreferrer"
 													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline"
 												>
 													<ExternalLink className="h-3 w-3" />
 													{link}
+												</a>
+											))}
+										</div>
+									</div>
+								)}
+
+								{viewingAssessment.attachments && viewingAssessment.attachments.length > 0 && (
+									<div>
+										<p className="text-sm font-medium mb-2">Assessment Files / Resources</p>
+										<div className="space-y-1">
+											{viewingAssessment.attachments.map((link, i) => (
+												<a
+													key={i}
+													href={getExternalUrl(link)}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline"
+												>
+													<ExternalLink className="h-3 w-3" />
+													Attachment {i + 1}
+												</a>
+											))}
+										</div>
+									</div>
+								)}
+
+								{viewingAssessment.submissions[0] && viewingAssessment.submissions[0].attachments && viewingAssessment.submissions[0].attachments.length > 0 && (
+									<div>
+										<p className="text-sm font-medium mb-2">My Submitted Attachments</p>
+										<div className="space-y-1">
+											{viewingAssessment.submissions[0].attachments.map((link, i) => (
+												<a
+													key={i}
+													href={getExternalUrl(link)}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline"
+												>
+													<ExternalLink className="h-3 w-3" />
+													My Attachment {i + 1}
 												</a>
 											))}
 										</div>
@@ -876,6 +927,19 @@ export function StudentAssessmentsClient({
 									placeholder="Write your submission here... Use Markdown for formatting."
 									minRows={10}
 								/>
+							</div>
+
+							<div className="space-y-2 border-t pt-4">
+								<Label>Attachments (PDFs, Images, Docs)</Label>
+								<CloudinaryUpload
+									maxFiles={5}
+									accept=".jpg,.jpeg,.png,.pdf,.docx,.doc"
+									value={submissionAttachments}
+									onChange={setSubmissionAttachments}
+								/>
+								<p className="text-xs text-muted-foreground mt-1">
+									Upload required resources/submissions for grading.
+								</p>
 							</div>
 
 							<DialogFooter className="gap-2 sm:gap-0">

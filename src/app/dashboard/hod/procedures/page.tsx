@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { getProcedureLogsForReview } from "@/actions/procedure-logs";
 import { getAutoReviewSettings } from "@/actions/auto-review";
 import { ProcedureLogsReviewClient } from "../../faculty/procedures/ProcedureLogsReviewClient";
+import { Suspense } from "react";
 
 export default async function HodProceduresPage() {
 	try {
@@ -37,11 +38,13 @@ export default async function HodProceduresPage() {
 					{ label: "Procedures" },
 				]}
 			/>
-			<ProcedureLogsReviewClient
-				submissions={submissions}
-				role="hod"
-				autoReviewEnabled={autoReviewSettings.procedureLogs}
-			/>
+			<Suspense fallback={<div>Loading...</div>}>
+				<ProcedureLogsReviewClient
+					submissions={submissions}
+					role="hod"
+					autoReviewEnabled={autoReviewSettings.procedureLogs}
+				/>
+			</Suspense>
 		</div>
 	);
 }

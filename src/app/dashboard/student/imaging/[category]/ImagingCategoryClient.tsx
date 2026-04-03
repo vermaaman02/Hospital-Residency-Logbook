@@ -155,6 +155,7 @@ export function ImagingCategoryClient({
 				onDeleteEntry={deleteImagingLogEntry}
 				onUpdateEntry={updateImagingLogEntry}
 				onSubmitEntry={submitImagingLogEntry}
+				allowImageUpload={true}
 			/>
 		</div>
 	);

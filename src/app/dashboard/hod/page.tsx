@@ -15,6 +15,7 @@ import {
 	HodDashboardClient,
 	type HodDashboardData,
 } from "./HodDashboardClient";
+import { PendingAssessmentPopup } from "@/components/dashboard/PendingAssessmentPopup";
 
 export default async function HodDashboardPage() {
 	const { userId: clerkId } = await auth();
@@ -319,6 +320,7 @@ export default async function HodDashboardPage() {
 
 	return (
 		<div className="space-y-6">
+			<PendingAssessmentPopup role="hod" />
 			<PageHeader
 				title="Department Dashboard"
 				description="Department-wide overview — Emergency Medicine"

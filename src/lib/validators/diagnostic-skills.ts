@@ -21,6 +21,7 @@ export const diagnosticSkillSchema = z.object({
 		error: "Confidence level is required",
 	}),
 	totalTimesPerformed: z.number().int().min(0).default(0),
+	imageUrls: z.array(z.string()).optional().default([]),
 });
 
 export type DiagnosticSkillInput = z.infer<typeof diagnosticSkillSchema>;

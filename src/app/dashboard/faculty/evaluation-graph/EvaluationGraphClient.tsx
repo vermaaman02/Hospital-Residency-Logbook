@@ -62,6 +62,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
+import {
 	exportEvaluationGraphReviewToExcel,
 	type EvaluationGraphReviewRow,
 } from "@/lib/export/export-excel";
@@ -1023,10 +1029,41 @@ function ReadOnlyRow({
 					<span className="font-bold">{record.overallScore.toFixed(1)}</span>
 				:	"—"}
 			</TableCell>
-			<TableCell className="text-center" onClick={onClick}>
-				{record ?
+			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+				{!record ? (
+					<span className="text-xs text-muted-foreground/40">—</span>
+				) : record.status === "SIGNED" && record.signatureDetails && record.signatureDetails.length > 0 ? (
+					<Popover>
+						<PopoverTrigger asChild>
+							<Badge
+								className="text-xs cursor-pointer bg-green-100 text-green-700 hover:bg-green-200 border-green-300"
+								variant="outline"
+							>
+								Signed
+							</Badge>
+						</PopoverTrigger>
+						<PopoverContent className="w-64 p-3 text-sm">
+							<div className="space-y-2">
+								<h4 className="font-medium text-hospital-primary border-b pb-1">
+									Sign-Off Details
+								</h4>
+								{record.signatureDetails.map((sig, idx) => (
+									<div key={idx} className="space-y-1">
+										<p><span className="text-muted-foreground">By:</span> {sig.signedByName}</p>
+										<p><span className="text-muted-foreground">Date:</span> {format(new Date(sig.signedAt), "PPP")}</p>
+										{sig.remark && (
+											<p><span className="text-muted-foreground">Remark:</span> {sig.remark}</p>
+										)}
+									</div>
+								))}
+							</div>
+						</PopoverContent>
+					</Popover>
+				) : (
 					<Badge
-						variant={record.status === "SIGNED" ? "default" : "outline"}
+						variant={
+							record.status === "SIGNED" ? "default" : "outline"
+						}
 						className={cn(
 							"text-xs",
 							record.status === "SIGNED" &&
@@ -1041,7 +1078,7 @@ function ReadOnlyRow({
 							"Pending"
 						:	record.status}
 					</Badge>
-				:	<span className="text-xs text-muted-foreground/40">—</span>}
+				)}
 			</TableCell>
 			<TableCell className="text-center">
 				<div className="flex items-center justify-center gap-1">

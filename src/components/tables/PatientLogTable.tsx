@@ -77,6 +77,7 @@ import {
 	MarkdownEditor,
 	renderMarkdown,
 } from "@/components/shared/MarkdownEditor";
+import { CloudinaryUpload, ImageGallery } from "@/components/shared/CloudinaryUpload";
 import type { EntryStatus } from "@/types";
 
 // ======================== TYPES ========================
@@ -96,6 +97,7 @@ export interface PatientLogEntry {
 	totalProcedureTally: number;
 	facultyId: string | null;
 	facultyRemark: string | null;
+	imageUrls?: string[];
 	status: string;
 }
 
@@ -128,9 +130,11 @@ interface PatientLogTableProps {
 			skillLevel?: string | null;
 			totalProcedureTally?: number;
 			facultyId?: string | null;
+			imageUrls?: string[];
 		},
 	) => Promise<unknown>;
 	onSubmitEntry: (id: string) => Promise<unknown>;
+	allowImageUpload?: boolean;
 }
 
 interface InlineForm {
@@ -145,6 +149,7 @@ interface InlineForm {
 	skillLevel: string;
 	totalProcedureTally: number;
 	facultyId: string;
+	imageUrls: string[];
 }
 
 const emptyForm: InlineForm = {
@@ -159,6 +164,7 @@ const emptyForm: InlineForm = {
 	skillLevel: "",
 	totalProcedureTally: 0,
 	facultyId: "",
+	imageUrls: [],
 };
 
 const SEX_OPTIONS = [
@@ -182,6 +188,7 @@ export function PatientLogTable({
 	onDeleteEntry,
 	onUpdateEntry,
 	onSubmitEntry,
+	allowImageUpload = false,
 }: PatientLogTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -274,6 +281,7 @@ export function PatientLogTable({
 			skillLevel: entry.skillLevel ?? "",
 			totalProcedureTally: entry.totalProcedureTally,
 			facultyId: entry.facultyId ?? "",
+			imageUrls: entry.imageUrls ?? [],
 		});
 	}
 
@@ -301,6 +309,7 @@ export function PatientLogTable({
 					skillLevel: form.skillLevel || null,
 					totalProcedureTally: form.totalProcedureTally,
 					facultyId: form.facultyId || null,
+					imageUrls: form.imageUrls,
 				});
 				toast.success("Saved");
 				setEditingId(null);
@@ -425,6 +434,11 @@ export function PatientLogTable({
 										<TableHead className="w-16 text-center font-bold">
 											Tally
 										</TableHead>
+										{allowImageUpload && (
+											<TableHead className="w-32 text-center font-bold">
+												Images
+											</TableHead>
+										)}
 										<TableHead className="w-24 text-center font-bold">
 											Status
 										</TableHead>
@@ -449,6 +463,7 @@ export function PatientLogTable({
 												isPending={isPending}
 												getFacultyName={getFacultyName}
 												skillLevelOptions={skillLevelOptions}
+												allowImageUpload={allowImageUpload}
 											/>
 										:	<ReadRow
 												key={entry.id}
@@ -459,6 +474,7 @@ export function PatientLogTable({
 												isPending={isPending}
 												getFacultyName={getFacultyName}
 												skillLabel={skillLabel}
+												allowImageUpload={allowImageUpload}
 											/>,
 									)}
 								</TableBody>
@@ -549,6 +565,7 @@ function EditRow({
 	isPending,
 	getFacultyName,
 	skillLevelOptions,
+	allowImageUpload,
 }: {
 	entry: PatientLogEntry;
 	form: InlineForm;
@@ -561,6 +578,7 @@ function EditRow({
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
 	skillLevelOptions: { value: string; label: string }[];
+	allowImageUpload: boolean;
 }) {
 	return (
 		<TableRow className="bg-blue-50/40">
@@ -730,6 +748,28 @@ function EditRow({
 					className="w-20 mx-auto text-center text-xs"
 				/>
 			</TableCell>
+			{allowImageUpload && (
+				<TableCell className="text-center">
+					<div className="flex flex-col gap-2 items-center">
+						<CloudinaryUpload
+							value={form.imageUrls || []}
+							onChange={(urls) => {
+								setForm((prev) => ({
+									...prev,
+									imageUrls: urls,
+								}));
+							}}
+							disabled={isPending}
+							maxFiles={3}
+						/>
+						{form.imageUrls && form.imageUrls.length > 0 && (
+							<span className="text-[10px] text-hospital-primary font-medium bg-hospital-primary/10 px-2 py-0.5 rounded">
+								{form.imageUrls.length} file(s)
+							</span>
+						)}
+					</div>
+				</TableCell>
+			)}
 			<TableCell className="text-center">
 				<StatusBadge status={entry.status as EntryStatus} size="sm" />
 			</TableCell>
@@ -773,6 +813,7 @@ function ReadRow({
 	isPending,
 	getFacultyName,
 	skillLabel,
+	allowImageUpload,
 }: {
 	entry: PatientLogEntry;
 	onEdit: () => void;
@@ -781,6 +822,7 @@ function ReadRow({
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
 	skillLabel: (val: string | null) => string;
+	allowImageUpload: boolean;
 }) {
 	const isEditable = entry.status !== "SUBMITTED" && entry.status !== "SIGNED";
 
@@ -861,6 +903,13 @@ function ReadRow({
 			<TableCell className="text-center font-mono">
 				{entry.totalProcedureTally}
 			</TableCell>
+			{allowImageUpload && (
+				<TableCell className="text-center">
+					{entry.imageUrls && entry.imageUrls.length > 0 ?
+						<ImageGallery urls={entry.imageUrls} />
+					:	<span className="text-xs text-muted-foreground">—</span>}
+				</TableCell>
+			)}
 			<TableCell className="text-center">
 				<div>
 					<StatusBadge status={entry.status as EntryStatus} size="sm" />

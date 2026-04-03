@@ -89,7 +89,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
 	signProcedureLogEntry,
@@ -155,8 +155,11 @@ export function ProcedureLogsReviewClient({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
+	const searchParams = useSearchParams();
+	const initialCategory = searchParams.get("tab") || "ALL";
+
 	// Category filter
-	const [categoryFilter, setCategoryFilter] = useState("ALL");
+	const [categoryFilter, setCategoryFilter] = useState(initialCategory);
 
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");

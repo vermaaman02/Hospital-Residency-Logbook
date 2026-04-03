@@ -87,11 +87,13 @@ import {
 	Stethoscope,
 	MapPin,
 	ScanLine,
+	Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { EntryStatus } from "@/types";
+import { ImageGallery } from "@/components/shared/CloudinaryUpload";
 
 // ======================== TYPES ========================
 
@@ -111,6 +113,7 @@ export interface PatientLogSubmission {
 	totalProcedureTally: number;
 	facultyId: string | null;
 	facultyRemark: string | null;
+	imageUrls?: string[];
 	status: string;
 	createdAt: string;
 	user: {
@@ -1099,6 +1102,17 @@ export function PatientLogReviewClient({
 											size="sm"
 										/>
 									</div>
+								</DetailSection>
+
+								{/* Uploaded Images */}
+								<DetailSection title="Uploaded Images" icon={ImageIcon}>
+									{detailEntry.imageUrls && detailEntry.imageUrls.length > 0 ? (
+										<ImageGallery urls={detailEntry.imageUrls} maxDisplay={6} />
+									) : (
+										<div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md">
+											No images were attached to this entry.
+										</div>
+									)}
 								</DetailSection>
 
 								{detailEntry.status === "SUBMITTED" && (

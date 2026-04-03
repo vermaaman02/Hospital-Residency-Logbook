@@ -96,10 +96,11 @@ import {
 	HeartPulse,
 	Stethoscope,
 	BookOpen,
+	Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
 	signDiagnosticSkillEntry,
@@ -112,6 +113,7 @@ import {
 	CONFIDENCE_LEVEL_LABELS,
 } from "@/lib/constants/diagnostic-types";
 import type { EntryStatus } from "@/types";
+import { ImageGallery } from "@/components/shared/CloudinaryUpload";
 
 // ======================== TYPES ========================
 
@@ -125,6 +127,7 @@ export interface DiagnosticSkillSubmission {
 	totalTimesPerformed: number;
 	facultyId: string | null;
 	facultyRemark: string | null;
+	imageUrls: string[];
 	status: string;
 	createdAt: string;
 	user: {
@@ -178,8 +181,11 @@ export function DiagnosticSkillsReviewClient({
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 
+	const searchParams = useSearchParams();
+	const initialTab = searchParams.get("tab") || "ABG_ANALYSIS";
+
 	// Active tab (category)
-	const [activeTab, setActiveTab] = useState<string>("ABG_ANALYSIS");
+	const [activeTab, setActiveTab] = useState<string>(initialTab);
 
 	// Auto-review
 	const [autoReview, setAutoReview] = useState(autoReviewEnabled ?? false);
@@ -759,6 +765,17 @@ export function DiagnosticSkillsReviewClient({
 										/>
 									</DetailSection>
 								)}
+
+								{/* Uploaded Images (Feature 4) */}
+								<DetailSection title="Uploaded Images" icon={ImageIcon}>
+									{detailEntry.imageUrls && detailEntry.imageUrls.length > 0 ? (
+										<ImageGallery urls={detailEntry.imageUrls} maxDisplay={6} />
+									) : (
+										<div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md">
+											No images were attached to this entry.
+										</div>
+									)}
+								</DetailSection>
 
 								{/* Action Buttons */}
 								{detailEntry.status === "SUBMITTED" && (

@@ -35,6 +35,12 @@ import {
 	type EvaluationGraphExportRow,
 } from "@/lib/export/export-excel";
 import { toast } from "sonner";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
 
 // Lazy load the chart component
 const EvaluationGraph = dynamic(
@@ -298,7 +304,36 @@ export function StudentEvaluationGraphClient({
 												:	"—"}
 											</TableCell>
 											<TableCell className="text-center">
-												{record ?
+												{!record ? (
+													<span className="text-xs text-muted-foreground/40">—</span>
+												) : record.status === "SIGNED" && record.signatureDetails && record.signatureDetails.length > 0 ? (
+													<Popover>
+														<PopoverTrigger asChild>
+															<Badge
+																className="text-xs cursor-pointer bg-green-100 text-green-700 hover:bg-green-200 border-green-300"
+																variant="outline"
+															>
+																Signed
+															</Badge>
+														</PopoverTrigger>
+														<PopoverContent className="w-64 p-3 text-sm">
+															<div className="space-y-2">
+																<h4 className="font-medium text-hospital-primary border-b pb-1">
+																	Sign-Off Details
+																</h4>
+																{record.signatureDetails.map((sig, idx) => (
+																	<div key={idx} className="space-y-1">
+																		<p><span className="text-muted-foreground">By:</span> {sig.signedByName}</p>
+																		<p><span className="text-muted-foreground">Date:</span> {format(new Date(sig.signedAt), "PPP")}</p>
+																		{sig.remark && (
+																			<p><span className="text-muted-foreground">Remark:</span> {sig.remark}</p>
+																		)}
+																	</div>
+																))}
+															</div>
+														</PopoverContent>
+													</Popover>
+												) : (
 													<Badge
 														variant={
 															record.status === "SIGNED" ? "default" : "outline"
@@ -317,10 +352,7 @@ export function StudentEvaluationGraphClient({
 															"Pending"
 														:	record.status}
 													</Badge>
-												:	<span className="text-xs text-muted-foreground/40">
-														—
-													</span>
-												}
+												)}
 											</TableCell>
 										</TableRow>
 									);
