@@ -1240,10 +1240,23 @@ export function HodAssessmentsClient({
 														:	"—"}
 													</TableCell>
 													<TableCell>
-														<StatusBadge
+														{evalItem.submission.status === "SIGNED" &&
+														evalItem.submission.evaluation?.evaluatedBy ?
+															<div className="flex flex-col gap-1">
+																<StatusBadge
+																	status={evalItem.submission.status as EntryStatus}
+																	size="sm"
+																/>
+																<span className="text-xs text-muted-foreground">
+																	Evaluated by:{" "}
+																	{evalItem.submission.evaluation.evaluatedBy.firstName}{" "}
+																	{evalItem.submission.evaluation.evaluatedBy.lastName}
+																</span>
+															</div>
+														:	<StatusBadge
 															status={evalItem.submission.status as EntryStatus}
 															size="sm"
-														/>
+														/>}
 													</TableCell>
 													<TableCell className="text-right">
 														<div className="flex justify-end gap-2">
