@@ -79,7 +79,6 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Calendar,
-	Award,
 	ClipboardList,
 	Globe,
 	Save,
@@ -104,7 +103,15 @@ interface SubmissionInfo {
 	submittedAt: string | null;
 	updatedAt: string | null;
 	student: { id: string; firstName: string; lastName: string };
-	evaluation?: { marks: number | null; grade: string | null } | null;
+	evaluation?: {
+		marks: number | null;
+		grade: string | null;
+		feedback: string | null;
+		rejectionReason: string | null;
+		evaluatedAt: string | null;
+		isMarksLocked: boolean;
+		evaluatedBy: { firstName: string; lastName: string };
+	} | null;
 }
 
 interface AssessmentRow {
@@ -152,7 +159,13 @@ interface HodAssessmentsClientProps {
 	batches: BatchInfo[];
 	stats: StatsData;
 	facultyList: { id: string; firstName: string; lastName: string }[];
-	students: { id: string; firstName: string; lastName: string; batchId: string; currentSemester: number | null }[];
+	students: {
+		id: string;
+		firstName: string;
+		lastName: string;
+		batchId: string;
+		currentSemester: number | null;
+	}[];
 }
 
 interface InlineForm {
@@ -243,6 +256,9 @@ export function HodAssessmentsClient({
 	const [evalMarks, setEvalMarks] = useState("");
 	const [evalGrade, setEvalGrade] = useState("");
 	const [evalFeedback, setEvalFeedback] = useState("");
+	const [showMarksLockedConfirm, setShowMarksLockedConfirm] = useState(false);
+	const [submissionAwaitingConfirm, setSubmissionAwaitingConfirm] =
+		useState<SubmissionInfo | null>(null);
 
 	// Reject dialog
 	const [rejectingSubmission, setRejectingSubmission] =
@@ -253,7 +269,9 @@ export function HodAssessmentsClient({
 
 	const getExternalUrl = (url: string) => {
 		if (!url) return "#";
-		return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+		return url.startsWith("http://") || url.startsWith("https://") ?
+				url
+			:	`https://${url}`;
 	};
 
 	const filtered = useMemo(() => {
@@ -280,15 +298,31 @@ export function HodAssessmentsClient({
 	}, [assessments, searchQuery, batchFilter, typeFilter, statusFilter]);
 
 	const pendingEvaluations = useMemo(() => {
-		const all: { assessmentTitle: string, submission: SubmissionInfo, assessmentId: string, maxMarks: number | null, assessmentDeadline: string | null }[] = [];
-		assessments.forEach(a => {
-			a.submissions.forEach(sub => {
+		const all: {
+			assessmentTitle: string;
+			submission: SubmissionInfo;
+			assessmentId: string;
+			maxMarks: number | null;
+			assessmentDeadline: string | null;
+		}[] = [];
+		assessments.forEach((a) => {
+			a.submissions.forEach((sub) => {
 				if (sub.status === "SUBMITTED" || sub.status === "NEEDS_REVISION") {
-					all.push({ assessmentTitle: a.title, submission: sub, assessmentId: a.id, maxMarks: a.maxMarks, assessmentDeadline: a.deadline });
+					all.push({
+						assessmentTitle: a.title,
+						submission: sub,
+						assessmentId: a.id,
+						maxMarks: a.maxMarks,
+						assessmentDeadline: a.deadline,
+					});
 				}
 			});
 		});
-		return all.sort((a, b) => new Date(a.submission.status).getTime() - new Date(b.submission.status).getTime()); // Basic sort
+		return all.sort(
+			(a, b) =>
+				new Date(a.submission.status).getTime() -
+				new Date(b.submission.status).getTime(),
+		); // Basic sort
 	}, [assessments]);
 
 	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -325,7 +359,7 @@ export function HodAssessmentsClient({
 			totalMarks: a.totalMarks?.toString() ?? "",
 			resourceLinks: a.resourceLinks.join("\n"),
 			attachments: a.attachments ?? [],
-			assignedStudentIds: a.assignedStudents?.map(s => s.id) ?? [],
+			assignedStudentIds: a.assignedStudents?.map((s) => s.id) ?? [],
 			isPublished: a.isPublished,
 			assignedFacultyId: a.assignedFacultyId ?? "none",
 		});
@@ -374,7 +408,8 @@ export function HodAssessmentsClient({
 			maxMarks: form.maxMarks ? parseInt(form.maxMarks) : undefined,
 			totalMarks: form.totalMarks ? parseFloat(form.totalMarks) : undefined,
 			isPublished: form.isPublished,
-			assignedFacultyId: form.assignedFacultyId !== "none" ? form.assignedFacultyId : undefined,
+			assignedFacultyId:
+				form.assignedFacultyId !== "none" ? form.assignedFacultyId : undefined,
 		};
 
 		startTransition(async () => {
@@ -539,7 +574,7 @@ export function HodAssessmentsClient({
 
 			<Tabs defaultValue="assessments" className="w-full">
 				<div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
-					<TabsList className="grid w-full sm:w-[400px] grid-cols-2">
+					<TabsList className="grid w-full sm:w-96 grid-cols-2">
 						<TabsTrigger value="assessments">Assessments</TabsTrigger>
 						<TabsTrigger value="evaluations" className="relative group">
 							<span className="flex items-center gap-2">
@@ -560,7 +595,10 @@ export function HodAssessmentsClient({
 					)}
 				</div>
 
-				<TabsContent value="assessments" className="space-y-6 focus-visible:outline-none focus:outline-none">
+				<TabsContent
+					value="assessments"
+					className="space-y-6 focus-visible:outline-none focus:outline-none"
+				>
 					{/* ======================== INLINE CREATE/EDIT FORM ======================== */}
 					{showInlineForm && (
 						<Card
@@ -569,83 +607,373 @@ export function HodAssessmentsClient({
 						>
 							<CardHeader className="pb-3">
 								<div className="flex items-center justify-between">
-							<CardTitle className="text-lg flex items-center gap-2">
-								{editingId ?
-									<Edit className="h-5 w-5" />
-								:	<Plus className="h-5 w-5" />}
-								{editingId ? "Edit Assessment" : "Create New Assessment"}
-							</CardTitle>
-							<Button variant="ghost" size="icon" onClick={cancelForm}>
-								<X className="h-4 w-4" />
-							</Button>
-						</div>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						{/* Row 1: Title */}
-						<div className="space-y-2">
-							<Label htmlFor="form-title">
-								Title <span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="form-title"
-								value={form.title}
-								onChange={(e) => updateForm({ title: e.target.value })}
-								placeholder="e.g., Theory Assessment - Emergency Medicine Module 3"
-							/>
-						</div>
+									<CardTitle className="text-lg flex items-center gap-2">
+										{editingId ?
+											<Edit className="h-5 w-5" />
+										:	<Plus className="h-5 w-5" />}
+										{editingId ? "Edit Assessment" : "Create New Assessment"}
+									</CardTitle>
+									<Button variant="ghost" size="icon" onClick={cancelForm}>
+										<X className="h-4 w-4" />
+									</Button>
+								</div>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								{/* Row 1: Title */}
+								<div className="space-y-2">
+									<Label htmlFor="form-title">
+										Title <span className="text-red-500">*</span>
+									</Label>
+									<Input
+										id="form-title"
+										value={form.title}
+										onChange={(e) => updateForm({ title: e.target.value })}
+										placeholder="e.g., Theory Assessment - Emergency Medicine Module 3"
+									/>
+								</div>
 
-						{/* Row 2: Batch, Semester, Type, Assigned Faculty */}
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-							<div className="space-y-2">
-								<Label>
-									Batch <span className="text-red-500">*</span>
-								</Label>
+								{/* Row 2: Batch, Semester, Type, Assigned Faculty */}
+								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+									<div className="space-y-2">
+										<Label>
+											Batch <span className="text-red-500">*</span>
+										</Label>
+										<Select
+											value={form.batchId}
+											onValueChange={(v) => updateForm({ batchId: v })}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="Select batch" />
+											</SelectTrigger>
+											<SelectContent>
+												{batches.map((b) => (
+													<SelectItem key={b.id} value={b.id}>
+														{b.name}{" "}
+														{b.currentSemester ?
+															`(Sem ${b.currentSemester})`
+														:	""}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="space-y-2">
+										<Label>Semester</Label>
+										<Select
+											value={form.semester}
+											onValueChange={(v) => updateForm({ semester: v })}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="All Semesters" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="all">All Semesters</SelectItem>
+												{SEMESTERS.map((s) => (
+													<SelectItem key={s} value={s.toString()}>
+														Semester {s}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="space-y-2">
+										<Label>Assessment Type</Label>
+										<Select
+											value={form.assessmentType}
+											onValueChange={(v) => updateForm({ assessmentType: v })}
+										>
+											<SelectTrigger>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{ASSESSMENT_TYPES.map((t) => (
+													<SelectItem key={t.value} value={t.value}>
+														{t.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="space-y-2">
+										<Label>Assigned Evaluator</Label>
+										<Select
+											value={form.assignedFacultyId}
+											onValueChange={(v) =>
+												updateForm({ assignedFacultyId: v })
+											}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="All Available Faculty" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="none">
+													All Available Faculty
+												</SelectItem>
+												{facultyList.map((f) => (
+													<SelectItem key={f.id} value={f.id}>
+														{f.firstName} {f.lastName}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+								</div>
+
+								{/* Row 3: Deadline, Publish At, Max Marks, Total Marks */}
+								<div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+									<div className="space-y-2">
+										<Label htmlFor="form-deadline">Deadline</Label>
+										<Input
+											id="form-deadline"
+											type="datetime-local"
+											value={form.deadline}
+											onChange={(e) => updateForm({ deadline: e.target.value })}
+										/>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="form-publishAt">Publish Date</Label>
+										<Input
+											id="form-publishAt"
+											type="datetime-local"
+											value={form.publishAt}
+											onChange={(e) =>
+												updateForm({ publishAt: e.target.value })
+											}
+										/>
+										<p className="text-xs text-muted-foreground">
+											Schedule when to publish
+										</p>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="form-maxMarks">Max Marks</Label>
+										<Input
+											id="form-maxMarks"
+											type="number"
+											min={0}
+											value={form.maxMarks}
+											onChange={(e) => updateForm({ maxMarks: e.target.value })}
+											placeholder="100"
+										/>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="form-totalMarks">Total Marks</Label>
+										<Input
+											id="form-totalMarks"
+											type="number"
+											min={0}
+											step="0.1"
+											value={form.totalMarks}
+											onChange={(e) =>
+												updateForm({ totalMarks: e.target.value })
+											}
+											placeholder="200"
+										/>
+									</div>
+								</div>
+
+								{/* Row 4: Description (Markdown) */}
+								<div className="space-y-2">
+									<Label>Instructions / Description (Markdown)</Label>
+									<MarkdownEditor
+										value={form.description}
+										onChange={(v) => updateForm({ description: v })}
+										placeholder="Write instructions, topics, format, grading criteria..."
+										minRows={6}
+									/>
+								</div>
+
+								{/* Row 5: Resource Links */}
+								<div className="space-y-2">
+									<Label htmlFor="form-links">
+										Resource Links{" "}
+										<span className="text-xs text-muted-foreground">
+											(one per line)
+										</span>
+									</Label>
+									<Textarea
+										id="form-links"
+										value={form.resourceLinks}
+										onChange={(e) =>
+											updateForm({ resourceLinks: e.target.value })
+										}
+										placeholder={
+											"https://example.com/study-material\nhttps://example.com/reference"
+										}
+										rows={3}
+									/>
+								</div>
+
+								{/* Row 5 B: Cloudinary Attachments */}
+								<div className="space-y-2 pt-2 border-t">
+									<Label>Attachments (PDFs, Images, Docs)</Label>
+									<CloudinaryUpload
+										maxFiles={5}
+										accept=".jpg,.jpeg,.png,.pdf,.docx,.doc"
+										value={form.attachments}
+										onChange={(urls) => updateForm({ attachments: urls })}
+									/>
+									<p className="text-xs text-muted-foreground mt-1">
+										Upload resources that students can download.
+									</p>
+								</div>
+
+								{/* Row 5 C: Assignees */}
+								<div className="space-y-2 border-t pt-4 pb-2">
+									<Label>Assign To Details (Specific Students)</Label>
+									<div className="border rounded-md p-2 bg-background">
+										<ScrollArea className="h-40">
+											{form.batchId ?
+												<div className="space-y-2 p-1">
+													{(
+														students.filter(
+															(s) =>
+																s.batchId === form.batchId &&
+																(form.semester === "all" ||
+																	s.currentSemester ===
+																		parseInt(form.semester)),
+														).length === 0
+													) ?
+														<p className="text-sm text-muted-foreground py-2">
+															No students found.
+														</p>
+													:	students
+															.filter(
+																(s) =>
+																	s.batchId === form.batchId &&
+																	(form.semester === "all" ||
+																		s.currentSemester ===
+																			parseInt(form.semester)),
+															)
+															.map((student) => (
+																<div
+																	key={student.id}
+																	className="flex items-center space-x-2"
+																>
+																	<Checkbox
+																		id={`student-${student.id}`}
+																		checked={form.assignedStudentIds.includes(
+																			student.id,
+																		)}
+																		onCheckedChange={(checked) => {
+																			if (checked === true) {
+																				updateForm({
+																					assignedStudentIds: [
+																						...form.assignedStudentIds,
+																						student.id,
+																					],
+																				});
+																			} else {
+																				updateForm({
+																					assignedStudentIds:
+																						form.assignedStudentIds.filter(
+																							(id) => id !== student.id,
+																						),
+																				});
+																			}
+																		}}
+																	/>
+																	<label
+																		htmlFor={`student-${student.id}`}
+																		className="text-sm font-medium leading-none cursor-pointer"
+																	>
+																		{student.firstName} {student.lastName}
+																	</label>
+																</div>
+															))
+													}
+												</div>
+											:	<p className="text-sm text-muted-foreground p-2">
+													Select a batch first.
+												</p>
+											}
+										</ScrollArea>
+									</div>
+									<p className="text-xs text-muted-foreground mt-1">
+										Leave all unchecked to assign to the entire batch/semester.
+									</p>
+								</div>
+
+								{/* Row 6: Publish toggle + Save */}
+								<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2 border-t">
+									<div className="flex items-center gap-3">
+										<Switch
+											id="form-published"
+											checked={form.isPublished}
+											onCheckedChange={(v) => updateForm({ isPublished: v })}
+										/>
+										<Label htmlFor="form-published" className="cursor-pointer">
+											{form.isPublished ?
+												"Published — visible to students"
+											:	"Draft — not visible to students"}
+										</Label>
+									</div>
+									<div className="flex gap-2">
+										<Button
+											variant="outline"
+											onClick={cancelForm}
+											disabled={isPending}
+										>
+											Cancel
+										</Button>
+										<Button onClick={handleSave} disabled={isPending}>
+											{isPending ?
+												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											:	<Save className="mr-2 h-4 w-4" />}
+											{editingId ? "Update Assessment" : "Create Assessment"}
+										</Button>
+									</div>
+								</div>
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Filters */}
+					<Card>
+						<CardContent className="pt-4 pb-4">
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+								<div className="relative flex-1">
+									<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+									<Input
+										placeholder="Search assessments..."
+										value={searchQuery}
+										onChange={(e) => {
+											setSearchQuery(e.target.value);
+											setPage(1);
+										}}
+										className="pl-10"
+									/>
+								</div>
 								<Select
-									value={form.batchId}
-									onValueChange={(v) => updateForm({ batchId: v })}
+									value={batchFilter}
+									onValueChange={(v) => {
+										setBatchFilter(v);
+										setPage(1);
+									}}
 								>
-									<SelectTrigger>
-										<SelectValue placeholder="Select batch" />
+									<SelectTrigger className="w-45">
+										<SelectValue placeholder="Batch" />
 									</SelectTrigger>
 									<SelectContent>
+										<SelectItem value="all">All Batches</SelectItem>
 										{batches.map((b) => (
 											<SelectItem key={b.id} value={b.id}>
-												{b.name}{" "}
-												{b.currentSemester ? `(Sem ${b.currentSemester})` : ""}
+												{b.name}
 											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
-							</div>
-							<div className="space-y-2">
-								<Label>Semester</Label>
 								<Select
-									value={form.semester}
-									onValueChange={(v) => updateForm({ semester: v })}
+									value={typeFilter}
+									onValueChange={(v) => {
+										setTypeFilter(v);
+										setPage(1);
+									}}
 								>
-									<SelectTrigger>
-										<SelectValue placeholder="All Semesters" />
+									<SelectTrigger className="w-40">
+										<SelectValue placeholder="Type" />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="all">All Semesters</SelectItem>
-										{SEMESTERS.map((s) => (
-											<SelectItem key={s} value={s.toString()}>
-												Semester {s}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-							<div className="space-y-2">
-								<Label>Assessment Type</Label>
-								<Select
-									value={form.assessmentType}
-									onValueChange={(v) => updateForm({ assessmentType: v })}
-								>
-									<SelectTrigger>
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
+										<SelectItem value="all">All Types</SelectItem>
 										{ASSESSMENT_TYPES.map((t) => (
 											<SelectItem key={t.value} value={t.value}>
 												{t.label}
@@ -653,514 +981,333 @@ export function HodAssessmentsClient({
 										))}
 									</SelectContent>
 								</Select>
-							</div>
-							<div className="space-y-2">
-								<Label>Assigned Evaluator</Label>
 								<Select
-									value={form.assignedFacultyId}
-									onValueChange={(v) => updateForm({ assignedFacultyId: v })}
+									value={statusFilter}
+									onValueChange={(v) => {
+										setStatusFilter(v as StatusFilter);
+										setPage(1);
+									}}
 								>
-									<SelectTrigger>
-										<SelectValue placeholder="All Available Faculty" />
+									<SelectTrigger className="w-40">
+										<SelectValue placeholder="Status" />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="none">All Available Faculty</SelectItem>
-										{facultyList.map((f) => (
-											<SelectItem key={f.id} value={f.id}>
-												{f.firstName} {f.lastName}
-											</SelectItem>
-										))}
+										<SelectItem value="all">All Status</SelectItem>
+										<SelectItem value="published">Published</SelectItem>
+										<SelectItem value="draft">Draft</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
-						</div>
+						</CardContent>
+					</Card>
 
-						{/* Row 3: Deadline, Publish At, Max Marks, Total Marks */}
-						<div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-							<div className="space-y-2">
-								<Label htmlFor="form-deadline">Deadline</Label>
-								<Input
-									id="form-deadline"
-									type="datetime-local"
-									value={form.deadline}
-									onChange={(e) => updateForm({ deadline: e.target.value })}
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor="form-publishAt">Publish Date</Label>
-								<Input
-									id="form-publishAt"
-									type="datetime-local"
-									value={form.publishAt}
-									onChange={(e) => updateForm({ publishAt: e.target.value })}
-								/>
-								<p className="text-xs text-muted-foreground">
-									Schedule when to publish
-								</p>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor="form-maxMarks">Max Marks</Label>
-								<Input
-									id="form-maxMarks"
-									type="number"
-									min={0}
-									value={form.maxMarks}
-									onChange={(e) => updateForm({ maxMarks: e.target.value })}
-									placeholder="100"
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor="form-totalMarks">Total Marks</Label>
-								<Input
-									id="form-totalMarks"
-									type="number"
-									min={0}
-									step="0.1"
-									value={form.totalMarks}
-									onChange={(e) => updateForm({ totalMarks: e.target.value })}
-									placeholder="200"
-								/>
-							</div>
-						</div>
+					{/* ======================== TABLE ======================== */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg">
+								Assessments ({filtered.length})
+							</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{filtered.length === 0 ?
+								<div className="text-center py-12 text-muted-foreground">
+									<FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+									<p className="text-lg font-medium">No assessments found</p>
+									<p className="text-sm mt-1">
+										Create your first assessment to get started
+									</p>
+								</div>
+							:	<>
+									<div className="rounded-md border overflow-x-auto">
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead className="min-w-50">Title</TableHead>
+													<TableHead>Type</TableHead>
+													<TableHead>Batch</TableHead>
+													<TableHead>Semester</TableHead>
+													<TableHead>Deadline</TableHead>
+													<TableHead className="text-center">
+														Submissions
+													</TableHead>
+													<TableHead className="text-center">Status</TableHead>
+													<TableHead className="text-right">Actions</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{paginated.map((a) => {
+													const submittedCount = a.submissions.filter(
+														(s) => s.status !== "DRAFT",
+													).length;
+													const evaluatedCount = a.submissions.filter(
+														(s) => s.status === "SIGNED",
+													).length;
+													const isBeingEdited = editingId === a.id;
 
-						{/* Row 4: Description (Markdown) */}
-						<div className="space-y-2">
-							<Label>Instructions / Description (Markdown)</Label>
-							<MarkdownEditor
-								value={form.description}
-								onChange={(v) => updateForm({ description: v })}
-								placeholder="Write instructions, topics, format, grading criteria..."
-								minRows={6}
-							/>
-						</div>
-
-						{/* Row 5: Resource Links */}
-						<div className="space-y-2">
-							<Label htmlFor="form-links">
-								Resource Links{" "}
-								<span className="text-xs text-muted-foreground">
-									(one per line)
-								</span>
-							</Label>
-							<Textarea
-								id="form-links"
-								value={form.resourceLinks}
-								onChange={(e) => updateForm({ resourceLinks: e.target.value })}
-								placeholder={
-									"https://example.com/study-material\nhttps://example.com/reference"
-								}
-								rows={3}
-							/>
-						</div>
-
-						{/* Row 5 B: Cloudinary Attachments */}
-						<div className="space-y-2 pt-2 border-t">
-							<Label>Attachments (PDFs, Images, Docs)</Label>
-							<CloudinaryUpload
-								maxFiles={5}
-								accept=".jpg,.jpeg,.png,.pdf,.docx,.doc"
-								value={form.attachments}
-								onChange={(urls) => updateForm({ attachments: urls })}
-							/>
-							<p className="text-xs text-muted-foreground mt-1">
-								Upload resources that students can download.
-							</p>
-						</div>
-
-						{/* Row 5 C: Assignees */}
-						<div className="space-y-2 border-t pt-4 pb-2">
-							<Label>Assign To Details (Specific Students)</Label>
-							<div className="border rounded-md p-2 bg-background">
-								<ScrollArea className="h-40">
-									{form.batchId ? (
-										<div className="space-y-2 p-1">
-											{students.filter(s => s.batchId === form.batchId && (form.semester === "all" || s.currentSemester === parseInt(form.semester))).length === 0 ? (
-												<p className="text-sm text-muted-foreground py-2">No students found.</p>
-											) : (
-												students.filter(s => s.batchId === form.batchId && (form.semester === "all" || s.currentSemester === parseInt(form.semester))).map(student => (
-													<div key={student.id} className="flex items-center space-x-2">
-														<Checkbox id={`student-${student.id}`} 
-															checked={form.assignedStudentIds.includes(student.id)}
-															onCheckedChange={(checked) => {
-																if (checked === true) {
-																	updateForm({ assignedStudentIds: [...form.assignedStudentIds, student.id] });
-																} else {
-																	updateForm({ assignedStudentIds: form.assignedStudentIds.filter(id => id !== student.id) });
-																}
-															}}
-														/>
-														<label htmlFor={`student-${student.id}`} className="text-sm font-medium leading-none cursor-pointer">
-															{student.firstName} {student.lastName}
-														</label>
-													</div>
-												))
-											)}
-										</div>
-									) : (
-										<p className="text-sm text-muted-foreground p-2">Select a batch first.</p>
-									)}
-								</ScrollArea>
-							</div>
-							<p className="text-xs text-muted-foreground mt-1">Leave all unchecked to assign to the entire batch/semester.</p>
-						</div>
-
-						{/* Row 6: Publish toggle + Save */}
-						<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2 border-t">
-							<div className="flex items-center gap-3">
-								<Switch
-									id="form-published"
-									checked={form.isPublished}
-									onCheckedChange={(v) => updateForm({ isPublished: v })}
-								/>
-								<Label htmlFor="form-published" className="cursor-pointer">
-									{form.isPublished ?
-										"Published — visible to students"
-									:	"Draft — not visible to students"}
-								</Label>
-							</div>
-							<div className="flex gap-2">
-								<Button
-									variant="outline"
-									onClick={cancelForm}
-									disabled={isPending}
-								>
-									Cancel
-								</Button>
-								<Button onClick={handleSave} disabled={isPending}>
-									{isPending ?
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									:	<Save className="mr-2 h-4 w-4" />}
-									{editingId ? "Update Assessment" : "Create Assessment"}
-								</Button>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
-			)}
-
-			{/* Filters */}
-			<Card>
-				<CardContent className="pt-4 pb-4">
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="relative flex-1">
-							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-							<Input
-								placeholder="Search assessments..."
-								value={searchQuery}
-								onChange={(e) => {
-									setSearchQuery(e.target.value);
-									setPage(1);
-								}}
-								className="pl-10"
-							/>
-						</div>
-						<Select
-							value={batchFilter}
-							onValueChange={(v) => {
-								setBatchFilter(v);
-								setPage(1);
-							}}
-						>
-							<SelectTrigger className="w-45">
-								<SelectValue placeholder="Batch" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Batches</SelectItem>
-								{batches.map((b) => (
-									<SelectItem key={b.id} value={b.id}>
-										{b.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Select
-							value={typeFilter}
-							onValueChange={(v) => {
-								setTypeFilter(v);
-								setPage(1);
-							}}
-						>
-							<SelectTrigger className="w-40">
-								<SelectValue placeholder="Type" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Types</SelectItem>
-								{ASSESSMENT_TYPES.map((t) => (
-									<SelectItem key={t.value} value={t.value}>
-										{t.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Select
-							value={statusFilter}
-							onValueChange={(v) => {
-								setStatusFilter(v as StatusFilter);
-								setPage(1);
-							}}
-						>
-							<SelectTrigger className="w-40">
-								<SelectValue placeholder="Status" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
-								<SelectItem value="published">Published</SelectItem>
-								<SelectItem value="draft">Draft</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-				</CardContent>
-			</Card>
-
-			{/* ======================== TABLE ======================== */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-lg">
-						Assessments ({filtered.length})
-					</CardTitle>
-				</CardHeader>
-				<CardContent>
-					{filtered.length === 0 ?
-						<div className="text-center py-12 text-muted-foreground">
-							<FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-							<p className="text-lg font-medium">No assessments found</p>
-							<p className="text-sm mt-1">
-								Create your first assessment to get started
-							</p>
-						</div>
-					:	<>
-							<div className="rounded-md border overflow-x-auto">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead className="min-w-50">Title</TableHead>
-											<TableHead>Type</TableHead>
-											<TableHead>Batch</TableHead>
-											<TableHead>Semester</TableHead>
-											<TableHead>Deadline</TableHead>
-											<TableHead className="text-center">Submissions</TableHead>
-											<TableHead className="text-center">Status</TableHead>
-											<TableHead className="text-right">Actions</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{paginated.map((a) => {
-											const submittedCount = a.submissions.filter(
-												(s) => s.status !== "DRAFT",
-											).length;
-											const evaluatedCount = a.submissions.filter(
-												(s) => s.status === "SIGNED",
-											).length;
-											const isBeingEdited = editingId === a.id;
-
-											return (
-												<TableRow
-													key={a.id}
-													className={
-														isBeingEdited ?
-															"bg-blue-50/50 ring-1 ring-blue-200"
-														:	""
-													}
-												>
-													<TableCell>
-														<button
-															onClick={() => setDetailAssessment(a)}
-															className="text-left hover:text-hospital-primary font-medium transition-colors"
+													return (
+														<TableRow
+															key={a.id}
+															className={
+																isBeingEdited ?
+																	"bg-blue-50/50 ring-1 ring-blue-200"
+																:	""
+															}
 														>
-															{a.title}
-														</button>
+															<TableCell>
+																<button
+																	onClick={() => setDetailAssessment(a)}
+																	className="text-left hover:text-hospital-primary font-medium transition-colors"
+																>
+																	{a.title}
+																</button>
+															</TableCell>
+															<TableCell>
+																<Badge variant="outline" className="text-xs">
+																	{ASSESSMENT_TYPES.find(
+																		(t) => t.value === a.assessmentType,
+																	)?.label ?? a.assessmentType}
+																</Badge>
+															</TableCell>
+															<TableCell className="text-sm">
+																{a.batch.name}
+															</TableCell>
+															<TableCell className="text-sm">
+																{a.semester ? `Sem ${a.semester}` : "All"}
+															</TableCell>
+															<TableCell className="text-sm">
+																{a.deadline ?
+																	format(new Date(a.deadline), "dd MMM yyyy")
+																:	"—"}
+															</TableCell>
+															<TableCell className="text-center">
+																<span className="text-sm font-medium">
+																	{submittedCount}
+																</span>
+																{evaluatedCount > 0 && (
+																	<span className="text-xs text-green-600 ml-1">
+																		({evaluatedCount} graded)
+																	</span>
+																)}
+															</TableCell>
+															<TableCell className="text-center">
+																{a.isPublished ?
+																	<Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+																		Published
+																	</Badge>
+																:	<Badge variant="secondary" className="text-xs">
+																		Draft
+																	</Badge>
+																}
+															</TableCell>
+															<TableCell className="text-right">
+																<div className="flex justify-end gap-1">
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => setDetailAssessment(a)}
+																		title="View Details"
+																	>
+																		<Eye className="h-4 w-4" />
+																	</Button>
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => openEdit(a)}
+																		title="Edit"
+																	>
+																		<Edit className="h-4 w-4" />
+																	</Button>
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => handleTogglePublish(a.id)}
+																		disabled={isPending}
+																		title={
+																			a.isPublished ? "Unpublish" : "Publish"
+																		}
+																	>
+																		<Globe className="h-4 w-4" />
+																	</Button>
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		onClick={() => handleDelete(a.id)}
+																		disabled={isPending}
+																		title="Delete"
+																		className="text-red-500 hover:text-red-700"
+																	>
+																		<Trash2 className="h-4 w-4" />
+																	</Button>
+																</div>
+															</TableCell>
+														</TableRow>
+													);
+												})}
+											</TableBody>
+										</Table>
+									</div>
+
+									{totalPages > 1 && (
+										<div className="flex items-center justify-between mt-4">
+											<p className="text-sm text-muted-foreground">
+												Showing {(page - 1) * PAGE_SIZE + 1}–
+												{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
+												{filtered.length}
+											</p>
+											<div className="flex gap-2">
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() => setPage((p) => Math.max(1, p - 1))}
+													disabled={page === 1}
+												>
+													<ChevronLeft className="h-4 w-4" />
+												</Button>
+												<span className="flex items-center px-3 text-sm">
+													{page} / {totalPages}
+												</span>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() =>
+														setPage((p) => Math.min(totalPages, p + 1))
+													}
+													disabled={page === totalPages}
+												>
+													<ChevronRight className="h-4 w-4" />
+												</Button>
+											</div>
+										</div>
+									)}
+								</>
+							}
+						</CardContent>
+					</Card>
+				</TabsContent>
+
+				{/* ======================== PENDING EVALUATIONS TAB ======================== */}
+				<TabsContent
+					value="evaluations"
+					className="focus-visible:outline-none focus:outline-none mt-6"
+				>
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg">Pending Submissions</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{pendingEvaluations.length === 0 ?
+								<div className="text-center py-12 text-muted-foreground">
+									<CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30 text-green-500" />
+									<p className="text-lg font-medium">All caught up!</p>
+									<p className="text-sm mt-1">
+										There are no pending submissions requiring your review.
+									</p>
+								</div>
+							:	<div className="rounded-md border overflow-x-auto">
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead>Student</TableHead>
+												<TableHead>Assessment Title</TableHead>
+												<TableHead>Date Submitted</TableHead>
+												<TableHead>Assigned Status</TableHead>
+												<TableHead className="text-right">Actions</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{pendingEvaluations.map((evalItem) => (
+												<TableRow key={evalItem.submission.id}>
+													<TableCell className="font-medium">
+														{evalItem.submission.student.firstName}{" "}
+														{evalItem.submission.student.lastName}
 													</TableCell>
 													<TableCell>
-														<Badge variant="outline" className="text-xs">
-															{ASSESSMENT_TYPES.find(
-																(t) => t.value === a.assessmentType,
-															)?.label ?? a.assessmentType}
-														</Badge>
+														<span className="text-hospital-secondary text-sm font-medium">
+															{evalItem.assessmentTitle}
+														</span>
 													</TableCell>
 													<TableCell className="text-sm">
-														{a.batch.name}
-													</TableCell>
-													<TableCell className="text-sm">
-														{a.semester ? `Sem ${a.semester}` : "All"}
-													</TableCell>
-													<TableCell className="text-sm">
-														{a.deadline ?
-															format(new Date(a.deadline), "dd MMM yyyy")
+														{evalItem.assessmentDeadline ?
+															format(
+																new Date(
+																	evalItem.submission.submittedAt ||
+																		evalItem.submission.updatedAt ||
+																		new Date(),
+																),
+																"dd MMM yyyy",
+															)
 														:	"—"}
 													</TableCell>
-													<TableCell className="text-center">
-														<span className="text-sm font-medium">
-															{submittedCount}
-														</span>
-														{evaluatedCount > 0 && (
-															<span className="text-xs text-green-600 ml-1">
-																({evaluatedCount} graded)
-															</span>
-														)}
-													</TableCell>
-													<TableCell className="text-center">
-														{a.isPublished ?
-															<Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
-																Published
-															</Badge>
-														:	<Badge variant="secondary" className="text-xs">
-																Draft
-															</Badge>
+													<TableCell>
+														{(
+															evalItem.submission.status === "SIGNED" &&
+															evalItem.submission.evaluation?.evaluatedBy
+														) ?
+															<div className="flex flex-col gap-1">
+																<StatusBadge
+																	status={
+																		evalItem.submission.status as EntryStatus
+																	}
+																	size="sm"
+																/>
+																<span className="text-xs text-muted-foreground">
+																	Evaluated by:{" "}
+																	{
+																		evalItem.submission.evaluation.evaluatedBy
+																			.firstName
+																	}{" "}
+																	{
+																		evalItem.submission.evaluation.evaluatedBy
+																			.lastName
+																	}
+																</span>
+															</div>
+														:	<StatusBadge
+																status={
+																	evalItem.submission.status as EntryStatus
+																}
+																size="sm"
+															/>
 														}
 													</TableCell>
 													<TableCell className="text-right">
-														<div className="flex justify-end gap-1">
+														<div className="flex justify-end gap-2">
 															<Button
-																variant="ghost"
-																size="icon"
-																onClick={() => setDetailAssessment(a)}
-																title="View Details"
+																size="sm"
+																variant="default"
+																className="bg-hospital-primary hover:bg-hospital-primary/90"
+																onClick={() => {
+																	setDetailAssessment(
+																		assessments.find(
+																			(a) => a.id === evalItem.assessmentId,
+																		) || null,
+																	);
+																	setEvaluatingSubmission(evalItem.submission);
+																	setEvalMarks(
+																		evalItem.submission.evaluation?.marks?.toString() ??
+																			"",
+																	);
+																	setEvalGrade(
+																		evalItem.submission.evaluation?.grade ?? "",
+																	);
+																	setEvalFeedback("");
+																}}
 															>
-																<Eye className="h-4 w-4" />
-															</Button>
-															<Button
-																variant="ghost"
-																size="icon"
-																onClick={() => openEdit(a)}
-																title="Edit"
-															>
-																<Edit className="h-4 w-4" />
-															</Button>
-															<Button
-																variant="ghost"
-																size="icon"
-																onClick={() => handleTogglePublish(a.id)}
-																disabled={isPending}
-																title={a.isPublished ? "Unpublish" : "Publish"}
-															>
-																<Globe className="h-4 w-4" />
-															</Button>
-															<Button
-																variant="ghost"
-																size="icon"
-																onClick={() => handleDelete(a.id)}
-																disabled={isPending}
-																title="Delete"
-																className="text-red-500 hover:text-red-700"
-															>
-																<Trash2 className="h-4 w-4" />
+																<CheckCircle2 className="mr-2 h-4 w-4" />
+																Evaluate
 															</Button>
 														</div>
 													</TableCell>
 												</TableRow>
-											);
-										})}
-									</TableBody>
-								</Table>
-							</div>
-
-							{totalPages > 1 && (
-								<div className="flex items-center justify-between mt-4">
-									<p className="text-sm text-muted-foreground">
-										Showing {(page - 1) * PAGE_SIZE + 1}–
-										{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
-										{filtered.length}
-									</p>
-									<div className="flex gap-2">
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() => setPage((p) => Math.max(1, p - 1))}
-											disabled={page === 1}
-										>
-											<ChevronLeft className="h-4 w-4" />
-										</Button>
-										<span className="flex items-center px-3 text-sm">
-											{page} / {totalPages}
-										</span>
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() =>
-												setPage((p) => Math.min(totalPages, p + 1))
-											}
-											disabled={page === totalPages}
-										>
-											<ChevronRight className="h-4 w-4" />
-										</Button>
-									</div>
+											))}
+										</TableBody>
+									</Table>
 								</div>
-							)}
-						</>
-					}
-				</CardContent>
-			</Card>
-			</TabsContent>
-
-			{/* ======================== PENDING EVALUATIONS TAB ======================== */}
-			<TabsContent value="evaluations" className="focus-visible:outline-none focus:outline-none mt-6">
-				<Card>
-					<CardHeader>
-						<CardTitle className="text-lg">Pending Submissions</CardTitle>
-					</CardHeader>
-					<CardContent>
-						{pendingEvaluations.length === 0 ? (
-							<div className="text-center py-12 text-muted-foreground">
-								<CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30 text-green-500" />
-								<p className="text-lg font-medium">All caught up!</p>
-								<p className="text-sm mt-1">There are no pending submissions requiring your review.</p>
-							</div>
-						) : (
-							<div className="rounded-md border overflow-x-auto">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>Student</TableHead>
-											<TableHead>Assessment Title</TableHead>
-											<TableHead>Date Submitted</TableHead>
-											<TableHead>Assigned Status</TableHead>
-											<TableHead className="text-right">Actions</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{pendingEvaluations.map((evalItem) => (
-											<TableRow key={evalItem.submission.id}>
-												<TableCell className="font-medium">
-													{evalItem.submission.student.firstName} {evalItem.submission.student.lastName}
-												</TableCell>
-												<TableCell>
-													<span className="text-hospital-secondary text-sm font-medium">{evalItem.assessmentTitle}</span>
-												</TableCell>
-												<TableCell className="text-sm">
-													{evalItem.assessmentDeadline ? format(new Date(evalItem.submission.submittedAt || evalItem.submission.updatedAt || new Date()), "dd MMM yyyy") : "—"}
-												</TableCell>
-												<TableCell>
-													<StatusBadge status={evalItem.submission.status as EntryStatus} size="sm" />
-												</TableCell>
-												<TableCell className="text-right">
-													<div className="flex justify-end gap-2">
-														<Button
-															size="sm"
-															variant="default"
-															className="bg-hospital-primary hover:bg-hospital-primary/90"
-															onClick={() => {
-																setDetailAssessment(assessments.find(a => a.id === evalItem.assessmentId) || null);
-																setEvaluatingSubmission(evalItem.submission);
-																setEvalMarks(evalItem.submission.evaluation?.marks?.toString() ?? "");
-																setEvalGrade(evalItem.submission.evaluation?.grade ?? "");
-																setEvalFeedback("");
-															}}
-														>
-															<CheckCircle2 className="mr-2 h-4 w-4" />
-															Evaluate
-														</Button>
-													</div>
-												</TableCell>
-											</TableRow>
-										))}
-									</TableBody>
-								</Table>
-							</div>
-						)}
-					</CardContent>
-				</Card>
-			</TabsContent>
-		</Tabs>
+							}
+						</CardContent>
+					</Card>
+				</TabsContent>
+			</Tabs>
 			{/* ======================== DETAIL SHEET ======================== */}
 			<Sheet
 				open={!!detailAssessment}
@@ -1256,27 +1403,30 @@ export function HodAssessmentsClient({
 								)}
 
 								{/* Attachments */}
-								{detailAssessment.attachments && detailAssessment.attachments.length > 0 && (
-									<div>
-										<p className="text-sm font-medium mb-2">
-											Attachments ({detailAssessment.attachments.length})
-										</p>
-										<div className="space-y-2">
-											{detailAssessment.attachments.map((link, i) => (
-												<a
-													key={i}
-													href={getExternalUrl(link)}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background flex-wrap break-all"
-												>
-													<ExternalLink className="h-3 w-3 shrink-0" />
-													<span className="truncate">View Attachment {i + 1}</span>
-												</a>
-											))}
+								{detailAssessment.attachments &&
+									detailAssessment.attachments.length > 0 && (
+										<div>
+											<p className="text-sm font-medium mb-2">
+												Attachments ({detailAssessment.attachments.length})
+											</p>
+											<div className="space-y-2">
+												{detailAssessment.attachments.map((link, i) => (
+													<a
+														key={i}
+														href={getExternalUrl(link)}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background flex-wrap break-all"
+													>
+														<ExternalLink className="h-3 w-3 shrink-0" />
+														<span className="truncate">
+															View Attachment {i + 1}
+														</span>
+													</a>
+												))}
+											</div>
 										</div>
-									</div>
-								)}
+									)}
 
 								{/* Submissions */}
 								<div>
@@ -1346,10 +1496,25 @@ export function HodAssessmentsClient({
 																	{sub.student.firstName} {sub.student.lastName}
 																</TableCell>
 																<TableCell>
-																	<StatusBadge
-																		status={sub.status as EntryStatus}
-																		size="sm"
-																	/>
+																	{(
+																		sub.status === "SIGNED" &&
+																		sub.evaluation?.evaluatedBy
+																	) ?
+																		<div className="text-xs">
+																			<div className="font-medium text-green-600">
+																				Evaluated
+																			</div>
+																			<div className="text-muted-foreground">
+																				by{" "}
+																				{sub.evaluation.evaluatedBy.firstName}{" "}
+																				{sub.evaluation.evaluatedBy.lastName}
+																			</div>
+																		</div>
+																	:	<StatusBadge
+																			status={sub.status as EntryStatus}
+																			size="sm"
+																		/>
+																	}
 																</TableCell>
 																<TableCell className="text-center">
 																	{sub.evaluation?.marks ?? "—"}
@@ -1401,15 +1566,9 @@ export function HodAssessmentsClient({
 																				size="sm"
 																				variant="ghost"
 																				onClick={() => {
-																					setEvaluatingSubmission(sub);
-																					setEvalMarks(
-																						sub.evaluation?.marks?.toString() ??
-																							"",
-																					);
-																					setEvalGrade(
-																						sub.evaluation?.grade ?? "",
-																					);
-																					setEvalFeedback("");
+																					// Show marks locked confirmation dialog
+																					setSubmissionAwaitingConfirm(sub);
+																					setShowMarksLockedConfirm(true);
 																				}}
 																			>
 																				<Edit className="mr-1 h-3 w-3" />
@@ -1431,6 +1590,60 @@ export function HodAssessmentsClient({
 					)}
 				</SheetContent>
 			</Sheet>
+
+			{/* ======================== MARKS LOCKED CONFIRMATION DIALOG ======================== */}
+			<Dialog
+				open={showMarksLockedConfirm}
+				onOpenChange={setShowMarksLockedConfirm}
+			>
+				<DialogContent className="max-w-sm">
+					<DialogHeader>
+						<DialogTitle>Marks are Locked</DialogTitle>
+						<DialogDescription>
+							This submission has already been evaluated and the marks are
+							locked.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
+						<p className="text-sm text-muted-foreground">
+							Are you sure you want to edit the evaluation? This will update the
+							marks and feedback for this submission.
+						</p>
+					</div>
+					<DialogFooter>
+						<Button
+							variant="outline"
+							onClick={() => {
+								setShowMarksLockedConfirm(false);
+								setSubmissionAwaitingConfirm(null);
+							}}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={() => {
+								if (submissionAwaitingConfirm) {
+									setEvaluatingSubmission(submissionAwaitingConfirm);
+									setEvalMarks(
+										submissionAwaitingConfirm.evaluation?.marks?.toString() ??
+											"",
+									);
+									setEvalGrade(
+										submissionAwaitingConfirm.evaluation?.grade ?? "",
+									);
+									setEvalFeedback(
+										submissionAwaitingConfirm.evaluation?.feedback ?? "",
+									);
+								}
+								setShowMarksLockedConfirm(false);
+								setSubmissionAwaitingConfirm(null);
+							}}
+						>
+							Continue Anyway
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 			{/* ======================== EVALUATE DIALOG ======================== */}
 			<Dialog
@@ -1456,35 +1669,43 @@ export function HodAssessmentsClient({
 						{evaluatingSubmission && (
 							<div className="rounded-md border p-3 bg-muted/20">
 								<p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-									Student's Submission
+									Student&apos;s Submission
 								</p>
 								<div className="prose prose-sm max-w-none text-sm mb-3">
-									{evaluatingSubmission.content ? 
-										<div dangerouslySetInnerHTML={{ __html: renderMarkdown(evaluatingSubmission.content) }} />
-									: <p className="text-muted-foreground italic">No written content provided.</p>}
-								</div>
-								
-								{evaluatingSubmission.attachments && evaluatingSubmission.attachments.length > 0 && (
-									<div>
-										<p className="text-xs font-semibold text-muted-foreground uppercase mb-1">
-											Attachments ({evaluatingSubmission.attachments.length})
+									{evaluatingSubmission.content ?
+										<div
+											dangerouslySetInnerHTML={{
+												__html: renderMarkdown(evaluatingSubmission.content),
+											}}
+										/>
+									:	<p className="text-muted-foreground italic">
+											No written content provided.
 										</p>
-										<div className="space-y-1">
-											{evaluatingSubmission.attachments.map((link, i) => (
-												<a
-													key={i}
-													href={getExternalUrl(link)}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background border rounded px-2 py-1 inline-flex w-fit"
-												>
-													<ExternalLink className="h-3 w-3" />
-													View Attachment {i + 1}
-												</a>
-											))}
+									}
+								</div>
+
+								{evaluatingSubmission.attachments &&
+									evaluatingSubmission.attachments.length > 0 && (
+										<div>
+											<p className="text-xs font-semibold text-muted-foreground uppercase mb-1">
+												Attachments ({evaluatingSubmission.attachments.length})
+											</p>
+											<div className="space-y-1">
+												{evaluatingSubmission.attachments.map((link, i) => (
+													<a
+														key={i}
+														href={getExternalUrl(link)}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="inline-flex items-center gap-2 text-sm text-hospital-primary hover:underline bg-background border rounded px-2 py-1 w-fit"
+													>
+														<ExternalLink className="h-3 w-3" />
+														View Attachment {i + 1}
+													</a>
+												))}
+											</div>
 										</div>
-									</div>
-								)}
+									)}
 							</div>
 						)}
 

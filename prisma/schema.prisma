@@ -1,10 +1,3 @@
-// =============================================================================
-// AIIMS Patna PG Residency Digital Logbook — Prisma Schema
-// =============================================================================
-// Reference: roadmap.md Section 5
-// Every model maps to a physical logbook section from PG Logbook .md
-// =============================================================================
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -14,73 +7,854 @@ datasource db {
   provider = "postgresql"
 }
 
-// ======================== USER & AUTH ========================
-
 model User {
-  id              String     @id @default(cuid())
-  clerkId         String     @unique
-  email           String     @unique
-  firstName       String
-  lastName        String
-  role            Role       @default(STUDENT)
-  status          UserStatus @default(ACTIVE)
-  bannedUntil     DateTime?  // null = permanent ban (if BANNED), or temp ban end date
-  banReason       String?
-  batch           String?    // e.g., "July 2022"
-  batchId         String?
-  batchRelation   Batch?     @relation(fields: [batchId], references: [id])
-  currentSemester Int?       @default(1)
-  department      String?    @default("Emergency Medicine") // legacy text field
-  departmentId    String?    // FK to Department model
-  departmentRelation Department? @relation(fields: [departmentId], references: [id])
-  profileImage    String?
-  notificationsLastSeenAt DateTime? // tracks when user last opened notification popover
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-
-  // Relations
-  rotationPostings          RotationPosting[]
-  attendanceSheets          AttendanceSheet[]
-  casePresentations         CasePresentation[]
-  seminars                  Seminar[]
-  journalClubs              JournalClub[]
-  clinicalSkillsAdult       ClinicalSkillAdult[]
-  clinicalSkillsPediatric   ClinicalSkillPediatric[]
-  caseManagementLogs        CaseManagementLog[]
-  procedureLogs             ProcedureLog[]
-  diagnosticSkills          DiagnosticSkill[]
-  imagingLogs               ImagingLog[]
-  coursesAttended           CourseAttended[]
-  conferenceParticipation   ConferenceParticipation[]
-  researchActivities        ResearchActivity[]
-  disasterDrills            DisasterDrill[]
-  qualityImprovement        QualityImprovement[]
-  logbookFacultyReviews     LogbookFacultyReview[]
-  evaluations               ResidentEvaluation[]
-  thesis                    Thesis?
-  transportLogs             TransportLog[]
-  consentLogs               ConsentLog[]
-  badNewsLogs               BadNewsLog[]
-  trainingMentoringRecords  TrainingMentoringRecord[]
-
-  // Faculty relations
-  assignedStudents FacultyStudentAssignment[] @relation("FacultyAssignments")
-  assignedFaculty  FacultyStudentAssignment[] @relation("StudentAssignments")
-  signedEntries    DigitalSignature[]
-  facultyBatchAssignments FacultyBatchAssignment[] @relation("FacultyBatchAssignments")
-
-  // Assessment relations
-  assessmentsCreated      InternalAssessment[]      @relation("AssessmentsCreated")
-  assessmentSubmissions   AssessmentSubmission[]     @relation("AssessmentSubmissions")
-  assessmentEvaluations   AssessmentEvaluation[]     @relation("AssessmentEvaluations")
-  assignedFacultyAssessments InternalAssessment[]    @relation("AssessmentAssignedFaculty")
-  specificAssessments     InternalAssessment[]      @relation("AssessmentAssignedSpecificStudents")
+  id                         String                     @id @default(cuid())
+  clerkId                    String                     @unique
+  email                      String                     @unique
+  firstName                  String
+  lastName                   String
+  role                       Role                       @default(STUDENT)
+  batch                      String?
+  currentSemester            Int?                       @default(1)
+  department                 String?                    @default("Emergency Medicine")
+  profileImage               String?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  banReason                  String?
+  bannedUntil                DateTime?
+  batchId                    String?
+  status                     UserStatus                 @default(ACTIVE)
+  notificationsLastSeenAt    DateTime?
+  departmentId               String?
+  assessmentEvaluations      AssessmentEvaluation[]     @relation("AssessmentEvaluations")
+  assessmentSubmissions      AssessmentSubmission[]     @relation("AssessmentSubmissions")
+  attendanceSheets           AttendanceSheet[]
+  badNewsLogs                BadNewsLog[]
+  caseManagementLogs         CaseManagementLog[]
+  casePresentations          CasePresentation[]
+  clinicalSkillsAdult        ClinicalSkillAdult[]
+  clinicalSkillsPediatric    ClinicalSkillPediatric[]
+  conferenceParticipation    ConferenceParticipation[]
+  consentLogs                ConsentLog[]
+  coursesAttended            CourseAttended[]
+  diagnosticSkills           DiagnosticSkill[]
+  signedEntries              DigitalSignature[]
+  disasterDrills             DisasterDrill[]
+  facultyBatchAssignments    FacultyBatchAssignment[]   @relation("FacultyBatchAssignments")
+  assignedStudents           FacultyStudentAssignment[] @relation("FacultyAssignments")
+  assignedFaculty            FacultyStudentAssignment[] @relation("StudentAssignments")
+  imagingLogs                ImagingLog[]
+  assignedFacultyAssessments InternalAssessment[]       @relation("AssessmentAssignedFaculty")
+  assessmentsCreated         InternalAssessment[]       @relation("AssessmentsCreated")
+  journalClubs               JournalClub[]
+  logbookFacultyReviews      LogbookFacultyReview[]
+  procedureLogs              ProcedureLog[]
+  qualityImprovement         QualityImprovement[]
+  researchActivities         ResearchActivity[]
+  evaluations                ResidentEvaluation[]
+  rotationPostings           RotationPosting[]
+  seminars                   Seminar[]
+  thesis                     Thesis?
+  trainingMentoringRecords   TrainingMentoringRecord[]
+  transportLogs              TransportLog[]
+  batchRelation              Batch?                     @relation(fields: [batchId], references: [id])
+  departmentRelation         Department?                @relation(fields: [departmentId], references: [id])
+  specificAssessments        InternalAssessment[]       @relation("AssessmentAssignedSpecificStudents")
 
   @@index([clerkId])
   @@index([role])
   @@index([status])
   @@index([batchId])
   @@index([departmentId])
+}
+
+model Batch {
+  id                 String                   @id @default(cuid())
+  name               String                   @unique
+  currentSemester    Int                      @default(1)
+  startDate          DateTime
+  endDate            DateTime?
+  isActive           Boolean                  @default(true)
+  description        String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  attendanceConfig   AttendanceConfig?
+  attendanceHolidays AttendanceHoliday[]
+  departmentBatches  DepartmentBatch[]
+  facultyAssignments FacultyBatchAssignment[]
+  assessments        InternalAssessment[]
+  students           User[]
+
+  @@index([isActive])
+}
+
+model FacultyBatchAssignment {
+  id        String   @id @default(cuid())
+  facultyId String
+  batchId   String
+  createdAt DateTime @default(now())
+  batch     Batch    @relation(fields: [batchId], references: [id])
+  faculty   User     @relation("FacultyBatchAssignments", fields: [facultyId], references: [id])
+
+  @@unique([facultyId, batchId])
+  @@index([facultyId])
+  @@index([batchId])
+}
+
+model FacultyStudentAssignment {
+  id        String   @id @default(cuid())
+  facultyId String
+  studentId String
+  semester  Int
+  createdAt DateTime @default(now())
+  faculty   User     @relation("FacultyAssignments", fields: [facultyId], references: [id])
+  student   User     @relation("StudentAssignments", fields: [studentId], references: [id])
+
+  @@unique([facultyId, studentId, semester])
+  @@index([facultyId])
+  @@index([studentId])
+}
+
+model DigitalSignature {
+  id         String   @id @default(cuid())
+  signedById String
+  entityType String
+  entityId   String
+  remark     String?
+  signedAt   DateTime @default(now())
+  signedBy   User     @relation(fields: [signedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([signedById])
+}
+
+model HodAutoReviewSetting {
+  id          String   @id @default(cuid())
+  category    String   @unique
+  enabled     Boolean  @default(false)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RotationPosting {
+  id            String      @id @default(cuid())
+  userId        String
+  slNo          Int
+  rotationName  String
+  isElective    Boolean     @default(false)
+  startDate     DateTime?
+  endDate       DateTime?
+  totalDuration String?
+  status        EntryStatus @default(DRAFT)
+  facultyRemark String?
+  attachments   String[]    @default([])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  durationDays  Int?
+  facultyId     String?
+  user          User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([facultyId])
+  @@index([status])
+}
+
+model Thesis {
+  id              String                 @id @default(cuid())
+  userId          String                 @unique
+  topic           String?
+  chiefGuide      String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  facultyRemark   String?
+  status          EntryStatus            @default(DRAFT)
+  user            User                   @relation(fields: [userId], references: [id])
+  semesterRecords ThesisSemesterRecord[]
+}
+
+model ThesisSemesterRecord {
+  id            String      @id @default(cuid())
+  thesisId      String
+  semester      Int
+  srJrMember    String?
+  srMember      String?
+  facultyMember String?
+  createdAt     DateTime    @default(now())
+  facultyRemark String?
+  status        EntryStatus @default(DRAFT)
+  updatedAt     DateTime    @updatedAt
+  thesis        Thesis      @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+
+  @@index([thesisId])
+  @@index([status])
+}
+
+model AttendanceConfig {
+  id                      String   @id @default(cuid())
+  batchId                 String   @unique
+  batchStartDate          DateTime
+  batchEndDate            DateTime
+  classStartTime          String
+  classEndTime            String
+  locationEnabled         Boolean  @default(false)
+  locationLatitude        Float?
+  locationLongitude       Float?
+  locationRadiusMeters    Int?     @default(500)
+  weeklyOffDays           String[] @default([])
+  minimumAttendancePct    Float    @default(75.0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  faceRecognitionEnabled  Boolean  @default(false)
+  manualAttendanceEnabled Boolean  @default(true)
+  batch                   Batch    @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+}
+
+model AttendanceHoliday {
+  id        String   @id @default(cuid())
+  date      DateTime
+  name      String
+  batchId   String?
+  createdAt DateTime @default(now())
+  batch     Batch?   @relation(fields: [batchId], references: [id])
+
+  @@unique([date, batchId])
+  @@index([batchId])
+  @@index([date])
+}
+
+model AttendanceSheet {
+  id               String            @id @default(cuid())
+  userId           String
+  weekStartDate    DateTime
+  weekEndDate      DateTime
+  batch            String?
+  postedDepartment String?
+  status           EntryStatus       @default(DRAFT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  facultyRemark    String?
+  entries          AttendanceEntry[]
+  user             User              @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([weekStartDate])
+}
+
+model AttendanceEntry {
+  id                String          @id @default(cuid())
+  attendanceSheetId String
+  date              DateTime?
+  day               DayOfWeek
+  presentAbsent     String?
+  hodName           String?
+  latitude          Float?
+  longitude         Float?
+  markedAt          DateTime?
+  withinLocation    Boolean?
+  createdAt         DateTime        @default(now())
+  facultyRemark     String?
+  signedAt          DateTime?
+  signedBy          String?
+  status            EntryStatus     @default(DRAFT)
+  updatedAt         DateTime        @updatedAt
+  attendanceSheet   AttendanceSheet @relation(fields: [attendanceSheetId], references: [id], onDelete: Cascade)
+
+  @@index([attendanceSheetId])
+  @@index([date])
+  @@index([status])
+}
+
+model CasePresentation {
+  id                String           @id @default(cuid())
+  userId            String
+  slNo              Int
+  date              DateTime?
+  completeDiagnosis String?
+  category          PatientCategory?
+  facultyRemark     String?
+  status            EntryStatus      @default(DRAFT)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  facultyId         String?
+  patientAge        String?
+  patientName       String?
+  patientSex        String?
+  uhid              String?
+  user              User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model Seminar {
+  id                String           @id @default(cuid())
+  userId            String
+  slNo              Int
+  date              DateTime?
+  completeDiagnosis String?
+  category          PatientCategory?
+  facultyRemark     String?
+  status            EntryStatus      @default(DRAFT)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  facultyId         String?
+  patientAge        String?
+  patientName       String?
+  patientSex        String?
+  uhid              String?
+  user              User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model JournalClub {
+  id             String      @id @default(cuid())
+  userId         String
+  slNo           Int
+  date           DateTime?
+  journalArticle String?
+  typeOfStudy    String?
+  facultyRemark  String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  facultyId      String?
+  user           User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ClinicalSkillAdult {
+  id                      String           @id @default(cuid())
+  userId                  String
+  slNo                    Int
+  skillName               String
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int              @default(0)
+  status                  EntryStatus      @default(DRAFT)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  facultyId               String?
+  facultyRemark           String?
+  user                    User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ClinicalSkillPediatric {
+  id                      String           @id @default(cuid())
+  userId                  String
+  slNo                    Int
+  skillName               String
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int              @default(0)
+  status                  EntryStatus      @default(DRAFT)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  facultyId               String?
+  facultyRemark           String?
+  user                    User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model CaseManagementLog {
+  id                String           @id @default(cuid())
+  userId            String
+  category          CaseCategory
+  slNo              Int
+  caseSubCategory   String
+  date              DateTime?
+  completeDiagnosis String?
+  competencyLevel   CompetencyLevel?
+  totalCaseTally    Int              @default(0)
+  status            EntryStatus      @default(DRAFT)
+  facultyRemark     String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  facultyId         String?
+  patientAge        Int?
+  patientName       String?
+  patientSex        String?
+  uhid              String?
+  user              User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([category])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ProcedureLog {
+  id                   String            @id @default(cuid())
+  userId               String
+  procedureCategory    ProcedureCategory
+  slNo                 Int
+  date                 DateTime?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus       @default(DRAFT)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  facultyId            String?
+  facultyRemark        String?
+  patientAge           Int?
+  patientName          String?
+  patientSex           String?
+  totalProcedureTally  Int               @default(0)
+  uhid                 String?
+  user                 User              @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([procedureCategory])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model DiagnosticSkill {
+  id                      String             @id @default(cuid())
+  userId                  String
+  diagnosticCategory      DiagnosticCategory
+  slNo                    Int
+  skillName               String
+  representativeDiagnosis String?
+  confidenceLevel         ConfidenceLevel?
+  totalTimesPerformed     Int                @default(0)
+  status                  EntryStatus        @default(DRAFT)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  facultyId               String?
+  facultyRemark           String?
+  imageUrls               String[]           @default([])
+  user                    User               @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([diagnosticCategory])
+  @@index([status])
+}
+
+model ImagingLog {
+  id                   String          @id @default(cuid())
+  userId               String
+  imagingCategory      ImagingCategory
+  slNo                 Int
+  date                 DateTime?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus     @default(DRAFT)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  facultyId            String?
+  facultyRemark        String?
+  patientAge           Int?
+  patientName          String?
+  patientSex           String?
+  totalProcedureTally  Int             @default(0)
+  uhid                 String?
+  imageUrls            String[]        @default([])
+  user                 User            @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([imagingCategory])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model TransportLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  slNo                 Int
+  date                 DateTime?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  facultyId            String?
+  facultyRemark        String?
+  patientAge           Int?
+  patientName          String?
+  patientSex           String?
+  totalProcedureTally  Int         @default(0)
+  uhid                 String?
+  user                 User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ConsentLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  slNo                 Int
+  date                 DateTime?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  facultyId            String?
+  facultyRemark        String?
+  patientAge           Int?
+  patientName          String?
+  patientSex           String?
+  totalProcedureTally  Int         @default(0)
+  uhid                 String?
+  user                 User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model BadNewsLog {
+  id                   String      @id @default(cuid())
+  userId               String
+  slNo                 Int
+  date                 DateTime?
+  completeDiagnosis    String?
+  procedureDescription String?
+  performedAtLocation  String?
+  skillLevel           SkillLevel?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  facultyId            String?
+  facultyRemark        String?
+  patientAge           Int?
+  patientName          String?
+  patientSex           String?
+  totalProcedureTally  Int         @default(0)
+  uhid                 String?
+  user                 User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model CourseAttended {
+  id              String      @id @default(cuid())
+  userId          String
+  slNo            Int
+  date            DateTime?
+  courseName      String?
+  conductedAt     String?
+  confidenceLevel String?
+  status          EntryStatus @default(DRAFT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  facultyId       String?
+  facultyRemark   String?
+  user            User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ConferenceParticipation {
+  id                String      @id @default(cuid())
+  userId            String
+  slNo              Int
+  date              DateTime?
+  conferenceName    String?
+  conductedAt       String?
+  participationRole String?
+  status            EntryStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  facultyId         String?
+  facultyRemark     String?
+  user              User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ResearchActivity {
+  id                String      @id @default(cuid())
+  userId            String
+  slNo              Int
+  date              DateTime?
+  activity          String?
+  conductedAt       String?
+  participationRole String?
+  status            EntryStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  facultyId         String?
+  facultyRemark     String?
+  user              User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model DisasterDrill {
+  id             String      @id @default(cuid())
+  userId         String
+  slNo           Int
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  facultyId      String?
+  facultyRemark  String?
+  user           User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model QualityImprovement {
+  id             String      @id @default(cuid())
+  userId         String
+  slNo           Int
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  facultyId      String?
+  facultyRemark  String?
+  user           User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model LogbookFacultyReview {
+  id             String      @id @default(cuid())
+  userId         String
+  slNo           Int
+  reviewNo       String?
+  date           DateTime?
+  description    String?
+  roleInActivity String?
+  facultyId      String?
+  facultyRemark  String?
+  status         EntryStatus @default(DRAFT)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  user           User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([facultyId])
+}
+
+model ResidentEvaluation {
+  id                   String      @id @default(cuid())
+  userId               String
+  semester             Int
+  reviewNo             Int
+  knowledgeScore       Int?
+  clinicalSkillScore   Int?
+  proceduralSkillScore Int?
+  softSkillScore       Int?
+  researchScore        Int?
+  theoryMarks          String?
+  practicalMarks       String?
+  description          String?
+  roleInActivity       String?
+  facultyRemark        String?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  assignedFacultyId    String?
+  user                 User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([semester])
+  @@index([status])
+  @@index([assignedFacultyId])
+}
+
+model TrainingMentoringRecord {
+  id                   String      @id @default(cuid())
+  userId               String
+  semester             Int
+  remarks              String?
+  status               EntryStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  clinicalSkillScore   Int?
+  evaluatedById        String?
+  knowledgeScore       Int?
+  overallScore         Float?
+  proceduralSkillScore Int?
+  researchScore        Int?
+  softSkillScore       Int?
+  practicalMarks       String?
+  theoryMarks          String?
+  user                 User        @relation(fields: [userId], references: [id])
+
+  @@unique([userId, semester])
+  @@index([userId])
+  @@index([evaluatedById])
+  @@index([status])
+}
+
+model InternalAssessment {
+  id                String                 @id @default(cuid())
+  title             String
+  description       String?
+  assessmentType    AssessmentType         @default(OTHER)
+  batchId           String
+  createdById       String
+  deadline          DateTime?
+  resourceLinks     String[]
+  maxMarks          Int?
+  totalMarks        Float?
+  isPublished       Boolean                @default(false)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  publishAt         DateTime?
+  semester          Int?
+  assignedFacultyId String?
+  attachments       String[]               @default([])
+  submissions       AssessmentSubmission[]
+  assignedFaculty   User?                  @relation("AssessmentAssignedFaculty", fields: [assignedFacultyId], references: [id])
+  batch             Batch                  @relation(fields: [batchId], references: [id])
+  createdBy         User                   @relation("AssessmentsCreated", fields: [createdById], references: [id])
+  assignedStudents  User[]                 @relation("AssessmentAssignedSpecificStudents")
+
+  @@index([batchId])
+  @@index([createdById])
+  @@index([isPublished])
+  @@index([assignedFacultyId])
+}
+
+model AssessmentSubmission {
+  id           String                @id @default(cuid())
+  assessmentId String
+  studentId    String
+  content      String?
+  submittedAt  DateTime?
+  status       EntryStatus           @default(DRAFT)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  attachments  String[]              @default([])
+  evaluation   AssessmentEvaluation?
+  assessment   InternalAssessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student      User                  @relation("AssessmentSubmissions", fields: [studentId], references: [id])
+
+  @@unique([assessmentId, studentId])
+  @@index([assessmentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model AssessmentEvaluation {
+  id              String               @id @default(cuid())
+  submissionId    String               @unique
+  evaluatedById   String
+  marks           Float?
+  grade           String?
+  feedback        String?
+  rejectionReason String?
+  evaluatedAt     DateTime             @default(now())
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  isMarksLocked   Boolean              @default(false)
+  evaluatedBy     User                 @relation("AssessmentEvaluations", fields: [evaluatedById], references: [id])
+  submission      AssessmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([evaluatedById])
+}
+
+model Department {
+  id                String            @id @default(cuid())
+  name              String            @unique
+  code              String            @unique
+  description       String?
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  departmentBatches DepartmentBatch[]
+  departmentForms   DepartmentForm[]
+  users             User[]
+
+  @@index([isActive])
+}
+
+model DepartmentBatch {
+  id           String     @id @default(cuid())
+  departmentId String
+  batchId      String
+  createdAt    DateTime   @default(now())
+  batch        Batch      @relation(fields: [batchId], references: [id])
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, batchId])
+  @@index([departmentId])
+  @@index([batchId])
+}
+
+model FormDefinition {
+  id              String           @id @default(cuid())
+  slug            String           @unique
+  title           String
+  description     String?
+  category        String?
+  icon            String?
+  route           String
+  isActive        Boolean          @default(true)
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  departmentForms DepartmentForm[]
+
+  @@index([isActive])
+  @@index([slug])
+}
+
+model DepartmentForm {
+  id               String         @id @default(cuid())
+  departmentId     String
+  formDefinitionId String
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  department       Department     @relation(fields: [departmentId], references: [id])
+  formDefinition   FormDefinition @relation(fields: [formDefinitionId], references: [id])
+
+  @@unique([departmentId, formDefinitionId])
+  @@index([departmentId])
+  @@index([formDefinitionId])
+  @@index([isActive])
 }
 
 enum Role {
@@ -95,241 +869,6 @@ enum UserStatus {
   TEMPORARILY_BANNED
 }
 
-// ======================== BATCH MANAGEMENT ========================
-
-model Batch {
-  id              String   @id @default(cuid())
-  name            String   @unique // e.g., "July 2022", "January 2023"
-  currentSemester Int      @default(1) // 1-6
-  startDate       DateTime
-  endDate         DateTime?
-  isActive        Boolean  @default(true)
-  description     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  students           User[]
-  facultyAssignments FacultyBatchAssignment[]
-  attendanceConfig   AttendanceConfig?
-  attendanceHolidays AttendanceHoliday[]
-  assessments        InternalAssessment[]
-  departmentBatches  DepartmentBatch[]
-
-  @@index([isActive])
-}
-
-model FacultyBatchAssignment {
-  id        String   @id @default(cuid())
-  facultyId String
-  batchId   String
-  createdAt DateTime @default(now())
-
-  faculty User  @relation("FacultyBatchAssignments", fields: [facultyId], references: [id])
-  batch   Batch @relation(fields: [batchId], references: [id])
-
-  @@unique([facultyId, batchId])
-  @@index([facultyId])
-  @@index([batchId])
-}
-
-model FacultyStudentAssignment {
-  id        String   @id @default(cuid())
-  facultyId String
-  studentId String
-  semester  Int
-  createdAt DateTime @default(now())
-
-  faculty User @relation("FacultyAssignments", fields: [facultyId], references: [id])
-  student User @relation("StudentAssignments", fields: [studentId], references: [id])
-
-  @@unique([facultyId, studentId, semester])
-  @@index([facultyId])
-  @@index([studentId])
-}
-
-// ======================== DIGITAL SIGNATURE ========================
-
-model DigitalSignature {
-  id         String   @id @default(cuid())
-  signedById String
-  signedBy   User     @relation(fields: [signedById], references: [id])
-  entityType String   // e.g., "RotationPosting", "CaseManagementLog", etc.
-  entityId   String   // ID of the signed record
-  remark     String?
-  signedAt   DateTime @default(now())
-
-  @@index([entityType, entityId])
-  @@index([signedById])
-}
-
-// ======================== HOD AUTO-REVIEW SETTINGS ========================
-
-model HodAutoReviewSetting {
-  id          String   @id @default(cuid())
-  category    String   @unique // "rotationPostings", "thesis", "trainingMentoring"
-  enabled     Boolean  @default(false)
-  updatedById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// ======================== MODULE 1: ROTATION POSTINGS ========================
-
-model RotationPosting {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  slNo          Int
-  rotationName  String      // e.g., "Emergency Medicine", "Critical Care"
-  isElective    Boolean     @default(false)
-  startDate     DateTime?
-  endDate       DateTime?
-  totalDuration String?     // e.g., "3 months", "6 weeks"
-  durationDays  Int?        // Auto-calculated from start/end date if available
-  facultyId     String?     // Faculty selected by student for signature/approval
-  status        EntryStatus @default(DRAFT)
-  facultyRemark String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([facultyId])
-  @@index([status])
-}
-
-// ======================== MODULE 2: THESIS TRACKING ========================
-
-model Thesis {
-  id              String                @id @default(cuid())
-  userId          String                @unique
-  user            User                  @relation(fields: [userId], references: [id])
-  topic           String?
-  chiefGuide      String?
-  status          EntryStatus           @default(DRAFT)
-  facultyRemark   String?
-  semesterRecords ThesisSemesterRecord[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-}
-
-model ThesisSemesterRecord {
-  id            String      @id @default(cuid())
-  thesisId      String
-  thesis        Thesis      @relation(fields: [thesisId], references: [id], onDelete: Cascade)
-  semester      Int         // 1-6
-  srJrMember    String?
-  srMember      String?
-  facultyMember String?
-  status        EntryStatus @default(DRAFT)
-  facultyRemark String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([thesisId])
-  @@index([status])
-}
-
-// ======================== MODULE 3: ATTENDANCE ========================
-
-// --- Attendance Configuration (set by HOD) ---
-model AttendanceConfig {
-  id                    String   @id @default(cuid())
-  batchId               String
-  batch                 Batch    @relation(fields: [batchId], references: [id])
-
-  // Batch academic dates
-  batchStartDate        DateTime
-  batchEndDate          DateTime
-
-  // Class timing window — students can only mark attendance within this window
-  classStartTime        String   // "08:00" (HH:mm format)
-  classEndTime          String   // "17:00" (HH:mm format)
-
-  // Location-based restriction
-  locationEnabled       Boolean  @default(false)
-  locationLatitude      Float?   // Campus center latitude
-  locationLongitude     Float?   // Campus center longitude
-  locationRadiusMeters  Int?     @default(500) // Allowed radius in meters
-
-  // Weekly off days (e.g., ["SATURDAY", "SUNDAY"])
-  weeklyOffDays         String[] @default([]) // DayOfWeek values as strings
-
-  // Minimum attendance criteria percentage
-  minimumAttendancePct  Float    @default(75.0) // 75%
-
-  // Attendance method toggles (HOD controls which methods students can use)
-  manualAttendanceEnabled Boolean @default(true)   // manual form (default ON)
-  faceRecognitionEnabled  Boolean @default(false)  // face recognition (default OFF)
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@unique([batchId])
-  @@index([batchId])
-}
-
-// --- Holiday Calendar (set by HOD) ---
-model AttendanceHoliday {
-  id          String   @id @default(cuid())
-  date        DateTime // The holiday date
-  name        String   // e.g., "Republic Day", "Holi"
-  batchId     String?  // null = global (all batches), specific = batch-only
-  batch       Batch?   @relation(fields: [batchId], references: [id])
-  createdAt   DateTime @default(now())
-
-  @@unique([date, batchId])
-  @@index([batchId])
-  @@index([date])
-}
-
-// --- Weekly attendance sheet (student creates, faculty/HOD reviews) ---
-model AttendanceSheet {
-  id               String            @id @default(cuid())
-  userId           String
-  user             User              @relation(fields: [userId], references: [id])
-  weekStartDate    DateTime
-  weekEndDate      DateTime
-  batch            String?
-  postedDepartment String?
-  entries          AttendanceEntry[]
-  status           EntryStatus       @default(DRAFT)
-  facultyRemark    String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([weekStartDate])
-}
-
-// --- Daily attendance record (one per day per sheet) ---
-model AttendanceEntry {
-  id                String          @id @default(cuid())
-  attendanceSheetId String
-  attendanceSheet   AttendanceSheet @relation(fields: [attendanceSheetId], references: [id], onDelete: Cascade)
-  date              DateTime?
-  day               DayOfWeek
-  presentAbsent     String?         // "Present", "Absent", "Leave", "Holiday"
-  hodName           String?
-  // Location & time metadata (captured when student marks attendance)
-  markedAt          DateTime?       // Exact time attendance was marked
-  latitude          Float?          // Student's location when marked
-  longitude         Float?          // Student's location when marked
-  withinLocation    Boolean?        // Was student within allowed radius?
-  // Per-entry review fields (daily submission model)
-  status            EntryStatus     @default(DRAFT)
-  facultyRemark     String?
-  signedAt          DateTime?
-  signedBy          String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([attendanceSheetId])
-  @@index([date])
-  @@index([status])
-}
-
 enum DayOfWeek {
   MONDAY
   TUESDAY
@@ -340,149 +879,11 @@ enum DayOfWeek {
   SUNDAY
 }
 
-// ======================== MODULE 4: ACADEMIC RECORDS ========================
-
-model CasePresentation {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id])
-  slNo              Int
-  date              DateTime?
-  patientName       String?         // Patient name
-  patientAge        String?         // Age (string to allow "2 months", "45 years" etc.)
-  patientSex        String?         // Male / Female / Other
-  uhid              String?         // UHID — can be alphanumeric
-  completeDiagnosis String?         // Markdown-supported diagnosis
-  category          PatientCategory?
-  facultyRemark     String?         // Markdown-supported remark by faculty
-  facultyId         String?         // Faculty selected by student for approval
-  status            EntryStatus     @default(DRAFT)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model Seminar {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id])
-  slNo              Int
-  date              DateTime?
-  patientName       String?         // Patient name
-  patientAge        String?         // Age (string to allow "2 months", "45 years" etc.)
-  patientSex        String?         // Male / Female / Other
-  uhid              String?         // UHID — can be alphanumeric
-  completeDiagnosis String?         // Markdown-supported diagnosis
-  category          PatientCategory?
-  facultyRemark     String?         // Markdown-supported remark by faculty
-  facultyId         String?         // Faculty selected by student for approval
-  status            EntryStatus     @default(DRAFT)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model JournalClub {
-  id              String      @id @default(cuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  slNo            Int
-  date            DateTime?
-  journalArticle  String?
-  typeOfStudy     String?
-  facultyRemark   String?
-  facultyId       String?
-  status          EntryStatus @default(DRAFT)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-// ======================== MODULE 5: CLINICAL SKILL TRAINING ========================
-
-model ClinicalSkillAdult {
-  id                      String          @id @default(cuid())
-  userId                  String
-  user                    User            @relation(fields: [userId], references: [id])
-  slNo                    Int
-  skillName               String          // e.g., "Initial Assessment Non-Trauma"
-  representativeDiagnosis String?
-  confidenceLevel         ConfidenceLevel?
-  totalTimesPerformed     Int             @default(0)
-  facultyId               String?         // Selected observing faculty
-  facultyRemark           String?         // Faculty remark / rejection reason
-  status                  EntryStatus     @default(DRAFT)
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model ClinicalSkillPediatric {
-  id                      String          @id @default(cuid())
-  userId                  String
-  user                    User            @relation(fields: [userId], references: [id])
-  slNo                    Int
-  skillName               String
-  representativeDiagnosis String?
-  confidenceLevel         ConfidenceLevel?
-  totalTimesPerformed     Int             @default(0)
-  facultyId               String?         // Selected observing faculty
-  facultyRemark           String?         // Faculty remark / rejection reason
-  status                  EntryStatus     @default(DRAFT)
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
 enum ConfidenceLevel {
-  VC // Very Confident
-  FC // Fairly Confident
-  SC // Slightly Confident
-  NC // Not Confident
-}
-
-// ======================== MODULE 6: CASE MANAGEMENT LOGS ========================
-
-model CaseManagementLog {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id])
-  category          CaseCategory
-  slNo              Int
-  caseSubCategory   String          // e.g., "Acute Airway Obstruction"
-  date              DateTime?
-  patientName       String?
-  patientAge        Int?
-  patientSex        String?         // Male / Female / Other
-  uhid              String?
-  completeDiagnosis String?
-  competencyLevel   CompetencyLevel?
-  totalCaseTally    Int             @default(0)
-  facultyId         String?         // Selected faculty for sign-off
-  status            EntryStatus     @default(DRAFT)
-  facultyRemark     String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([category])
-  @@index([status])
-  @@index([facultyId])
+  VC
+  FC
+  SC
+  NC
 }
 
 enum CaseCategory {
@@ -513,41 +914,11 @@ enum CaseCategory {
 }
 
 enum CompetencyLevel {
-  CBD // Case Based Discussion
-  S   // Simulation
-  O   // Observed
-  MS  // Managed under Supervision
-  MI  // Managed Independently
-}
-
-// ======================== MODULE 7: PROCEDURE LOGS ========================
-
-model ProcedureLog {
-  id                   String            @id @default(cuid())
-  userId               String
-  user                 User              @relation(fields: [userId], references: [id])
-  procedureCategory    ProcedureCategory
-  slNo                 Int
-  date                 DateTime?
-  patientName          String?
-  patientAge           Int?
-  patientSex           String?
-  uhid                 String?
-  completeDiagnosis    String?
-  procedureDescription String?
-  performedAtLocation  String?
-  skillLevel           SkillLevel?
-  facultyId            String?
-  facultyRemark        String?
-  totalProcedureTally  Int               @default(0)
-  status               EntryStatus       @default(DRAFT)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-
-  @@index([userId])
-  @@index([procedureCategory])
-  @@index([status])
-  @@index([facultyId])
+  CBD
+  S
+  O
+  MS
+  MI
 }
 
 enum ProcedureCategory {
@@ -603,74 +974,19 @@ enum ProcedureCategory {
 }
 
 enum SkillLevel {
-  S  // Simulation
-  O  // Observed
-  A  // Assisted
-  PS // Performed under Supervision
-  PI // Performed Independently
-  TM // Team Member (for CPR)
-  TL // Team Leader (for CPR)
-}
-
-// ======================== MODULE 8: DIAGNOSTIC SKILLS ========================
-
-model DiagnosticSkill {
-  id                      String             @id @default(cuid())
-  userId                  String
-  user                    User               @relation(fields: [userId], references: [id])
-  diagnosticCategory      DiagnosticCategory
-  slNo                    Int
-  skillName               String             // e.g., "Respiratory Acidosis acute/chronic"
-  representativeDiagnosis String?
-  confidenceLevel         ConfidenceLevel?
-  totalTimesPerformed     Int                @default(0)
-  facultyId               String?
-  facultyRemark           String?
-  imageUrls               String[]           @default([])  // ECG/ABG image uploads
-  status                  EntryStatus        @default(DRAFT)
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
-
-  @@index([userId])
-  @@index([diagnosticCategory])
-  @@index([status])
+  S
+  O
+  A
+  PS
+  PI
+  TM
+  TL
 }
 
 enum DiagnosticCategory {
   ABG_ANALYSIS
   ECG_ANALYSIS
   OTHER_DIAGNOSTIC
-}
-
-// ======================== MODULE 9: IMAGING LOGS ========================
-
-model ImagingLog {
-  id                   String          @id @default(cuid())
-  userId               String
-  user                 User            @relation(fields: [userId], references: [id])
-  imagingCategory      ImagingCategory
-  slNo                 Int
-  date                 DateTime?
-  patientName          String?
-  patientAge           Int?
-  patientSex           String?
-  uhid                 String?
-  completeDiagnosis    String?
-  procedureDescription String?
-  performedAtLocation  String?
-  skillLevel           SkillLevel?
-  facultyId            String?
-  facultyRemark        String?
-  imageUrls            String[]        @default([])  // X-RAY/imaging uploads
-  totalProcedureTally  Int             @default(0)
-  status               EntryStatus     @default(DRAFT)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([imagingCategory])
-  @@index([status])
-  @@index([facultyId])
 }
 
 enum ImagingCategory {
@@ -681,346 +997,6 @@ enum ImagingCategory {
   XRAY_CT_TRAUMA
 }
 
-// ======================== MODULE 10: OTHER LOGS ========================
-
-model TransportLog {
-  id                   String      @id @default(cuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  slNo                 Int
-  date                 DateTime?
-  patientName          String?
-  patientAge           Int?
-  patientSex           String?
-  uhid                 String?
-  completeDiagnosis    String?
-  procedureDescription String?
-  performedAtLocation  String?
-  skillLevel           SkillLevel?
-  facultyId            String?
-  facultyRemark        String?
-  totalProcedureTally  Int         @default(0)
-  status               EntryStatus @default(DRAFT)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model ConsentLog {
-  id                   String      @id @default(cuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  slNo                 Int
-  date                 DateTime?
-  patientName          String?
-  patientAge           Int?
-  patientSex           String?
-  uhid                 String?
-  completeDiagnosis    String?
-  procedureDescription String?
-  performedAtLocation  String?
-  skillLevel           SkillLevel?
-  facultyId            String?
-  facultyRemark        String?
-  totalProcedureTally  Int         @default(0)
-  status               EntryStatus @default(DRAFT)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model BadNewsLog {
-  id                   String      @id @default(cuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  slNo                 Int
-  date                 DateTime?
-  patientName          String?
-  patientAge           Int?
-  patientSex           String?
-  uhid                 String?
-  completeDiagnosis    String?
-  procedureDescription String?
-  performedAtLocation  String?
-  skillLevel           SkillLevel?
-  facultyId            String?
-  facultyRemark        String?
-  totalProcedureTally  Int         @default(0)
-  status               EntryStatus @default(DRAFT)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-// ======================== MODULE 11: COURSES & CONFERENCES ========================
-
-model CourseAttended {
-  id              String      @id @default(cuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  slNo            Int
-  date            DateTime?
-  courseName      String?
-  conductedAt     String?
-  confidenceLevel String?
-  facultyId       String?
-  facultyRemark   String?
-  status          EntryStatus @default(DRAFT)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model ConferenceParticipation {
-  id                String      @id @default(cuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  slNo              Int
-  date              DateTime?
-  conferenceName    String?
-  conductedAt       String?
-  participationRole String?
-  facultyId         String?
-  facultyRemark     String?
-  status            EntryStatus @default(DRAFT)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model ResearchActivity {
-  id                String      @id @default(cuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  slNo              Int
-  date              DateTime?
-  activity          String?
-  conductedAt       String?
-  participationRole String?
-  facultyId         String?
-  facultyRemark     String?
-  status            EntryStatus @default(DRAFT)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-// ======================== MODULE 12: DISASTER & QUALITY ========================
-
-model DisasterDrill {
-  id             String      @id @default(cuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id])
-  slNo           Int
-  date           DateTime?
-  description    String?
-  roleInActivity String?
-  facultyId      String?
-  facultyRemark  String?
-  status         EntryStatus @default(DRAFT)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-model QualityImprovement {
-  id             String      @id @default(cuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id])
-  slNo           Int
-  date           DateTime?
-  description    String?
-  roleInActivity String?
-  facultyId      String?
-  facultyRemark  String?
-  status         EntryStatus @default(DRAFT)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-// Periodic Logbook Faculty Review (SEM 1-6, 2 reviews per semester)
-model LogbookFacultyReview {
-  id             String      @id @default(cuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id])
-  slNo           Int
-  reviewNo       String?     // "SEM 1", "SEM 2", etc.
-  date           DateTime?
-  description    String?
-  roleInActivity String?
-  facultyId      String?
-  facultyRemark  String?
-  status         EntryStatus @default(DRAFT)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([facultyId])
-}
-
-// ======================== MODULE 13: RESIDENT EVALUATION ========================
-
-model ResidentEvaluation {
-  id                   String      @id @default(cuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  semester             Int         // 1-6
-  reviewNo             Int         // 1 or 2 per semester
-  assignedFacultyId    String?     // Faculty assigned to evaluate this student
-
-  // 5 domains, each scored 1-5
-  knowledgeScore       Int?        // 1-5
-  clinicalSkillScore   Int?        // 1-5
-  proceduralSkillScore Int?        // 1-5
-  softSkillScore       Int?        // 1-5
-  researchScore        Int?        // 1-5
-
-  // End semester assessment
-  theoryMarks          String?
-  practicalMarks       String?
-
-  description          String?
-  roleInActivity       String?
-  facultyRemark        String?
-  status               EntryStatus @default(DRAFT)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([semester])
-  @@index([status])
-  @@index([assignedFacultyId])
-}
-
-// ======================== MODULE 14: TRAINING & MENTORING / EVALUATION GRAPH ========================
-
-model TrainingMentoringRecord {
-  id                   String      @id @default(cuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  semester             Int         // 1-6
-  // 5 domains, each scored 1-5 (1=Requires remedial, 5=Exceptional)
-  knowledgeScore       Int?        // Knowledge domain
-  clinicalSkillScore   Int?        // Clinical Skills domain
-  proceduralSkillScore Int?        // Procedural Skills domain
-  softSkillScore       Int?        // Soft Skills domain
-  researchScore        Int?        // Research domain
-  overallScore         Float?      // Auto-calculated average
-  
-  // End Semester Assessment
-  theoryMarks          String?     // e.g. "Pass", "Fail", "72%"
-  practicalMarks       String?     // e.g. "Pass", "Fail", "85%"
-  
-  evaluatedById        String?     // Faculty who evaluated
-  remarks              String?
-  status               EntryStatus @default(DRAFT)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  @@unique([userId, semester])
-  @@index([userId])
-  @@index([evaluatedById])
-  @@index([status])
-}
-
-// ======================== MODULE 15: INTERNAL ASSESSMENTS ========================
-
-model InternalAssessment {
-  id              String             @id @default(cuid())
-  title           String
-  description     String?            // Markdown instructions
-  assessmentType  AssessmentType     @default(OTHER)
-  batchId         String
-  batch           Batch              @relation(fields: [batchId], references: [id])
-  createdById     String
-  createdBy       User               @relation("AssessmentsCreated", fields: [createdById], references: [id])
-  deadline        DateTime?
-  resourceLinks   String[]           // Array of embedded links
-  maxMarks        Int?
-  totalMarks      Float?
-  isPublished     Boolean            @default(false)
-  publishAt       DateTime?          // Scheduled publish date
-  semester        Int?               // Target semester (null = all semesters)
-  assignedFacultyId String?          // Optional: Restrict evaluation to specific faculty
-  assignedFaculty   User?            @relation("AssessmentAssignedFaculty", fields: [assignedFacultyId], references: [id])
-  assignedStudents  User[]           @relation("AssessmentAssignedSpecificStudents")
-  attachments       String[]         @default([]) // Uploaded Cloudinary resources
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-
-  submissions     AssessmentSubmission[]
-
-  @@index([batchId])
-  @@index([createdById])
-  @@index([isPublished])
-  @@index([assignedFacultyId])
-}
-
-model AssessmentSubmission {
-  id             String             @id @default(cuid())
-  assessmentId   String
-  assessment     InternalAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  studentId      String
-  student        User               @relation("AssessmentSubmissions", fields: [studentId], references: [id])
-  content        String?            // Student's submission text (markdown)
-  attachments    String[]           @default([]) // Student uploaded files
-  submittedAt    DateTime?
-  status         EntryStatus        @default(DRAFT)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-
-  evaluation     AssessmentEvaluation?
-
-  @@unique([assessmentId, studentId])
-  @@index([assessmentId])
-  @@index([studentId])
-  @@index([status])
-}
-
-model AssessmentEvaluation {
-  id             String               @id @default(cuid())
-  submissionId   String               @unique
-  submission     AssessmentSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  evaluatedById  String
-  evaluatedBy    User                 @relation("AssessmentEvaluations", fields: [evaluatedById], references: [id])
-  marks          Float?
-  grade          String?              // e.g., "A+", "B", "Pass", etc.
-  feedback       String?              // Markdown feedback
-  rejectionReason String?
-  isMarksLocked  Boolean              @default(false)  // Locked after first edit by HOD
-  evaluatedAt    DateTime             @default(now())
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-
-  @@index([evaluatedById])
-}
-
 enum AssessmentType {
   THEORY
   PRACTICAL
@@ -1029,8 +1005,6 @@ enum AssessmentType {
   PROJECT
   OTHER
 }
-
-// ======================== SHARED ENUMS ========================
 
 enum EntryStatus {
   DRAFT
@@ -1046,72 +1020,4 @@ enum PatientCategory {
   PEDIATRIC_NON_TRAUMA
   PEDIATRIC_TRAUMA
   OTHER
-}
-
-// ======================== DEPARTMENT & FORM MANAGEMENT ========================
-
-model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  code        String   @unique  // Short code e.g. "EM", "CARD"
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  departmentBatches DepartmentBatch[]
-  departmentForms   DepartmentForm[]
-  users             User[]
-
-  @@index([isActive])
-}
-
-model DepartmentBatch {
-  id           String     @id @default(cuid())
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
-  batchId      String
-  batch        Batch      @relation(fields: [batchId], references: [id])
-  createdAt    DateTime   @default(now())
-
-  @@unique([departmentId, batchId])
-  @@index([departmentId])
-  @@index([batchId])
-}
-
-model FormDefinition {
-  id          String   @id @default(cuid())
-  slug        String   @unique  // e.g. "case-presentations", "procedure-logs"
-  title       String             // Display name
-  description String?
-  category    String?            // "Academic", "Clinical", "Professional"
-  icon        String?            // Lucide icon name
-  route       String             // Dashboard route segment
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  departmentForms DepartmentForm[]
-
-  @@index([isActive])
-  @@index([slug])
-}
-
-model DepartmentForm {
-  id               String         @id @default(cuid())
-  departmentId     String
-  department       Department     @relation(fields: [departmentId], references: [id])
-  formDefinitionId String
-  formDefinition   FormDefinition @relation(fields: [formDefinitionId], references: [id])
-  isActive         Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@unique([departmentId, formDefinitionId])
-  @@index([departmentId])
-  @@index([formDefinitionId])
-  @@index([isActive])
 }

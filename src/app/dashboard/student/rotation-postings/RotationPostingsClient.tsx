@@ -16,6 +16,7 @@ import { RotationPostingsTab } from "./tabs/RotationPostingsTab";
 import { ThesisTopicTab } from "./tabs/ThesisTopicTab";
 import { TrainingMentoringTab } from "./tabs/TrainingMentoringTab";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import { RotationPostingsPDFDownload } from "@/components/shared/RotationPostingsPDFDownload";
 import { RotateCcw, GraduationCap, Target } from "lucide-react";
 
 // ======================== TYPE DEFINITIONS ========================
@@ -31,8 +32,10 @@ export interface RotationPostingData {
 	durationDays: number | null;
 	facultyId: string | null;
 	status: string;
+	attachments?: string[];
 	facultyRemark: string | null;
 	createdAt: string;
+	signedByName?: string | null;
 }
 
 export interface ThesisSemesterRecordData {
@@ -84,6 +87,7 @@ interface RotationPostingsClientProps {
 	facultyList: FacultyOption[];
 	defaultTab?: string;
 	studentName: string;
+	userId: string;
 }
 
 const TAB_MAP: Record<string, string> = {
@@ -98,6 +102,7 @@ export function RotationPostingsClient({
 	facultyList,
 	defaultTab,
 	studentName,
+	userId,
 }: RotationPostingsClientProps) {
 	const resolvedTab =
 		(defaultTab && TAB_MAP[defaultTab]) || "rotation-postings";
@@ -148,11 +153,18 @@ export function RotationPostingsClient({
 					</TabsTrigger>
 				</TabsList>
 
-				<ExportDropdown
-					onExportPdf={handleExportPdf}
-					onExportExcel={handleExportExcel}
-					label="Download"
-				/>
+				<div className="flex gap-2">
+					<RotationPostingsPDFDownload
+						userId={userId}
+						studentName={studentName}
+						isStudent={true}
+					/>
+					<ExportDropdown
+						onExportPdf={handleExportPdf}
+						onExportExcel={handleExportExcel}
+						label="Download"
+					/>
+				</div>
 			</div>
 
 			<TabsContent value="rotation-postings" className="mt-6">
