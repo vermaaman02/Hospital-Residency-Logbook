@@ -70,6 +70,8 @@ import {
 	BookOpen,
 	ChevronLeft,
 	ChevronRight,
+	FileUp,
+	Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -95,6 +97,7 @@ export interface RotationSubmission {
 	durationDays: number | null;
 	facultyId: string | null;
 	status: string;
+	attachments?: string[];
 	facultyRemark: string | null;
 	createdAt: string;
 	user: {
@@ -737,6 +740,38 @@ export function RotationReviewClient({
 										)}
 									</div>
 								</DetailSection>
+
+								{/* Attachments if any */}
+								{detailEntry.attachments && detailEntry.attachments.length > 0 && (
+									<DetailSection title="Attachments" icon={FileUp}>
+										<div className="space-y-2">
+											{detailEntry.attachments.map((url) => (
+												<div
+													key={url}
+													className="flex items-center justify-between p-2 bg-muted/50 rounded"
+												>
+													<span className="text-sm truncate flex-1">
+														{url.split("/").pop()}
+													</span>
+													<a
+														href={url}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="ml-2"
+													>
+														<Button
+															variant="ghost"
+															size="sm"
+															className="h-7 w-7 p-0"
+														>
+															<Download className="h-4 w-4" />
+														</Button>
+													</a>
+												</div>
+											))}
+										</div>
+									</DetailSection>
+								)}
 
 								{/* Remark if exists */}
 								{detailEntry.facultyRemark && (

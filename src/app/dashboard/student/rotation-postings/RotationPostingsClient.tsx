@@ -16,6 +16,7 @@ import { RotationPostingsTab } from "./tabs/RotationPostingsTab";
 import { ThesisTopicTab } from "./tabs/ThesisTopicTab";
 import { TrainingMentoringTab } from "./tabs/TrainingMentoringTab";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import { RotationPostingsPDFDownload } from "@/components/shared/RotationPostingsPDFDownload";
 import { RotateCcw, GraduationCap, Target } from "lucide-react";
 
 // ======================== TYPE DEFINITIONS ========================
@@ -31,6 +32,7 @@ export interface RotationPostingData {
 	durationDays: number | null;
 	facultyId: string | null;
 	status: string;
+	attachments?: string[];
 	facultyRemark: string | null;
 	createdAt: string;
 }
@@ -84,6 +86,7 @@ interface RotationPostingsClientProps {
 	facultyList: FacultyOption[];
 	defaultTab?: string;
 	studentName: string;
+	userId: string;
 }
 
 const TAB_MAP: Record<string, string> = {
@@ -98,6 +101,7 @@ export function RotationPostingsClient({
 	facultyList,
 	defaultTab,
 	studentName,
+	userId,
 }: RotationPostingsClientProps) {
 	const resolvedTab =
 		(defaultTab && TAB_MAP[defaultTab]) || "rotation-postings";
@@ -118,42 +122,49 @@ export function RotationPostingsClient({
 		exportStudentDataToExcel(postings, thesis, trainingRecords, studentName);
 	}, [postings, thesis, trainingRecords, studentName]);
 
-	return (
-		<Tabs defaultValue={resolvedTab} className="w-full">
-			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between mb-2">
-				<TabsList className="grid w-full sm:w-auto grid-cols-3 h-auto">
-					<TabsTrigger
-						value="rotation-postings"
-						className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
-					>
-						<RotateCcw className="h-4 w-4 shrink-0" />
-						<span className="hidden sm:inline">Rotation Postings</span>
-						<span className="sm:hidden">Rotations</span>
-					</TabsTrigger>
-					<TabsTrigger
-						value="thesis"
-						className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
-					>
-						<GraduationCap className="h-4 w-4 shrink-0" />
-						<span className="hidden sm:inline">Thesis Topic</span>
-						<span className="sm:hidden">Thesis</span>
-					</TabsTrigger>
-					<TabsTrigger
-						value="training"
-						className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
-					>
-						<Target className="h-4 w-4 shrink-0" />
-						<span className="hidden sm:inline">Training & Mentoring</span>
-						<span className="sm:hidden">Training</span>
-					</TabsTrigger>
-				</TabsList>
+		return (
+			<Tabs defaultValue={resolvedTab} className="w-full">
+				<div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between mb-2">
+					<TabsList className="grid w-full sm:w-auto grid-cols-3 h-auto">
+						<TabsTrigger
+							value="rotation-postings"
+							className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
+						>
+							<RotateCcw className="h-4 w-4 shrink-0" />
+							<span className="hidden sm:inline">Rotation Postings</span>
+							<span className="sm:hidden">Rotations</span>
+						</TabsTrigger>
+						<TabsTrigger
+							value="thesis"
+							className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
+						>
+							<GraduationCap className="h-4 w-4 shrink-0" />
+							<span className="hidden sm:inline">Thesis Topic</span>
+							<span className="sm:hidden">Thesis</span>
+						</TabsTrigger>
+						<TabsTrigger
+							value="training"
+							className="flex items-center gap-2 py-2.5 text-xs sm:text-sm"
+						>
+							<Target className="h-4 w-4 shrink-0" />
+							<span className="hidden sm:inline">Training & Mentoring</span>
+							<span className="sm:hidden">Training</span>
+						</TabsTrigger>
+					</TabsList>
 
-				<ExportDropdown
-					onExportPdf={handleExportPdf}
-					onExportExcel={handleExportExcel}
-					label="Download"
-				/>
-			</div>
+					<div className="flex gap-2">
+						<RotationPostingsPDFDownload
+							userId={userId}
+							studentName={studentName}
+							isStudent={true}
+						/>
+						<ExportDropdown
+							onExportPdf={handleExportPdf}
+							onExportExcel={handleExportExcel}
+							label="Download"
+						/>
+					</div>
+				</div>
 
 			<TabsContent value="rotation-postings" className="mt-6">
 				<RotationPostingsTab postings={postings} facultyList={facultyList} />

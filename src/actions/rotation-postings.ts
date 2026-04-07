@@ -18,6 +18,8 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 // ======================== STUDENT ACTIONS ========================
 
@@ -347,4 +349,208 @@ export async function getAllFacultyForDropdown() {
 		select: { id: true, firstName: true, lastName: true, email: true },
 		orderBy: { firstName: "asc" },
 	});
+}
+
+// ======================== ATTACHMENT ACTIONS ========================
+
+/**
+ * Student: Add attachment to a rotation posting row.
+ */
+export async function addRotationPostingAttachment(
+	postingId: string,
+	attachmentUrl: string,
+) {
+	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+	});
+	if (!posting) throw new Error("Rotation posting not found");
+	if (posting.userId !== user.id)
+		throw new Error("Not authorized to modify this posting");
+
+	// Add attachment URL to the array if not already present
+	const currentAttachments = posting.attachments || [];
+	if (!currentAttachments.includes(attachmentUrl)) {
+		currentAttachments.push(attachmentUrl);
+	}
+
+	await prisma.rotationPosting.update({
+		where: { id: postingId },
+		data: { attachments: currentAttachments },
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Student: Remove attachment from a rotation posting row.
+ */
+export async function removeRotationPostingAttachment(
+	postingId: string,
+	attachmentUrl: string,
+) {
+	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+	});
+	if (!posting) throw new Error("Rotation posting not found");
+	if (posting.userId !== user.id)
+		throw new Error("Not authorized to modify this posting");
+
+	// Remove attachment URL from the array
+	const updatedAttachments = (posting.attachments || []).filter(
+		(url) => url !== attachmentUrl,
+	);
+
+	await prisma.rotationPosting.update({
+		where: { id: postingId },
+		data: { attachments: updatedAttachments },
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Get attachments for a rotation posting (all roles can view).
+ */
+export async function getRotationPostingAttachments(postingId: string) {
+	await requireAuth();
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+		select: {
+			id: true,
+			attachments: true,
+			user: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+		},
+	});
+
+	if (!posting) throw new Error("Rotation posting not found");
+	return posting;
+}
+
+// ======================== PDF GENERATION ========================
+
+/**
+ * Generate a PDF of rotation postings form for student to fill manually.
+ * Landscape format with 20 rows (7 core + 13 electives).
+ */
+export async function generateRotationPostingsPDF(userId: string) {
+	const user = await requireAuth();
+	const currentUser = await prisma.user.findUnique({ where: { clerkId: user } });
+	if (!currentUser) throw new Error("User not found");
+
+	// Verify the student ID matches or user is HOD/Faculty
+	if (currentUser.role === "STUDENT" && currentUser.id !== userId) {
+		throw new Error("Not authorized to generate this PDF");
+	}
+
+	// Fetch student info
+	const student = await prisma.user.findUnique({
+		where: { id: userId },
+		select: {
+			id: true,
+			firstName: true,
+			lastName: true,
+			email: true,
+			batchRelation: { select: { name: true } },
+		},
+	});
+
+	if (!student) throw new Error("Student not found");
+
+	// Create PDF in landscape orientation
+	const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+	// Set up fonts
+	doc.setFontSize(14);
+	doc.text("LOG OF ROTATION POSTINGS DURING PG IN EMERGENCY MEDICINE", 148, 15, {
+		align: "center",
+	});
+
+	// Student info section
+	doc.setFontSize(10);
+	doc.text(
+		`Student: ${student.firstName} ${student.lastName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Date: _______________`,
+		10,
+		25,
+	);
+
+	// Manual table drawing
+	const pageWidth = doc.internal.pageSize.getWidth();
+	const pageHeight = doc.internal.pageSize.getHeight();
+	const margin = 10;
+	const tableWidth = pageWidth - margin * 2;
+	
+	// Column widths
+	const colWidths = [12, 50, 40, 50, 40]; // Total ~190
+	const colWidthRatio = colWidths.map(w => w / colWidths.reduce((a, b) => a + b, 0));
+	const actualColWidths = colWidthRatio.map(ratio => tableWidth * ratio);
+	
+	const headers = ["Sl. No.", "Department/Block", "Duration", "Faculty Name", "Remarks"];
+	const rowHeight = 12;
+	let currentY = 35;
+
+	// Draw header
+	doc.setFillColor(41, 128, 185);
+	doc.setTextColor(255, 255, 255);
+	doc.setFontSize(10);
+	doc.setFont("helvetica", "bold");
+	
+	let currentX = margin;
+	for (let i = 0; i < headers.length; i++) {
+		doc.rect(currentX, currentY, actualColWidths[i], rowHeight, "F");
+		doc.text(headers[i], currentX + 2, currentY + 8, { maxWidth: actualColWidths[i] - 4 });
+		currentX += actualColWidths[i];
+	}
+	currentY += rowHeight;
+
+	// Draw rows
+	doc.setTextColor(0, 0, 0);
+	doc.setFont("helvetica", "normal");
+	for (let i = 1; i <= 20; i++) {
+		currentX = margin;
+		
+		// Draw row cells
+		for (let j = 0; j < headers.length; j++) {
+			doc.rect(currentX, currentY, actualColWidths[j], rowHeight);
+			// Add row number in first column
+			if (j === 0) {
+				doc.text(i.toString(), currentX + 2, currentY + 8);
+			}
+			currentX += actualColWidths[j];
+		}
+		currentY += rowHeight;
+		
+		// Check if we need a new page
+		if (currentY > pageHeight - 30) {
+			doc.addPage();
+			currentY = margin;
+		}
+	}
+
+	// Add signature area
+	const finalY = currentY + 10;
+	doc.setFontSize(9);
+	doc.text("Student Signature: __________________", margin, finalY);
+	doc.text("Faculty Signature: __________________", margin + 70, finalY);
+	doc.text("HOD Signature: __________________", margin + 130, finalY);
+
+	// Return PDF as base64 for download
+	const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+	return pdfBuffer.toString("base64");
 }
