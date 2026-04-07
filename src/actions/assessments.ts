@@ -92,11 +92,13 @@ export async function createAssessment(input: CreateAssessmentInput) {
 			totalMarks: input.totalMarks ?? null,
 			isPublished: input.isPublished ?? false,
 			assignedFacultyId: input.assignedFacultyId ?? null,
-			...(input.assignedStudentIds && input.assignedStudentIds.length > 0 ? {
-				assignedStudents: {
-					connect: input.assignedStudentIds.map(id => ({ id }))
+			...(input.assignedStudentIds && input.assignedStudentIds.length > 0 ?
+				{
+					assignedStudents: {
+						connect: input.assignedStudentIds.map((id) => ({ id })),
+					},
 				}
-			} : {})
+			:	{}),
 		},
 	});
 
@@ -141,17 +143,25 @@ export async function updateAssessment(
 				publishAt: input.publishAt ? new Date(input.publishAt) : null,
 			}),
 			...(input.semester !== undefined && { semester: input.semester }),
-			...(input.resourceLinks !== undefined && { resourceLinks: input.resourceLinks }),
-			...(input.attachments !== undefined && { attachments: input.attachments }),
+			...(input.resourceLinks !== undefined && {
+				resourceLinks: input.resourceLinks,
+			}),
+			...(input.attachments !== undefined && {
+				attachments: input.attachments,
+			}),
 			...(input.maxMarks !== undefined && { maxMarks: input.maxMarks }),
 			...(input.totalMarks !== undefined && { totalMarks: input.totalMarks }),
-			...(input.isPublished !== undefined && { isPublished: input.isPublished }),
-			...(input.assignedFacultyId !== undefined && { assignedFacultyId: input.assignedFacultyId }),
+			...(input.isPublished !== undefined && {
+				isPublished: input.isPublished,
+			}),
+			...(input.assignedFacultyId !== undefined && {
+				assignedFacultyId: input.assignedFacultyId,
+			}),
 			...(input.assignedStudentIds !== undefined && {
 				assignedStudents: {
-					set: input.assignedStudentIds.map(id => ({ id })) // OVERWRITES existing connect lists with the new array
-				}
-			})
+					set: input.assignedStudentIds.map((id) => ({ id })), // OVERWRITES existing connect lists with the new array
+				},
+			}),
 		},
 	});
 
@@ -209,8 +219,12 @@ export async function getAllAssessments() {
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
-			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
-			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
+			assignedFaculty: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+			assignedStudents: {
+				select: { id: true, firstName: true, lastName: true },
+			},
 			submissions: {
 				select: {
 					id: true,
@@ -221,7 +235,15 @@ export async function getAllAssessments() {
 					updatedAt: true,
 					student: { select: { id: true, firstName: true, lastName: true } },
 					evaluation: {
-						select: { marks: true, grade: true },
+						select: {
+							marks: true,
+							grade: true,
+							feedback: true,
+							rejectionReason: true,
+							evaluatedAt: true,
+							isMarksLocked: true,
+							evaluatedBy: { select: { firstName: true, lastName: true } },
+						},
 					},
 				},
 			},
@@ -242,19 +264,20 @@ export async function getFacultyAssessments() {
 	const batchIds = assignments.map((a) => a.batchId);
 
 	return prisma.internalAssessment.findMany({
-		where: { 
+		where: {
 			batchId: { in: batchIds },
-			OR: [
-				{ assignedFacultyId: user.id },
-				{ assignedFacultyId: null }
-			]
+			OR: [{ assignedFacultyId: user.id }, { assignedFacultyId: null }],
 		},
 		orderBy: { createdAt: "desc" },
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
-			assignedFaculty: { select: { id: true, firstName: true, lastName: true } },
-			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
+			assignedFaculty: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+			assignedStudents: {
+				select: { id: true, firstName: true, lastName: true },
+			},
 			submissions: {
 				select: {
 					id: true,
@@ -265,7 +288,15 @@ export async function getFacultyAssessments() {
 					updatedAt: true,
 					student: { select: { id: true, firstName: true, lastName: true } },
 					evaluation: {
-						select: { marks: true, grade: true },
+						select: {
+							marks: true,
+							grade: true,
+							feedback: true,
+							rejectionReason: true,
+							evaluatedAt: true,
+							isMarksLocked: true,
+							evaluatedBy: { select: { firstName: true, lastName: true } },
+						},
 					},
 				},
 			},
@@ -285,14 +316,16 @@ export async function getStudentAssessments() {
 			isPublished: true,
 			OR: [
 				{ assignedStudents: { some: { id: user.id } } }, // specifically for this student
-				{ assignedStudents: { none: {} } } // OR fallback: no specific students = entire batch
-			]
+				{ assignedStudents: { none: {} } }, // OR fallback: no specific students = entire batch
+			],
 		},
 		orderBy: { createdAt: "desc" },
 		include: {
 			batch: { select: { id: true, name: true } },
 			createdBy: { select: { id: true, firstName: true, lastName: true } },
-			assignedStudents: { select: { id: true, firstName: true, lastName: true } },
+			assignedStudents: {
+				select: { id: true, firstName: true, lastName: true },
+			},
 			submissions: {
 				where: { studentId: user.id },
 				select: {
@@ -356,8 +389,14 @@ export async function getAssessmentDetail(assessmentId: string) {
 	if (!assessment) throw new Error("Assessment not found");
 
 	// Enforce strict faculty scoping
-	if (role === "faculty" && assessment.assignedFacultyId && assessment.assignedFacultyId !== user.id) {
-		throw new Error("You are not authorized to view this specific assessment detail");
+	if (
+		role === "faculty" &&
+		assessment.assignedFacultyId &&
+		assessment.assignedFacultyId !== user.id
+	) {
+		throw new Error(
+			"You are not authorized to view this specific assessment detail",
+		);
 	}
 
 	// Faculty: verify batch assignment
@@ -376,7 +415,11 @@ export async function getAssessmentDetail(assessmentId: string) {
 
 // ======================== STUDENT SUBMISSION ACTIONS ========================
 
-export async function submitAssessment(assessmentId: string, content?: string, attachments?: string[]) {
+export async function submitAssessment(
+	assessmentId: string,
+	content?: string,
+	attachments?: string[],
+) {
 	await requireAuth();
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
@@ -384,13 +427,15 @@ export async function submitAssessment(assessmentId: string, content?: string, a
 	// Verify published and batch match
 	const assessment = await prisma.internalAssessment.findUnique({
 		where: { id: assessmentId },
-		include: { assignedStudents: { select: { id: true } } }
+		include: { assignedStudents: { select: { id: true } } },
 	});
 	if (!assessment || !assessment.isPublished)
 		throw new Error("Assessment not available");
-	
+
 	if (assessment.assignedStudents.length > 0) {
-		const isAssigned = assessment.assignedStudents.some(s => s.id === user.id);
+		const isAssigned = assessment.assignedStudents.some(
+			(s) => s.id === user.id,
+		);
 		if (!isAssigned) throw new Error("Not specifically configured for you");
 	} else if (assessment.batchId !== user.batchId) {
 		throw new Error("Not authorized for your batch");
@@ -428,7 +473,7 @@ export async function submitAssessment(assessmentId: string, content?: string, a
 export async function saveDraftSubmission(
 	assessmentId: string,
 	content?: string,
-	attachments?: string[]
+	attachments?: string[],
 ) {
 	await requireAuth();
 	const user = await ensureUserInDb();
@@ -436,13 +481,15 @@ export async function saveDraftSubmission(
 
 	const assessment = await prisma.internalAssessment.findUnique({
 		where: { id: assessmentId },
-		include: { assignedStudents: { select: { id: true } } }
+		include: { assignedStudents: { select: { id: true } } },
 	});
 	if (!assessment || !assessment.isPublished)
 		throw new Error("Assessment not available");
-	
+
 	if (assessment.assignedStudents.length > 0) {
-		const isAssigned = assessment.assignedStudents.some(s => s.id === user.id);
+		const isAssigned = assessment.assignedStudents.some(
+			(s) => s.id === user.id,
+		);
 		if (!isAssigned) throw new Error("Not explicitly assigned to you");
 	} else if (assessment.batchId !== user.batchId) {
 		throw new Error("Not authorized for your batch");
@@ -495,7 +542,9 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 
 	// Check if marks are locked (Feature 6: lock after one edit)
 	if (submission.evaluation?.isMarksLocked) {
-		throw new Error("Marks are locked and cannot be changed after the first evaluation.");
+		throw new Error(
+			"Marks are locked and cannot be changed after the first evaluation.",
+		);
 	}
 
 	// Verify max marks
