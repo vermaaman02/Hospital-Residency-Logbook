@@ -2,6 +2,7 @@
  * @component RotationPostingAttachments
  * @description Upload/view attachments for rotation posting rows.
  * Students can upload, all roles can download.
+ * Uses secure signed upload (same method as ECG/ABG).
  */
 
 "use client";
@@ -22,6 +23,7 @@ import {
 	addRotationPostingAttachment,
 	removeRotationPostingAttachment,
 } from "@/actions/rotation-postings";
+import { getCloudinarySignature } from "@/actions/cloudinary";
 
 interface RotationPostingAttachmentsProps {
 	postingId: string;
@@ -29,6 +31,9 @@ interface RotationPostingAttachmentsProps {
 	isStudent: boolean;
 	isPending?: boolean;
 }
+
+const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const API_KEY = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
 
 export function RotationPostingAttachments({
 	postingId,
@@ -46,17 +51,17 @@ export function RotationPostingAttachments({
 			try {
 				setUploading(true);
 
-				// Here you would integrate with Cloudinary
-				// For now, we'll create a placeholder that your frontend will handle
+				// Use secure signed upload method (same as ECG/ABG)
+				const { timestamp, signature } = await getCloudinarySignature();
+
 				const formData = new FormData();
 				formData.append("file", file);
-				formData.append(
-					"upload_preset",
-					process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "",
-				);
+				formData.append("api_key", API_KEY || "");
+				formData.append("timestamp", timestamp.toString());
+				formData.append("signature", signature);
 
 				const response = await fetch(
-					`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/auto/upload`,
+					`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
 					{
 						method: "POST",
 						body: formData,
@@ -64,7 +69,9 @@ export function RotationPostingAttachments({
 				);
 
 				if (!response.ok) {
-					throw new Error("Upload failed");
+					const errorData = await response.json();
+					console.error("Cloudinary error:", errorData);
+					throw new Error(errorData.error?.message || "Upload failed");
 				}
 
 				const data = await response.json();
@@ -79,10 +86,14 @@ export function RotationPostingAttachments({
 				if (result.success) {
 					toast.success("Attachment uploaded successfully");
 					setOpen(false);
+				} else {
+					toast.error("Failed to save attachment");
 				}
 			} catch (error) {
 				console.error("Upload error:", error);
-				toast.error("Failed to upload attachment");
+				toast.error(
+					error instanceof Error ? error.message : "Failed to upload attachment",
+				);
 			} finally {
 				setUploading(false);
 			}
