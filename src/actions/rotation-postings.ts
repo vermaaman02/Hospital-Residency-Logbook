@@ -19,7 +19,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 // ======================== STUDENT ACTIONS ========================
 
@@ -582,8 +582,55 @@ export async function generateRotationPostingsPDF(userId: string) {
 
 	if (!student) throw new Error("Student not found");
 
+	const existingPostings = await prisma.rotationPosting.findMany({
+		where: { userId },
+		orderBy: { slNo: "asc" },
+	});
+	const signatureRecords = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "RotationPosting",
+			entityId: { in: existingPostings.map((entry) => entry.id) },
+		},
+		include: {
+			signedBy: {
+				select: { firstName: true, lastName: true },
+			},
+		},
+	});
+	const signatureByEntity = new Map(
+		signatureRecords.map((record) => [
+			record.entityId,
+			`${record.signedBy.firstName} ${record.signedBy.lastName}`,
+		]),
+	);
+	const postingsBySlNo = new Map(
+		existingPostings.map((entry) => [entry.slNo, entry]),
+	);
+
+	function formatDateValue(date: Date | string | null | undefined): string {
+		if (!date) return "";
+		try {
+			return new Date(date).toLocaleDateString("en-IN", {
+				day: "2-digit",
+				month: "2-digit",
+				year: "2-digit",
+			});
+		} catch {
+			return typeof date === "string" ? date : date.toString();
+		}
+	}
+
 	// Create PDF in landscape orientation
 	const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const autoTableFn =
+		(
+			autoTable as unknown as {
+				default?: typeof autoTable;
+				autoTable?: typeof autoTable;
+			}
+		).default ??
+		(autoTable as unknown as { autoTable?: typeof autoTable }).autoTable ??
+		autoTable;
 
 	// Set up fonts
 	doc.setFontSize(14);
@@ -608,67 +655,78 @@ export async function generateRotationPostingsPDF(userId: string) {
 	const pageWidth = doc.internal.pageSize.getWidth();
 	const pageHeight = doc.internal.pageSize.getHeight();
 	const margin = 10;
-	const tableWidth = pageWidth - margin * 2;
-
-	// Column widths
-	const colWidths = [12, 50, 40, 50, 40]; // Total ~190
-	const colWidthRatio = colWidths.map(
-		(w) => w / colWidths.reduce((a, b) => a + b, 0),
-	);
-	const actualColWidths = colWidthRatio.map((ratio) => tableWidth * ratio);
 
 	const headers = [
 		"Sl. No.",
-		"Department/Block",
+		"Rotation Posting",
+		"Date",
 		"Duration",
-		"Faculty Name",
-		"Remarks",
+		"Faculty Signature",
 	];
-	const rowHeight = 12;
-	let currentY = 35;
 
-	// Draw header
-	doc.setFillColor(41, 128, 185);
-	doc.setTextColor(255, 255, 255);
-	doc.setFontSize(10);
-	doc.setFont("helvetica", "bold");
+	const rows = ROTATION_POSTINGS.map((rotation) => {
+		const existing = postingsBySlNo.get(rotation.slNo);
+		const dateText =
+			existing ?
+				`${formatDateValue(existing.startDate)}${existing.startDate && existing.endDate ? " - " : ""}${formatDateValue(existing.endDate)}`.trim()
+			:	"";
+		const durationText =
+			existing?.durationDays ? existing.durationDays.toString() : "";
+		const signatureText =
+			existing ? (signatureByEntity.get(existing.id) ?? "") : "";
 
-	let currentX = margin;
-	for (let i = 0; i < headers.length; i++) {
-		doc.rect(currentX, currentY, actualColWidths[i], rowHeight, "F");
-		doc.text(headers[i], currentX + 2, currentY + 8, {
-			maxWidth: actualColWidths[i] - 4,
-		});
-		currentX += actualColWidths[i];
+		return [
+			rotation.slNo.toString(),
+			rotation.name,
+			dateText,
+			durationText,
+			signatureText,
+		];
+	});
+
+	autoTableFn(doc, {
+		head: [headers],
+		body: rows,
+		startY: 35,
+		theme: "grid",
+		styles: {
+			font: "helvetica",
+			fontSize: 9,
+			cellPadding: 3,
+			overflow: "ellipsize",
+		},
+		headStyles: {
+			fillColor: [41, 128, 185],
+			textColor: [255, 255, 255],
+			fontStyle: "bold",
+		},
+		columnStyles: {
+			0: { cellWidth: 12 },
+			1: { cellWidth: 120 },
+			2: { cellWidth: 45 },
+			3: { cellWidth: 40 },
+			4: { cellWidth: 60 },
+		},
+		margin: { left: margin, right: margin },
+		didDrawPage: (data: { pageNumber: number }) => {
+			doc.setFontSize(8);
+			doc.text(
+				`Page ${data.pageNumber} of ${doc.getNumberOfPages()}`,
+				pageWidth - margin,
+				pageHeight - 5,
+				{ align: "right" },
+			);
+		},
+	});
+
+	const tableEndY =
+		(doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable
+			?.finalY ?? 35;
+	let finalY = tableEndY + 10;
+	if (finalY > pageHeight - margin) {
+		doc.addPage();
+		finalY = 25;
 	}
-	currentY += rowHeight;
-
-	// Draw rows
-	doc.setTextColor(0, 0, 0);
-	doc.setFont("helvetica", "normal");
-	for (let i = 1; i <= 20; i++) {
-		currentX = margin;
-
-		// Draw row cells
-		for (let j = 0; j < headers.length; j++) {
-			doc.rect(currentX, currentY, actualColWidths[j], rowHeight);
-			// Add row number in first column
-			if (j === 0) {
-				doc.text(i.toString(), currentX + 2, currentY + 8);
-			}
-			currentX += actualColWidths[j];
-		}
-		currentY += rowHeight;
-
-		// Check if we need a new page
-		if (currentY > pageHeight - 30) {
-			doc.addPage();
-			currentY = margin;
-		}
-	}
-
-	// Add signature area
-	const finalY = currentY + 10;
 	doc.setFontSize(9);
 	doc.text("Student Signature: __________________", margin, finalY);
 	doc.text("Faculty Signature: __________________", margin + 70, finalY);
