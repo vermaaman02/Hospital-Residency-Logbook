@@ -490,48 +490,65 @@ export async function generateRotationPostingsPDF(userId: string) {
 		25,
 	);
 
-	// Table headers and rows
-	const headers = [
-		"Sl. No.",
-		"Department/Block",
-		"Duration",
-		"Faculty Name",
-		"Remarks",
-	];
+	// Manual table drawing
+	const pageWidth = doc.internal.pageSize.getWidth();
+	const pageHeight = doc.internal.pageSize.getHeight();
+	const margin = 10;
+	const tableWidth = pageWidth - margin * 2;
+	
+	// Column widths
+	const colWidths = [12, 50, 40, 50, 40]; // Total ~190
+	const colWidthRatio = colWidths.map(w => w / colWidths.reduce((a, b) => a + b, 0));
+	const actualColWidths = colWidthRatio.map(ratio => tableWidth * ratio);
+	
+	const headers = ["Sl. No.", "Department/Block", "Duration", "Faculty Name", "Remarks"];
+	const rowHeight = 12;
+	let currentY = 35;
 
-	const rows: string[][] = [];
+	// Draw header
+	doc.setFillColor(41, 128, 185);
+	doc.setTextColor(255, 255, 255);
+	doc.setFontSize(10);
+	doc.setFont("helvetica", "bold");
+	
+	let currentX = margin;
+	for (let i = 0; i < headers.length; i++) {
+		doc.rect(currentX, currentY, actualColWidths[i], rowHeight, "F");
+		doc.text(headers[i], currentX + 2, currentY + 8, { maxWidth: actualColWidths[i] - 4 });
+		currentX += actualColWidths[i];
+	}
+	currentY += rowHeight;
 
-	// Add 20 empty rows for manual fill
+	// Draw rows
+	doc.setTextColor(0, 0, 0);
+	doc.setFont("helvetica", "normal");
 	for (let i = 1; i <= 20; i++) {
-		rows.push([i.toString(), "", "", "", ""]);
+		currentX = margin;
+		
+		// Draw row cells
+		for (let j = 0; j < headers.length; j++) {
+			doc.rect(currentX, currentY, actualColWidths[j], rowHeight);
+			// Add row number in first column
+			if (j === 0) {
+				doc.text(i.toString(), currentX + 2, currentY + 8);
+			}
+			currentX += actualColWidths[j];
+		}
+		currentY += rowHeight;
+		
+		// Check if we need a new page
+		if (currentY > pageHeight - 30) {
+			doc.addPage();
+			currentY = margin;
+		}
 	}
 
-	// Use autoTable to create the table
-	(doc as any).autoTable({
-		head: [headers],
-		body: rows,
-		startY: 35,
-		columnStyles: {
-			0: { cellWidth: 15 },
-			1: { cellWidth: 50 },
-			2: { cellWidth: 40 },
-			3: { cellWidth: 50 },
-			4: { cellWidth: 40 },
-		},
-		bodyStyles: { minCellHeight: 10, fontSize: 10 },
-		headStyles: {
-			fillColor: [41, 128, 185],
-			textColor: 255,
-			fontStyle: "bold",
-		},
-	});
-
-	// Add signature area at bottom
-	const finalY = (doc as any).lastAutoTable.finalY || 150;
+	// Add signature area
+	const finalY = currentY + 10;
 	doc.setFontSize(9);
-	doc.text("Student Signature: __________________", 20, finalY + 15);
-	doc.text("Faculty Signature: __________________", 130, finalY + 15);
-	doc.text("HOD Signature: __________________", 250, finalY + 15);
+	doc.text("Student Signature: __________________", margin, finalY);
+	doc.text("Faculty Signature: __________________", margin + 70, finalY);
+	doc.text("HOD Signature: __________________", margin + 130, finalY);
 
 	// Return PDF as base64 for download
 	const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
