@@ -1561,7 +1561,7 @@ export function FacultyAssessmentsClient({
 						{evaluatingSubmission && (
 							<div className="rounded-md border p-3 bg-muted/20">
 								<p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-									Student's Submission
+									Student&apos;s Submission
 								</p>
 								<div className="prose prose-sm max-w-none text-sm mb-3">
 									{evaluatingSubmission.content ?
