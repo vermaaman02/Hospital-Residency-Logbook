@@ -18,6 +18,8 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 // ======================== STUDENT ACTIONS ========================
 
@@ -347,4 +349,191 @@ export async function getAllFacultyForDropdown() {
 		select: { id: true, firstName: true, lastName: true, email: true },
 		orderBy: { firstName: "asc" },
 	});
+}
+
+// ======================== ATTACHMENT ACTIONS ========================
+
+/**
+ * Student: Add attachment to a rotation posting row.
+ */
+export async function addRotationPostingAttachment(
+	postingId: string,
+	attachmentUrl: string,
+) {
+	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+	});
+	if (!posting) throw new Error("Rotation posting not found");
+	if (posting.userId !== user.id)
+		throw new Error("Not authorized to modify this posting");
+
+	// Add attachment URL to the array if not already present
+	const currentAttachments = posting.attachments || [];
+	if (!currentAttachments.includes(attachmentUrl)) {
+		currentAttachments.push(attachmentUrl);
+	}
+
+	await prisma.rotationPosting.update({
+		where: { id: postingId },
+		data: { attachments: currentAttachments },
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Student: Remove attachment from a rotation posting row.
+ */
+export async function removeRotationPostingAttachment(
+	postingId: string,
+	attachmentUrl: string,
+) {
+	const userId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+	});
+	if (!posting) throw new Error("Rotation posting not found");
+	if (posting.userId !== user.id)
+		throw new Error("Not authorized to modify this posting");
+
+	// Remove attachment URL from the array
+	const updatedAttachments = (posting.attachments || []).filter(
+		(url) => url !== attachmentUrl,
+	);
+
+	await prisma.rotationPosting.update({
+		where: { id: postingId },
+		data: { attachments: updatedAttachments },
+	});
+
+	revalidatePath("/dashboard/student/rotation-postings");
+	revalidatePath("/dashboard/faculty/rotation-postings");
+	revalidatePath("/dashboard/hod/rotation-postings");
+	return { success: true };
+}
+
+/**
+ * Get attachments for a rotation posting (all roles can view).
+ */
+export async function getRotationPostingAttachments(postingId: string) {
+	await requireAuth();
+
+	const posting = await prisma.rotationPosting.findUnique({
+		where: { id: postingId },
+		select: {
+			id: true,
+			attachments: true,
+			user: {
+				select: { id: true, firstName: true, lastName: true },
+			},
+		},
+	});
+
+	if (!posting) throw new Error("Rotation posting not found");
+	return posting;
+}
+
+// ======================== PDF GENERATION ========================
+
+/**
+ * Generate a PDF of rotation postings form for student to fill manually.
+ * Landscape format with 20 rows (7 core + 13 electives).
+ */
+export async function generateRotationPostingsPDF(userId: string) {
+	const user = await requireAuth();
+	const currentUser = await prisma.user.findUnique({ where: { clerkId: user } });
+	if (!currentUser) throw new Error("User not found");
+
+	// Verify the student ID matches or user is HOD/Faculty
+	if (currentUser.role === "STUDENT" && currentUser.id !== userId) {
+		throw new Error("Not authorized to generate this PDF");
+	}
+
+	// Fetch student info
+	const student = await prisma.user.findUnique({
+		where: { id: userId },
+		select: {
+			id: true,
+			firstName: true,
+			lastName: true,
+			email: true,
+			batchRelation: { select: { name: true } },
+		},
+	});
+
+	if (!student) throw new Error("Student not found");
+
+	// Create PDF in landscape orientation
+	const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+	// Set up fonts
+	doc.setFontSize(14);
+	doc.text("LOG OF ROTATION POSTINGS DURING PG IN EMERGENCY MEDICINE", 148, 15, {
+		align: "center",
+	});
+
+	// Student info section
+	doc.setFontSize(10);
+	doc.text(
+		`Student: ${student.firstName} ${student.lastName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Date: _______________`,
+		10,
+		25,
+	);
+
+	// Table headers and rows
+	const headers = [
+		"Sl. No.",
+		"Department/Block",
+		"Duration",
+		"Faculty Name",
+		"Remarks",
+	];
+
+	const rows: string[][] = [];
+
+	// Add 20 empty rows for manual fill
+	for (let i = 1; i <= 20; i++) {
+		rows.push([i.toString(), "", "", "", ""]);
+	}
+
+	// Use autoTable to create the table
+	(doc as any).autoTable({
+		head: [headers],
+		body: rows,
+		startY: 35,
+		columnStyles: {
+			0: { cellWidth: 15 },
+			1: { cellWidth: 50 },
+			2: { cellWidth: 40 },
+			3: { cellWidth: 50 },
+			4: { cellWidth: 40 },
+		},
+		bodyStyles: { minCellHeight: 10, fontSize: 10 },
+		headStyles: {
+			fillColor: [41, 128, 185],
+			textColor: 255,
+			fontStyle: "bold",
+		},
+	});
+
+	// Add signature area at bottom
+	const finalY = (doc as any).lastAutoTable.finalY || 150;
+	doc.setFontSize(9);
+	doc.text("Student Signature: __________________", 20, finalY + 15);
+	doc.text("Faculty Signature: __________________", 130, finalY + 15);
+	doc.text("HOD Signature: __________________", 250, finalY + 15);
+
+	// Return PDF as base64 for download
+	const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+	return pdfBuffer.toString("base64");
 }

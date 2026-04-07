@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RotationPostingAttachments } from "@/components/shared/RotationPostingAttachments";
 import {
 	CalendarIcon,
 	Loader2,
@@ -321,6 +322,7 @@ export function RotationPostingsTab({
 						getFacultyName={getFacultyName}
 						canEdit={canEdit}
 						isPending={isPending}
+						isStudent={true}
 						onClick={() => canEdit && startEditing(config, posting)}
 						onSubmit={
 							posting && canEdit ? () => handleSubmit(posting.id) : undefined
@@ -640,6 +642,7 @@ interface ReadOnlyRowProps {
 	getFacultyName: (id: string | null) => string;
 	canEdit: boolean;
 	isPending: boolean;
+	isStudent: boolean;
 	onClick: () => void;
 	onSubmit?: () => void;
 	onDelete?: () => void;
@@ -651,6 +654,7 @@ function ReadOnlyRow({
 	getFacultyName,
 	canEdit,
 	isPending,
+	isStudent,
 	onClick,
 	onSubmit,
 	onDelete,
@@ -691,6 +695,14 @@ function ReadOnlyRow({
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				{posting ?
 					<div className="flex items-center justify-center gap-0.5">
+						{isStudent && (
+							<RotationPostingAttachments
+								postingId={posting.id}
+								attachments={posting.attachments || []}
+								isStudent={isStudent}
+								isPending={isPending}
+							/>
+						)}
 						{(posting.status === "DRAFT" ||
 							posting.status === "NEEDS_REVISION") &&
 							onSubmit && (

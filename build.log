@@ -1,0 +1,21 @@
+
+> aiims-patna-logbook@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.1.6 (Turbopack)
+- Experiments (use with caution):
+  ┬╖ serverActions
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 44s
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+Error: DATABASE_URL environment variable is not set
+    at <unknown> (C:\Users\Vikash\Desktop\hospital-residency-logbook.worktrees\copilot-worktree-2026-04-07T01-46-37\.next\server\chunks\_18a4e741._.js:1:346080)
+    at <unknown> (C:\Users\Vikash\Desktop\hospital-residency-logbook.worktrees\copilot-worktree-2026-04-07T01-46-37\.next\server\chunks\_18a4e741._.js:1:346216)
+
+> Build error occurred
+Error: Failed to collect page data for /api/analytics/student/[id]
+    at ignore-listed frames {
+  type: 'Error'
+}

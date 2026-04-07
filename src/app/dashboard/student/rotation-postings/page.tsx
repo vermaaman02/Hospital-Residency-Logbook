@@ -68,6 +68,7 @@ export default async function RotationPostingsPage({
 				facultyList={JSON.parse(JSON.stringify(facultyList))}
 				defaultTab={tab}
 				studentName={studentName}
+				userId={user.id}
 			/>
 		</div>
 	);
