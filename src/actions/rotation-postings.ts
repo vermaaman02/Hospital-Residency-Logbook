@@ -196,10 +196,45 @@ export async function getMyRotationPostings() {
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
 
-	return prisma.rotationPosting.findMany({
+	const postings = await prisma.rotationPosting.findMany({
 		where: { userId: user.id },
 		orderBy: { slNo: "asc" },
 	});
+
+	// Fetch signer info for each SIGNED posting
+	const postingsWithSigners = await Promise.all(
+		postings.map(async (posting) => {
+			if (posting.status === "SIGNED") {
+				const signature = await prisma.digitalSignature.findFirst({
+					where: {
+						entityType: "RotationPosting",
+						entityId: posting.id,
+					},
+					include: {
+						signedBy: {
+							select: {
+								firstName: true,
+								lastName: true,
+							},
+						},
+					},
+				});
+				return {
+					...posting,
+					signedByName:
+						signature ?
+							`${signature.signedBy.firstName} ${signature.signedBy.lastName}`
+						:	null,
+				};
+			}
+			return {
+				...posting,
+				signedByName: null,
+			};
+		}),
+	);
+
+	return postingsWithSigners;
 }
 
 // ======================== FACULTY & HOD ACTIONS ========================
@@ -213,8 +248,39 @@ export async function getRotationPostingsForReview() {
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
 
+	let postings;
+
 	if (role === "hod") {
-		return prisma.rotationPosting.findMany({
+		postings = await prisma.rotationPosting.findMany({
+			orderBy: { createdAt: "desc" },
+			include: {
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						batchRelation: { select: { name: true } },
+						currentSemester: true,
+					},
+				},
+			},
+		});
+	} else {
+		// Faculty: batch-scoped
+		const batchAssignments = await prisma.facultyBatchAssignment.findMany({
+			where: { facultyId: user.id },
+			select: { batchId: true },
+		});
+		const batchIds = batchAssignments.map((b) => b.batchId);
+		if (batchIds.length === 0) return [];
+
+		const students = await prisma.user.findMany({
+			where: { batchId: { in: batchIds }, role: "STUDENT" as never },
+			select: { id: true },
+		});
+
+		postings = await prisma.rotationPosting.findMany({
+			where: { userId: { in: students.map((s) => s.id) } },
 			orderBy: { createdAt: "desc" },
 			include: {
 				user: {
@@ -230,34 +296,40 @@ export async function getRotationPostingsForReview() {
 		});
 	}
 
-	// Faculty: batch-scoped
-	const batchAssignments = await prisma.facultyBatchAssignment.findMany({
-		where: { facultyId: user.id },
-		select: { batchId: true },
-	});
-	const batchIds = batchAssignments.map((b) => b.batchId);
-	if (batchIds.length === 0) return [];
+	// Fetch signer info for each SIGNED posting
+	const postingsWithSigners = await Promise.all(
+		postings.map(async (posting) => {
+			if (posting.status === "SIGNED") {
+				const signature = await prisma.digitalSignature.findFirst({
+					where: {
+						entityType: "RotationPosting",
+						entityId: posting.id,
+					},
+					include: {
+						signedBy: {
+							select: {
+								firstName: true,
+								lastName: true,
+							},
+						},
+					},
+				});
+				return {
+					...posting,
+					signedByName:
+						signature ?
+							`${signature.signedBy.firstName} ${signature.signedBy.lastName}`
+						:	null,
+				};
+			}
+			return {
+				...posting,
+				signedByName: null,
+			};
+		}),
+	);
 
-	const students = await prisma.user.findMany({
-		where: { batchId: { in: batchIds }, role: "STUDENT" as never },
-		select: { id: true },
-	});
-
-	return prisma.rotationPosting.findMany({
-		where: { userId: { in: students.map((s) => s.id) } },
-		orderBy: { createdAt: "desc" },
-		include: {
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					batchRelation: { select: { name: true } },
-					currentSemester: true,
-				},
-			},
-		},
-	});
+	return postingsWithSigners;
 }
 
 /**
@@ -265,10 +337,45 @@ export async function getRotationPostingsForReview() {
  */
 export async function getStudentRotationPostings(studentId: string) {
 	await requireRole(["faculty", "hod"]);
-	return prisma.rotationPosting.findMany({
+	const postings = await prisma.rotationPosting.findMany({
 		where: { userId: studentId },
 		orderBy: { slNo: "asc" },
 	});
+
+	// Fetch signer info for each SIGNED posting
+	const postingsWithSigners = await Promise.all(
+		postings.map(async (posting) => {
+			if (posting.status === "SIGNED") {
+				const signature = await prisma.digitalSignature.findFirst({
+					where: {
+						entityType: "RotationPosting",
+						entityId: posting.id,
+					},
+					include: {
+						signedBy: {
+							select: {
+								firstName: true,
+								lastName: true,
+							},
+						},
+					},
+				});
+				return {
+					...posting,
+					signedByName:
+						signature ?
+							`${signature.signedBy.firstName} ${signature.signedBy.lastName}`
+						:	null,
+				};
+			}
+			return {
+				...posting,
+				signedByName: null,
+			};
+		}),
+	);
+
+	return postingsWithSigners;
 }
 
 /**
@@ -451,7 +558,9 @@ export async function getRotationPostingAttachments(postingId: string) {
  */
 export async function generateRotationPostingsPDF(userId: string) {
 	const user = await requireAuth();
-	const currentUser = await prisma.user.findUnique({ where: { clerkId: user } });
+	const currentUser = await prisma.user.findUnique({
+		where: { clerkId: user },
+	});
 	if (!currentUser) throw new Error("User not found");
 
 	// Verify the student ID matches or user is HOD/Faculty
@@ -478,9 +587,14 @@ export async function generateRotationPostingsPDF(userId: string) {
 
 	// Set up fonts
 	doc.setFontSize(14);
-	doc.text("LOG OF ROTATION POSTINGS DURING PG IN EMERGENCY MEDICINE", 148, 15, {
-		align: "center",
-	});
+	doc.text(
+		"LOG OF ROTATION POSTINGS DURING PG IN EMERGENCY MEDICINE",
+		148,
+		15,
+		{
+			align: "center",
+		},
+	);
 
 	// Student info section
 	doc.setFontSize(10);
@@ -495,13 +609,21 @@ export async function generateRotationPostingsPDF(userId: string) {
 	const pageHeight = doc.internal.pageSize.getHeight();
 	const margin = 10;
 	const tableWidth = pageWidth - margin * 2;
-	
+
 	// Column widths
 	const colWidths = [12, 50, 40, 50, 40]; // Total ~190
-	const colWidthRatio = colWidths.map(w => w / colWidths.reduce((a, b) => a + b, 0));
-	const actualColWidths = colWidthRatio.map(ratio => tableWidth * ratio);
-	
-	const headers = ["Sl. No.", "Department/Block", "Duration", "Faculty Name", "Remarks"];
+	const colWidthRatio = colWidths.map(
+		(w) => w / colWidths.reduce((a, b) => a + b, 0),
+	);
+	const actualColWidths = colWidthRatio.map((ratio) => tableWidth * ratio);
+
+	const headers = [
+		"Sl. No.",
+		"Department/Block",
+		"Duration",
+		"Faculty Name",
+		"Remarks",
+	];
 	const rowHeight = 12;
 	let currentY = 35;
 
@@ -510,11 +632,13 @@ export async function generateRotationPostingsPDF(userId: string) {
 	doc.setTextColor(255, 255, 255);
 	doc.setFontSize(10);
 	doc.setFont("helvetica", "bold");
-	
+
 	let currentX = margin;
 	for (let i = 0; i < headers.length; i++) {
 		doc.rect(currentX, currentY, actualColWidths[i], rowHeight, "F");
-		doc.text(headers[i], currentX + 2, currentY + 8, { maxWidth: actualColWidths[i] - 4 });
+		doc.text(headers[i], currentX + 2, currentY + 8, {
+			maxWidth: actualColWidths[i] - 4,
+		});
 		currentX += actualColWidths[i];
 	}
 	currentY += rowHeight;
@@ -524,7 +648,7 @@ export async function generateRotationPostingsPDF(userId: string) {
 	doc.setFont("helvetica", "normal");
 	for (let i = 1; i <= 20; i++) {
 		currentX = margin;
-		
+
 		// Draw row cells
 		for (let j = 0; j < headers.length; j++) {
 			doc.rect(currentX, currentY, actualColWidths[j], rowHeight);
@@ -535,7 +659,7 @@ export async function generateRotationPostingsPDF(userId: string) {
 			currentX += actualColWidths[j];
 		}
 		currentY += rowHeight;
-		
+
 		// Check if we need a new page
 		if (currentY > pageHeight - 30) {
 			doc.addPage();

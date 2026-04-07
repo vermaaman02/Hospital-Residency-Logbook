@@ -35,6 +35,7 @@ export interface RotationPostingViewEntry {
 	status: string;
 	facultyRemark: string | null;
 	createdAt: string;
+	signedByName?: string | null;
 }
 
 interface StudentRotationPostingViewProps {
@@ -173,7 +174,14 @@ function RotationRow({ entry }: { entry: RotationPostingViewEntry }) {
 				)}
 			</TableCell>
 			<TableCell className="text-center">
-				<StatusBadge status={entry.status as EntryStatus} size="sm" />
+				<div>
+					<StatusBadge status={entry.status as EntryStatus} size="sm" />
+					{entry.status === "SIGNED" && entry.signedByName && (
+						<p className="text-xs text-muted-foreground mt-1">
+							by {entry.signedByName}
+						</p>
+					)}
+				</div>
 			</TableCell>
 		</TableRow>
 	);

@@ -148,6 +148,7 @@ model RotationPosting {
   totalDuration String?
   status        EntryStatus @default(DRAFT)
   facultyRemark String?
+  attachments   String[]    @default([])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   durationDays  Int?
