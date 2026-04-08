@@ -40,6 +40,7 @@ import {
 	Users,
 	UserCog,
 	FileText,
+	Settings,
 	ChevronLeft,
 	ChevronRight,
 	UserCircle,
@@ -491,6 +492,12 @@ const hodNavSections: NavSection[] = [
 				badgeKey: "rotationPostings",
 			},
 			{
+				title: "Rotation Posting Settings",
+				href: "/dashboard/hod/rotation-posting-config",
+				icon: <Settings className="h-4 w-4" />,
+				roles: ["hod"],
+			},
+			{
 				title: "Attendance",
 				href: "/dashboard/hod/attendance",
 				icon: <CalendarDays className="h-4 w-4" />,
@@ -724,7 +731,10 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 				// Filter items: keep non-form static items OR items whose href route segment matches a FormDefinition route
 				const filteredItems = section.items.filter((item) => {
 					// Static items that are always active regardless of active forms
-					if (item.href === `/dashboard/${role}` || item.href === `/dashboard/${role}/profile`) {
+					if (
+						item.href === `/dashboard/${role}` ||
+						item.href === `/dashboard/${role}/profile`
+					) {
 						return true;
 					}
 

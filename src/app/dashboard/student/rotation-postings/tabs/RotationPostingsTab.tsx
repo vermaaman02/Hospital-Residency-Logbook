@@ -82,6 +82,7 @@ import type { EntryStatus } from "@/types";
 interface RotationPostingsTabProps {
 	postings: RotationPostingData[];
 	facultyList: FacultyOption[];
+	enabledRotations?: Array<{ rotationSlNo: number; isEnabled: boolean }> | null;
 }
 
 interface InlineForm {
@@ -113,9 +114,23 @@ function calcDuration(start: Date | undefined, end: Date | undefined): string {
 export function RotationPostingsTab({
 	postings,
 	facultyList,
+	enabledRotations,
 }: RotationPostingsTabProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Create a map of enabled rotations for quick lookup
+	const enabledRotationMap = useMemo(() => {
+		if (!enabledRotations) {
+			return new Map(
+				ROTATION_POSTINGS.map((rotation) => [rotation.slNo, false]),
+			);
+		}
+		const map = new Map(
+			enabledRotations.map((r) => [r.rotationSlNo, r.isEnabled]),
+		);
+		return map;
+	}, [enabledRotations]);
 
 	// Which rotation row (by slNo) is in edit mode
 	const [editingSlNo, setEditingSlNo] = useState<number | null>(null);
@@ -270,10 +285,13 @@ export function RotationPostingsTab({
 		return configs.map((config) => {
 			const posting = postingsList.find((p) => p.rotationName === config.name);
 			const isEditing = editingSlNo === config.slNo;
+			// Get enabled state from config: true by default if no explicit disable
+			const isEnabled = enabledRotationMap.get(config.slNo) ?? false;
 			const canEdit =
-				!posting ||
-				posting.status === "DRAFT" ||
-				posting.status === "NEEDS_REVISION";
+				(!posting ||
+					posting.status === "DRAFT" ||
+					posting.status === "NEEDS_REVISION") &&
+				isEnabled;
 
 			const showRemark =
 				posting?.status === "NEEDS_REVISION" && posting?.facultyRemark;
@@ -323,6 +341,7 @@ export function RotationPostingsTab({
 						canEdit={canEdit}
 						isPending={isPending}
 						isStudent={true}
+						isEnabled={enabledRotationMap.get(config.slNo) ?? false}
 						onClick={() => canEdit && startEditing(config, posting)}
 						onSubmit={
 							posting && canEdit ? () => handleSubmit(posting.id) : undefined
@@ -643,6 +662,7 @@ interface ReadOnlyRowProps {
 	canEdit: boolean;
 	isPending: boolean;
 	isStudent: boolean;
+	isEnabled?: boolean;
 	onClick: () => void;
 	onSubmit?: () => void;
 	onDelete?: () => void;
@@ -655,11 +675,12 @@ function ReadOnlyRow({
 	canEdit,
 	isPending,
 	isStudent,
+	isEnabled = true,
 	onClick,
 	onSubmit,
 	onDelete,
 }: ReadOnlyRowProps) {
-	const isClickable = canEdit && !isPending;
+	const isClickable = canEdit && !isPending && isEnabled;
 
 	return (
 		<TableRow
@@ -667,9 +688,15 @@ function ReadOnlyRow({
 				"transition-colors",
 				posting ? "" : "text-muted-foreground/60",
 				posting?.status === "SIGNED" && "bg-green-50/50",
+				!isEnabled && "opacity-50 bg-gray-50",
 				isClickable && "cursor-pointer hover:bg-blue-50/40",
 			)}
 			onClick={isClickable ? onClick : undefined}
+			title={
+				!isEnabled ?
+					"This rotation posting is not available for your batch/semester"
+				:	""
+			}
 		>
 			<TableCell className="text-center font-medium">{config.slNo}.</TableCell>
 			<TableCell className="font-medium">{config.name}</TableCell>
@@ -701,46 +728,52 @@ function ReadOnlyRow({
 			</TableCell>
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				{posting ?
-					<div className="flex items-center justify-center gap-0.5">
-						{isStudent && (
-							<RotationPostingAttachments
-								postingId={posting.id}
-								attachments={posting.attachments || []}
-								isStudent={isStudent}
-								isPending={isPending}
-							/>
-						)}
-						{(posting.status === "DRAFT" ||
-							posting.status === "NEEDS_REVISION") &&
-							onSubmit && (
+					isEnabled ?
+						<div className="flex items-center justify-center gap-0.5">
+							{isStudent && (
+								<RotationPostingAttachments
+									postingId={posting.id}
+									attachments={posting.attachments || []}
+									isStudent={isStudent}
+									isPending={isPending}
+								/>
+							)}
+							{(posting.status === "DRAFT" ||
+								posting.status === "NEEDS_REVISION") &&
+								onSubmit && (
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-7 w-7 text-hospital-primary hover:text-hospital-primary"
+										title="Submit for review"
+										onClick={onSubmit}
+										disabled={isPending}
+									>
+										<Send className="h-3.5 w-3.5" />
+									</Button>
+								)}
+							{posting.status === "DRAFT" && onDelete && (
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-7 w-7 text-hospital-primary hover:text-hospital-primary"
-									title="Submit for review"
-									onClick={onSubmit}
+									className="h-7 w-7 text-destructive hover:text-destructive"
+									title="Delete"
+									onClick={onDelete}
 									disabled={isPending}
 								>
-									<Send className="h-3.5 w-3.5" />
+									<Trash2 className="h-3.5 w-3.5" />
 								</Button>
 							)}
-						{posting.status === "DRAFT" && onDelete && (
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-7 w-7 text-destructive hover:text-destructive"
-								title="Delete"
-								onClick={onDelete}
-								disabled={isPending}
-							>
-								<Trash2 className="h-3.5 w-3.5" />
-							</Button>
-						)}
-					</div>
-				:	<span className="text-xs text-muted-foreground italic">
+						</div>
+					:	<span className="text-xs text-red-600 font-medium">
+							Disabled by HOD
+						</span>
+
+				: isEnabled ?
+					<span className="text-xs text-muted-foreground italic">
 						Click to fill
 					</span>
-				}
+				:	<span className="text-xs text-red-600 italic">Disabled by HOD</span>}
 			</TableCell>
 		</TableRow>
 	);

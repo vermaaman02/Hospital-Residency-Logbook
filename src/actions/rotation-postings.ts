@@ -18,8 +18,80 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
+import { validateRotationEnabledForStudentDetails } from "@/actions/rotation-posting-config";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+
+interface RotationScopeSource {
+	batchId: string | null;
+	batch: string | null;
+	currentSemester: number | null;
+	departmentId: string | null;
+	department: string | null;
+}
+
+async function resolveRotationScope(source: RotationScopeSource) {
+	const batchById =
+		source.batchId ?
+			await prisma.batch.findUnique({
+				where: { id: source.batchId },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+	const batchByName =
+		!batchById && source.batch ?
+			await prisma.batch.findFirst({
+				where: { name: source.batch },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+	const fallbackBatch =
+		!batchById && !batchByName ?
+			await prisma.batch.findFirst({
+				where: { isActive: true },
+				orderBy: { name: "asc" },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+
+	const departmentById =
+		source.departmentId ?
+			await prisma.department.findUnique({
+				where: { id: source.departmentId },
+				select: { id: true },
+			})
+		:	null;
+	const departmentByName =
+		!departmentById && source.department ?
+			await prisma.department.findFirst({
+				where: { name: source.department },
+				select: { id: true },
+			})
+		:	null;
+	const fallbackDepartment =
+		!departmentById && !departmentByName ?
+			await prisma.department.findFirst({
+				where: { isActive: true },
+				orderBy: { name: "asc" },
+				select: { id: true },
+			})
+		:	null;
+
+	return {
+		batchId: batchById?.id ?? batchByName?.id ?? fallbackBatch?.id ?? null,
+		semester:
+			source.currentSemester ??
+			batchById?.currentSemester ??
+			batchByName?.currentSemester ??
+			fallbackBatch?.currentSemester ??
+			null,
+		departmentId:
+			departmentById?.id ??
+			departmentByName?.id ??
+			fallbackDepartment?.id ??
+			null,
+	};
+}
 
 // ======================== STUDENT ACTIONS ========================
 
@@ -30,8 +102,27 @@ export async function createRotationPosting(data: RotationPostingInput) {
 	const userId = await requireAuth();
 	const validated = rotationPostingSchema.parse(data);
 
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found in database");
+	const rotationScope = await resolveRotationScope(user);
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		validated.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	// Validate rotation name
 	const rotationConfig = ROTATION_POSTINGS.find(
@@ -95,8 +186,19 @@ export async function updateRotationPosting(
 	const userId = await requireAuth();
 	const validated = rotationPostingSchema.parse(data);
 
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found");
+	const rotationScope = await resolveRotationScope(user);
 
 	const existing = await prisma.rotationPosting.findFirst({
 		where: { id, userId: user.id },
@@ -104,6 +206,14 @@ export async function updateRotationPosting(
 	if (!existing) throw new Error("Entry not found or access denied");
 	if (existing.status === "SIGNED")
 		throw new Error("Cannot edit a signed entry");
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		validated.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	const rotationConfig = ROTATION_POSTINGS.find(
 		(r) => r.name === validated.rotationName,
@@ -149,8 +259,19 @@ export async function updateRotationPosting(
  */
 export async function submitRotationPosting(id: string) {
 	const userId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found");
+	const rotationScope = await resolveRotationScope(user);
 
 	const existing = await prisma.rotationPosting.findFirst({
 		where: { id, userId: user.id },
@@ -159,6 +280,14 @@ export async function submitRotationPosting(id: string) {
 	if (existing.status !== "DRAFT" && existing.status !== "NEEDS_REVISION") {
 		throw new Error("Cannot submit this entry");
 	}
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		existing.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	await prisma.rotationPosting.update({
 		where: { id },
@@ -576,11 +705,35 @@ export async function generateRotationPostingsPDF(userId: string) {
 			firstName: true,
 			lastName: true,
 			email: true,
+			batchId: true,
+			currentSemester: true,
+			departmentId: true,
 			batchRelation: { select: { name: true } },
 		},
 	});
 
 	if (!student) throw new Error("Student not found");
+
+	// Fetch enabled rotations for this student
+	let enabledRotationSlNos: Set<number> = new Set(
+		ROTATION_POSTINGS.map((r) => r.slNo),
+	); // Default to all enabled
+	if (student.batchId && student.currentSemester && student.departmentId) {
+		const configs = await prisma.rotationPostingConfiguration.findMany({
+			where: {
+				batchId: student.batchId,
+				semester: student.currentSemester,
+				departmentId: student.departmentId,
+			},
+			select: { rotationSlNo: true, isEnabled: true },
+		});
+		if (configs.length > 0) {
+			// If configs exist, only include enabled ones
+			enabledRotationSlNos = new Set(
+				configs.filter((c) => c.isEnabled).map((c) => c.rotationSlNo),
+			);
+		}
+	}
 
 	const existingPostings = await prisma.rotationPosting.findMany({
 		where: { userId },
@@ -664,7 +817,12 @@ export async function generateRotationPostingsPDF(userId: string) {
 		"Faculty Signature",
 	];
 
-	const rows = ROTATION_POSTINGS.map((rotation) => {
+	// Filter rotations to only include enabled ones
+	const enabledRotations = ROTATION_POSTINGS.filter((rotation) =>
+		enabledRotationSlNos.has(rotation.slNo),
+	);
+
+	const rows = enabledRotations.map((rotation) => {
 		const existing = postingsBySlNo.get(rotation.slNo);
 		const dateText =
 			existing ?

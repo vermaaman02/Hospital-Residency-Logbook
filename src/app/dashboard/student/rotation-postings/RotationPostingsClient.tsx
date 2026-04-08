@@ -85,6 +85,7 @@ interface RotationPostingsClientProps {
 	thesis: ThesisData;
 	trainingRecords: TrainingRecordData[];
 	facultyList: FacultyOption[];
+	enabledRotations?: Array<{ rotationSlNo: number; isEnabled: boolean }> | null;
 	defaultTab?: string;
 	studentName: string;
 	userId: string;
@@ -100,6 +101,7 @@ export function RotationPostingsClient({
 	thesis,
 	trainingRecords,
 	facultyList,
+	enabledRotations,
 	defaultTab,
 	studentName,
 	userId,
@@ -168,7 +170,11 @@ export function RotationPostingsClient({
 			</div>
 
 			<TabsContent value="rotation-postings" className="mt-6">
-				<RotationPostingsTab postings={postings} facultyList={facultyList} />
+				<RotationPostingsTab
+					postings={postings}
+					facultyList={facultyList}
+					enabledRotations={enabledRotations}
+				/>
 			</TabsContent>
 
 			<TabsContent value="thesis" className="mt-6">
