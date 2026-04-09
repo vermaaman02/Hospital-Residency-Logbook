@@ -18,8 +18,80 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
+import { validateRotationEnabledForStudentDetails } from "@/actions/rotation-posting-config";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
+
+interface RotationScopeSource {
+	batchId: string | null;
+	batch: string | null;
+	currentSemester: number | null;
+	departmentId: string | null;
+	department: string | null;
+}
+
+async function resolveRotationScope(source: RotationScopeSource) {
+	const batchById =
+		source.batchId ?
+			await prisma.batch.findUnique({
+				where: { id: source.batchId },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+	const batchByName =
+		!batchById && source.batch ?
+			await prisma.batch.findFirst({
+				where: { name: source.batch },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+	const fallbackBatch =
+		!batchById && !batchByName ?
+			await prisma.batch.findFirst({
+				where: { isActive: true },
+				orderBy: { name: "asc" },
+				select: { id: true, currentSemester: true },
+			})
+		:	null;
+
+	const departmentById =
+		source.departmentId ?
+			await prisma.department.findUnique({
+				where: { id: source.departmentId },
+				select: { id: true },
+			})
+		:	null;
+	const departmentByName =
+		!departmentById && source.department ?
+			await prisma.department.findFirst({
+				where: { name: source.department },
+				select: { id: true },
+			})
+		:	null;
+	const fallbackDepartment =
+		!departmentById && !departmentByName ?
+			await prisma.department.findFirst({
+				where: { isActive: true },
+				orderBy: { name: "asc" },
+				select: { id: true },
+			})
+		:	null;
+
+	return {
+		batchId: batchById?.id ?? batchByName?.id ?? fallbackBatch?.id ?? null,
+		semester:
+			source.currentSemester ??
+			batchById?.currentSemester ??
+			batchByName?.currentSemester ??
+			fallbackBatch?.currentSemester ??
+			null,
+		departmentId:
+			departmentById?.id ??
+			departmentByName?.id ??
+			fallbackDepartment?.id ??
+			null,
+	};
+}
 
 // ======================== STUDENT ACTIONS ========================
 
@@ -30,8 +102,27 @@ export async function createRotationPosting(data: RotationPostingInput) {
 	const userId = await requireAuth();
 	const validated = rotationPostingSchema.parse(data);
 
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found in database");
+	const rotationScope = await resolveRotationScope(user);
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		validated.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	// Validate rotation name
 	const rotationConfig = ROTATION_POSTINGS.find(
@@ -95,8 +186,19 @@ export async function updateRotationPosting(
 	const userId = await requireAuth();
 	const validated = rotationPostingSchema.parse(data);
 
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found");
+	const rotationScope = await resolveRotationScope(user);
 
 	const existing = await prisma.rotationPosting.findFirst({
 		where: { id, userId: user.id },
@@ -104,6 +206,14 @@ export async function updateRotationPosting(
 	if (!existing) throw new Error("Entry not found or access denied");
 	if (existing.status === "SIGNED")
 		throw new Error("Cannot edit a signed entry");
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		validated.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	const rotationConfig = ROTATION_POSTINGS.find(
 		(r) => r.name === validated.rotationName,
@@ -149,8 +259,19 @@ export async function updateRotationPosting(
  */
 export async function submitRotationPosting(id: string) {
 	const userId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	const user = await prisma.user.findUnique({
+		where: { clerkId: userId },
+		select: {
+			id: true,
+			batchId: true,
+			batch: true,
+			currentSemester: true,
+			departmentId: true,
+			department: true,
+		},
+	});
 	if (!user) throw new Error("User not found");
+	const rotationScope = await resolveRotationScope(user);
 
 	const existing = await prisma.rotationPosting.findFirst({
 		where: { id, userId: user.id },
@@ -159,6 +280,14 @@ export async function submitRotationPosting(id: string) {
 	if (existing.status !== "DRAFT" && existing.status !== "NEEDS_REVISION") {
 		throw new Error("Cannot submit this entry");
 	}
+
+	// Check if rotation is enabled - throws error if disabled
+	await validateRotationEnabledForStudentDetails(
+		existing.rotationName,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
+	);
 
 	await prisma.rotationPosting.update({
 		where: { id },
@@ -576,14 +705,85 @@ export async function generateRotationPostingsPDF(userId: string) {
 			firstName: true,
 			lastName: true,
 			email: true,
+			batchId: true,
+			currentSemester: true,
+			departmentId: true,
 			batchRelation: { select: { name: true } },
 		},
 	});
 
 	if (!student) throw new Error("Student not found");
 
+	// Fetch enabled rotations for this student
+	let enabledRotationSlNos: Set<number> = new Set(
+		ROTATION_POSTINGS.map((r) => r.slNo),
+	); // Default to all enabled
+	if (student.batchId && student.currentSemester && student.departmentId) {
+		const configs = await prisma.rotationPostingConfiguration.findMany({
+			where: {
+				batchId: student.batchId,
+				semester: student.currentSemester,
+				departmentId: student.departmentId,
+			},
+			select: { rotationSlNo: true, isEnabled: true },
+		});
+		if (configs.length > 0) {
+			// If configs exist, only include enabled ones
+			enabledRotationSlNos = new Set(
+				configs.filter((c) => c.isEnabled).map((c) => c.rotationSlNo),
+			);
+		}
+	}
+
+	const existingPostings = await prisma.rotationPosting.findMany({
+		where: { userId },
+		orderBy: { slNo: "asc" },
+	});
+	const signatureRecords = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "RotationPosting",
+			entityId: { in: existingPostings.map((entry) => entry.id) },
+		},
+		include: {
+			signedBy: {
+				select: { firstName: true, lastName: true },
+			},
+		},
+	});
+	const signatureByEntity = new Map(
+		signatureRecords.map((record) => [
+			record.entityId,
+			`${record.signedBy.firstName} ${record.signedBy.lastName}`,
+		]),
+	);
+	const postingsBySlNo = new Map(
+		existingPostings.map((entry) => [entry.slNo, entry]),
+	);
+
+	function formatDateValue(date: Date | string | null | undefined): string {
+		if (!date) return "";
+		try {
+			return new Date(date).toLocaleDateString("en-IN", {
+				day: "2-digit",
+				month: "2-digit",
+				year: "2-digit",
+			});
+		} catch {
+			return typeof date === "string" ? date : date.toString();
+		}
+	}
+
 	// Create PDF in landscape orientation
 	const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const autoTableFn =
+		(
+			autoTable as unknown as {
+				default?: typeof autoTable;
+				autoTable?: typeof autoTable;
+			}
+		).default ??
+		(autoTable as unknown as { autoTable?: typeof autoTable }).autoTable ??
+		autoTable;
 
 	// Set up fonts
 	doc.setFontSize(14);
@@ -608,67 +808,83 @@ export async function generateRotationPostingsPDF(userId: string) {
 	const pageWidth = doc.internal.pageSize.getWidth();
 	const pageHeight = doc.internal.pageSize.getHeight();
 	const margin = 10;
-	const tableWidth = pageWidth - margin * 2;
-
-	// Column widths
-	const colWidths = [12, 50, 40, 50, 40]; // Total ~190
-	const colWidthRatio = colWidths.map(
-		(w) => w / colWidths.reduce((a, b) => a + b, 0),
-	);
-	const actualColWidths = colWidthRatio.map((ratio) => tableWidth * ratio);
 
 	const headers = [
 		"Sl. No.",
-		"Department/Block",
+		"Rotation Posting",
+		"Date",
 		"Duration",
-		"Faculty Name",
-		"Remarks",
+		"Faculty Signature",
 	];
-	const rowHeight = 12;
-	let currentY = 35;
 
-	// Draw header
-	doc.setFillColor(41, 128, 185);
-	doc.setTextColor(255, 255, 255);
-	doc.setFontSize(10);
-	doc.setFont("helvetica", "bold");
+	// Filter rotations to only include enabled ones
+	const enabledRotations = ROTATION_POSTINGS.filter((rotation) =>
+		enabledRotationSlNos.has(rotation.slNo),
+	);
 
-	let currentX = margin;
-	for (let i = 0; i < headers.length; i++) {
-		doc.rect(currentX, currentY, actualColWidths[i], rowHeight, "F");
-		doc.text(headers[i], currentX + 2, currentY + 8, {
-			maxWidth: actualColWidths[i] - 4,
-		});
-		currentX += actualColWidths[i];
+	const rows = enabledRotations.map((rotation) => {
+		const existing = postingsBySlNo.get(rotation.slNo);
+		const dateText =
+			existing ?
+				`${formatDateValue(existing.startDate)}${existing.startDate && existing.endDate ? " - " : ""}${formatDateValue(existing.endDate)}`.trim()
+			:	"";
+		const durationText =
+			existing?.durationDays ? existing.durationDays.toString() : "";
+		const signatureText =
+			existing ? (signatureByEntity.get(existing.id) ?? "") : "";
+
+		return [
+			rotation.slNo.toString(),
+			rotation.name,
+			dateText,
+			durationText,
+			signatureText,
+		];
+	});
+
+	autoTableFn(doc, {
+		head: [headers],
+		body: rows,
+		startY: 35,
+		theme: "grid",
+		styles: {
+			font: "helvetica",
+			fontSize: 9,
+			cellPadding: 3,
+			overflow: "ellipsize",
+		},
+		headStyles: {
+			fillColor: [41, 128, 185],
+			textColor: [255, 255, 255],
+			fontStyle: "bold",
+		},
+		columnStyles: {
+			0: { cellWidth: 12 },
+			1: { cellWidth: 120 },
+			2: { cellWidth: 45 },
+			3: { cellWidth: 40 },
+			4: { cellWidth: 60 },
+		},
+		margin: { left: margin, right: margin },
+		didDrawPage: (data: { pageNumber: number }) => {
+			doc.setFontSize(8);
+			doc.text(
+				`Page ${data.pageNumber} of ${doc.getNumberOfPages()}`,
+				pageWidth - margin,
+				pageHeight - 5,
+				{ align: "right" },
+			);
+		},
+	});
+
+	const tableEndY =
+		(doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable
+			?.finalY ?? 35;
+	let finalY = tableEndY + 10;
+	if (finalY > pageHeight - margin) {
+		doc.addPage();
+		finalY = 25;
 	}
-	currentY += rowHeight;
-
-	// Draw rows
-	doc.setTextColor(0, 0, 0);
-	doc.setFont("helvetica", "normal");
-	for (let i = 1; i <= 20; i++) {
-		currentX = margin;
-
-		// Draw row cells
-		for (let j = 0; j < headers.length; j++) {
-			doc.rect(currentX, currentY, actualColWidths[j], rowHeight);
-			// Add row number in first column
-			if (j === 0) {
-				doc.text(i.toString(), currentX + 2, currentY + 8);
-			}
-			currentX += actualColWidths[j];
-		}
-		currentY += rowHeight;
-
-		// Check if we need a new page
-		if (currentY > pageHeight - 30) {
-			doc.addPage();
-			currentY = margin;
-		}
-	}
-
-	// Add signature area
-	const finalY = currentY + 10;
 	doc.setFontSize(9);
 	doc.text("Student Signature: __________________", margin, finalY);
 	doc.text("Faculty Signature: __________________", margin + 70, finalY);

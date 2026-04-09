@@ -11,7 +11,9 @@
 import { requireRole } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 import { getRotationPostingsForReview } from "@/actions/rotation-postings";
 import { getThesesForReview } from "@/actions/thesis";
 import { getAutoReviewSettings } from "@/actions/auto-review";
@@ -70,6 +72,11 @@ export default async function HodRotationPostingsPage() {
 					{ label: "Dashboard", href: "/dashboard/hod" },
 					{ label: "Rotation Postings" },
 				]}
+				actions={
+					<Link href="/dashboard/hod/rotation-posting-config">
+						<Button variant="outline">Rotation Posting Settings</Button>
+					</Link>
+				}
 			/>
 			<ReviewTabsClient
 				role="hod"
