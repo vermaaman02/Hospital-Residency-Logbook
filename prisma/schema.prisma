@@ -53,6 +53,7 @@ model User {
   researchActivities         ResearchActivity[]
   evaluations                ResidentEvaluation[]
   rotationPostings           RotationPosting[]
+  rotationStudentConfigs     RotationPostingStudentConfiguration[]
   seminars                   Seminar[]
   thesis                     Thesis?
   trainingMentoringRecords   TrainingMentoringRecord[]
@@ -85,6 +86,7 @@ model Batch {
   assessments        InternalAssessment[]
   students           User[]
   rotationConfigs    RotationPostingConfiguration[]
+  rotationStudentConfigs RotationPostingStudentConfiguration[]
 
   @@index([isActive])
 }
@@ -177,6 +179,28 @@ model RotationPostingConfiguration {
   @@index([batchId])
   @@index([departmentId])
   @@index([semester])
+  @@index([isEnabled])
+}
+
+model RotationPostingStudentConfiguration {
+  id             String     @id @default(cuid())
+  rotationSlNo   Int // 1-20, refers to ROTATION_POSTINGS constant
+  batchId        String
+  semester       Int // 1-6
+  departmentId   String
+  studentId      String
+  isEnabled      Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  batch          Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  department     Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  student        User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([rotationSlNo, batchId, semester, departmentId, studentId])
+  @@index([batchId])
+  @@index([departmentId])
+  @@index([semester])
+  @@index([studentId])
   @@index([isEnabled])
 }
 
@@ -827,6 +851,7 @@ model Department {
   departmentForms        DepartmentForm[]
   users                  User[]
   rotationConfigs        RotationPostingConfiguration[]
+  rotationStudentConfigs RotationPostingStudentConfiguration[]
 
   @@index([isActive])
 }
