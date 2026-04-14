@@ -6,7 +6,7 @@
 
 "use server";
 
-import { requireRole } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 
@@ -15,7 +15,42 @@ export interface RotationConfigWithDetails {
 	rotationName: string;
 	isElective: boolean;
 	isEnabled: boolean;
+	isOverridden?: boolean;
 	configId?: string;
+}
+
+export interface RotationConfigStudentOption {
+	id: string;
+	name: string;
+	email: string;
+}
+
+interface RotationFlagRecord {
+	id: string;
+	rotationSlNo: number;
+	isEnabled: boolean;
+}
+
+function mergeRotationConfigs(
+	baseConfigs: RotationFlagRecord[],
+	studentOverrides: RotationFlagRecord[] = [],
+): RotationConfigWithDetails[] {
+	const baseMap = new Map(baseConfigs.map((c) => [c.rotationSlNo, c]));
+	const studentMap = new Map(studentOverrides.map((c) => [c.rotationSlNo, c]));
+
+	return ROTATION_POSTINGS.map((rotation) => {
+		const base = baseMap.get(rotation.slNo);
+		const override = studentMap.get(rotation.slNo);
+
+		return {
+			rotationSlNo: rotation.slNo,
+			rotationName: rotation.name,
+			isElective: rotation.isElective,
+			isEnabled: override?.isEnabled ?? base?.isEnabled ?? true,
+			isOverridden: Boolean(override),
+			configId: override?.id ?? base?.id,
+		};
+	});
 }
 
 /**
@@ -33,30 +68,111 @@ export async function getRotationPostingConfigurations(
 		throw new Error("Unauthorized");
 	}
 
-	// Fetch existing configurations from database
 	const configs = await prisma.rotationPostingConfiguration.findMany({
 		where: {
 			batchId,
 			semester,
 			departmentId,
 		},
+		select: {
+			id: true,
+			rotationSlNo: true,
+			isEnabled: true,
+		},
 	});
 
-	// Create a map for quick lookup
-	const configMap = new Map(configs.map((c) => [c.rotationSlNo, c]));
+	return mergeRotationConfigs(configs);
+}
 
-	// Merge with ROTATION_POSTINGS constant
-	const result: RotationConfigWithDetails[] = ROTATION_POSTINGS.map(
-		(rotation) => ({
-			rotationSlNo: rotation.slNo,
-			rotationName: rotation.name,
-			isElective: rotation.isElective,
-			isEnabled: configMap.get(rotation.slNo)?.isEnabled ?? true, // Default to enabled if no config exists
-			configId: configMap.get(rotation.slNo)?.id,
+/**
+ * Get students in selected batch/semester/department for specific-student overrides.
+ */
+/**
+ * Get students in selected batch/semester/department for specific-student overrides.
+ * If departmentId matches, show those students first. Also include students
+ * without a departmentId assigned (fallback for legacy data).
+ */
+export async function getStudentsForRotationPostingConfig(
+	batchId: string,
+	semester: number,
+	departmentId: string,
+): Promise<RotationConfigStudentOption[]> {
+	try {
+		await requireRole(["hod"]);
+	} catch {
+		throw new Error("Unauthorized");
+	}
+
+	const students = await prisma.user.findMany({
+		where: {
+			role: "STUDENT" as never,
+			batchId,
+			// Include students who match departmentId OR have no departmentId assigned yet
+			OR: [{ departmentId }, { departmentId: null }],
+		},
+		select: {
+			id: true,
+			firstName: true,
+			lastName: true,
+			email: true,
+		},
+		orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+	});
+
+	return students.map((student) => ({
+		id: student.id,
+		name:
+			`${student.firstName ?? ""} ${student.lastName ?? ""}`.trim() ||
+			student.email,
+		email: student.email,
+	}));
+}
+
+/**
+ * Fetch effective rotation posting configuration for one specific student.
+ * Effective = student override (if present) otherwise base filter config.
+ */
+export async function getRotationPostingConfigurationsForSpecificStudent(
+	batchId: string,
+	semester: number,
+	departmentId: string,
+	studentId: string,
+): Promise<RotationConfigWithDetails[]> {
+	try {
+		await requireRole(["hod"]);
+	} catch {
+		throw new Error("Unauthorized");
+	}
+
+	const [baseConfigs, studentOverrides] = await Promise.all([
+		prisma.rotationPostingConfiguration.findMany({
+			where: {
+				batchId,
+				semester,
+				departmentId,
+			},
+			select: {
+				id: true,
+				rotationSlNo: true,
+				isEnabled: true,
+			},
 		}),
-	);
+		prisma.rotationPostingStudentConfiguration.findMany({
+			where: {
+				batchId,
+				semester,
+				departmentId,
+				studentId,
+			},
+			select: {
+				id: true,
+				rotationSlNo: true,
+				isEnabled: true,
+			},
+		}),
+	]);
 
-	return result;
+	return mergeRotationConfigs(baseConfigs, studentOverrides);
 }
 
 /**
@@ -93,6 +209,82 @@ export async function updateRotationPostingConfig(
 			batchId,
 			semester,
 			departmentId,
+			isEnabled,
+		},
+	});
+}
+
+/**
+ * Update a single student-specific rotation posting configuration.
+ */
+export async function updateRotationPostingConfigForSpecificStudent(
+	rotationSlNo: number,
+	batchId: string,
+	semester: number,
+	departmentId: string,
+	studentId: string,
+	isEnabled: boolean,
+): Promise<void> {
+	try {
+		await requireRole(["hod"]);
+	} catch {
+		throw new Error("Unauthorized");
+	}
+
+	const student = await prisma.user.findUnique({
+		where: { id: studentId },
+		select: { id: true, role: true },
+	});
+	if (!student || student.role !== "STUDENT") {
+		throw new Error("Invalid student selection");
+	}
+
+	const baseConfig = await prisma.rotationPostingConfiguration.findUnique({
+		where: {
+			rotationSlNo_batchId_semester_departmentId: {
+				rotationSlNo,
+				batchId,
+				semester,
+				departmentId,
+			},
+		},
+		select: { isEnabled: true },
+	});
+	const baseEnabled = baseConfig?.isEnabled ?? true;
+
+	if (isEnabled === baseEnabled) {
+		await prisma.rotationPostingStudentConfiguration.deleteMany({
+			where: {
+				rotationSlNo,
+				batchId,
+				semester,
+				departmentId,
+				studentId,
+			},
+		});
+		return;
+	}
+
+	await prisma.rotationPostingStudentConfiguration.upsert({
+		where: {
+			rotationSlNo_batchId_semester_departmentId_studentId: {
+				rotationSlNo,
+				batchId,
+				semester,
+				departmentId,
+				studentId,
+			},
+		},
+		update: {
+			isEnabled,
+			updatedAt: new Date(),
+		},
+		create: {
+			rotationSlNo,
+			batchId,
+			semester,
+			departmentId,
+			studentId,
 			isEnabled,
 		},
 	});
@@ -150,19 +342,20 @@ export async function getEnabledRotationSlNos(
 	batchId: string,
 	semester: number,
 	departmentId: string,
+	studentId?: string,
 ): Promise<Set<number>> {
-	// Fetch configurations (allow all authenticated users to read)
-	const configs = await prisma.rotationPostingConfiguration.findMany({
-		where: {
-			batchId,
-			semester,
-			departmentId,
-			isEnabled: true,
-		},
-		select: { rotationSlNo: true },
-	});
+	const configs = await getEnabledRotationsForStudent(
+		batchId,
+		semester,
+		departmentId,
+		studentId,
+	);
 
-	return new Set(configs.map((c) => c.rotationSlNo));
+	return new Set(
+		configs
+			.filter((config) => config.isEnabled)
+			.map((config) => config.rotationSlNo),
+	);
 }
 
 export async function validateRotationEnabledForStudentDetails(
@@ -170,6 +363,7 @@ export async function validateRotationEnabledForStudentDetails(
 	batchId?: string | null,
 	semester?: number | null,
 	departmentId?: string | null,
+	studentId?: string | null,
 ): Promise<void> {
 	if (!batchId || !semester || !departmentId) {
 		throw new Error(
@@ -180,6 +374,30 @@ export async function validateRotationEnabledForStudentDetails(
 	const rotation = ROTATION_POSTINGS.find((r) => r.name === rotationName);
 	if (!rotation) {
 		throw new Error("Invalid rotation posting name");
+	}
+
+	if (studentId) {
+		const studentOverride =
+			await prisma.rotationPostingStudentConfiguration.findUnique({
+				where: {
+					rotationSlNo_batchId_semester_departmentId_studentId: {
+						rotationSlNo: rotation.slNo,
+						batchId,
+						semester,
+						departmentId,
+						studentId,
+					},
+				},
+			});
+
+		if (studentOverride) {
+			if (!studentOverride.isEnabled) {
+				throw new Error(
+					`Rotation posting "${rotationName}" is disabled for this student.`,
+				);
+			}
+			return;
+		}
 	}
 
 	const config = await prisma.rotationPostingConfiguration.findUnique({
@@ -208,30 +426,38 @@ export async function getEnabledRotationsForStudent(
 	batchId: string,
 	semester: number,
 	departmentId: string,
+	studentId?: string,
 ): Promise<RotationConfigWithDetails[]> {
-	// Fetch configurations
-	const configs = await prisma.rotationPostingConfiguration.findMany({
+	await requireAuth();
+
+	const baseConfigs = await prisma.rotationPostingConfiguration.findMany({
 		where: {
 			batchId,
 			semester,
 			departmentId,
 		},
+		select: {
+			id: true,
+			rotationSlNo: true,
+			isEnabled: true,
+		},
 	});
+	const studentOverrides =
+		studentId ?
+			await prisma.rotationPostingStudentConfiguration.findMany({
+				where: {
+					batchId,
+					semester,
+					departmentId,
+					studentId,
+				},
+				select: {
+					id: true,
+					rotationSlNo: true,
+					isEnabled: true,
+				},
+			})
+		:	[];
 
-	// Create a map for quick lookup
-	const configMap = new Map(configs.map((c) => [c.rotationSlNo, c]));
-
-	// Merge with ROTATION_POSTINGS constant
-	// Include both enabled and disabled for UI rendering (UI will show disabled as grayed out)
-	const result: RotationConfigWithDetails[] = ROTATION_POSTINGS.map(
-		(rotation) => ({
-			rotationSlNo: rotation.slNo,
-			rotationName: rotation.name,
-			isElective: rotation.isElective,
-			isEnabled: configMap.get(rotation.slNo)?.isEnabled ?? true, // Default to enabled if no config exists
-			configId: configMap.get(rotation.slNo)?.id,
-		}),
-	);
-
-	return result;
+	return mergeRotationConfigs(baseConfigs, studentOverrides);
 }

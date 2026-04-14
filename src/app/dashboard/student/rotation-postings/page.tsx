@@ -143,6 +143,7 @@ export default async function RotationPostingsPage({
 				rotationScope.batchId,
 				rotationScope.semester,
 				rotationScope.departmentId,
+				user.id,
 			);
 		} catch (error) {
 			console.error("[FETCH_ENABLED_ROTATIONS]", error);

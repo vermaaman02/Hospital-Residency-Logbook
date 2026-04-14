@@ -1,7 +1,7 @@
 /**
  * @module RotationPostingConfigurationClient
- * @description HOD rotation configuration UI with 20 small cards and proper filtering.
- * Allows HOD to enable/disable rotation postings per batch, semester, and department.
+ * @description HOD rotation configuration UI with 20 cards and filter-scoped toggles.
+ * Supports both batch-wide config and specific-student override config.
  */
 
 "use client";
@@ -19,8 +19,14 @@ import { toast } from "sonner";
 import {
 	updateRotationPostingConfig,
 	getRotationPostingConfigurations,
+	getStudentsForRotationPostingConfig,
+	getRotationPostingConfigurationsForSpecificStudent,
+	updateRotationPostingConfigForSpecificStudent,
 } from "@/actions/rotation-posting-config";
-import type { RotationConfigWithDetails } from "@/actions/rotation-posting-config";
+import type {
+	RotationConfigWithDetails,
+	RotationConfigStudentOption,
+} from "@/actions/rotation-posting-config";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 import { cn } from "@/lib/utils";
 import { Check, Loader2, X } from "lucide-react";
@@ -35,6 +41,8 @@ interface RotationPostingConfigurationClientProps {
 	onConfigChange?: () => void;
 }
 
+const ALL_STUDENTS_KEY = "__ALL_STUDENTS__";
+
 export function RotationPostingConfigurationClient({
 	batches,
 	departments,
@@ -47,72 +55,137 @@ export function RotationPostingConfigurationClient({
 	const [batchId, setBatchId] = useState(initialBatchId);
 	const [departmentId, setDepartmentId] = useState(initialDepartmentId);
 	const [semester, setSemester] = useState(initialSemester);
+	const [selectedStudentId, setSelectedStudentId] =
+		useState<string>(ALL_STUDENTS_KEY);
+
 	const [configs, setConfigs] =
 		useState<RotationConfigWithDetails[]>(initialConfigs);
+	const [students, setStudents] = useState<RotationConfigStudentOption[]>([]);
+
 	const [togglingSlNo, setTogglingSlNo] = useState<number | null>(null);
 	const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
-	const fetchRequestRef = useRef(0);
+	const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
-	// Refetch configurations whenever batch, semester, or department changes.
-	// The request id guard prevents stale responses from overwriting newer filter results.
+	const configFetchRef = useRef(0);
+	const studentFetchRef = useRef(0);
+
+	useEffect(() => {
+		setSelectedStudentId(ALL_STUDENTS_KEY);
+	}, [batchId, departmentId, semester]);
+
+	useEffect(() => {
+		if (!batchId || !departmentId) {
+			setStudents([]);
+			return;
+		}
+
+		let cancelled = false;
+		const requestId = ++studentFetchRef.current;
+
+		const fetchStudents = async () => {
+			setIsLoadingStudents(true);
+			try {
+				const result = await getStudentsForRotationPostingConfig(
+					batchId,
+					semester,
+					departmentId,
+				);
+				if (!cancelled && requestId === studentFetchRef.current) {
+					setStudents(result);
+				}
+			} catch (error) {
+				if (!cancelled && requestId === studentFetchRef.current) {
+					console.error("[FETCH_ROTATION_CONFIG_STUDENTS]", error);
+					toast.error("Failed to load students for selected filter");
+					setStudents([]);
+				}
+			} finally {
+				if (!cancelled && requestId === studentFetchRef.current) {
+					setIsLoadingStudents(false);
+				}
+			}
+		};
+
+		fetchStudents();
+		return () => {
+			cancelled = true;
+		};
+	}, [batchId, departmentId, semester]);
+
 	useEffect(() => {
 		if (!batchId || !departmentId) {
 			setConfigs([]);
 			return;
 		}
 
-		let isCancelled = false;
-		const requestId = ++fetchRequestRef.current;
+		let cancelled = false;
+		const requestId = ++configFetchRef.current;
 
 		const fetchConfigs = async () => {
 			setIsLoadingConfigs(true);
 			try {
-				const newConfigs = await getRotationPostingConfigurations(
-					batchId,
-					semester,
-					departmentId,
-				);
+				const result =
+					selectedStudentId === ALL_STUDENTS_KEY ?
+						await getRotationPostingConfigurations(
+							batchId,
+							semester,
+							departmentId,
+						)
+					:	await getRotationPostingConfigurationsForSpecificStudent(
+							batchId,
+							semester,
+							departmentId,
+							selectedStudentId,
+						);
 
-				if (!isCancelled && requestId === fetchRequestRef.current) {
-					setConfigs(newConfigs);
+				if (!cancelled && requestId === configFetchRef.current) {
+					setConfigs(result);
 				}
 			} catch (error) {
-				if (!isCancelled && requestId === fetchRequestRef.current) {
-					console.error("[FETCH_CONFIGS]", error);
+				if (!cancelled && requestId === configFetchRef.current) {
+					console.error("[FETCH_ROTATION_CONFIGS]", error);
 					toast.error("Failed to load rotation configurations");
 				}
 			} finally {
-				if (!isCancelled && requestId === fetchRequestRef.current) {
+				if (!cancelled && requestId === configFetchRef.current) {
 					setIsLoadingConfigs(false);
 				}
 			}
 		};
 
 		fetchConfigs();
-
 		return () => {
-			isCancelled = true;
+			cancelled = true;
 		};
-	}, [batchId, departmentId, semester]);
+	}, [batchId, departmentId, semester, selectedStudentId]);
 
 	const allRotations = useMemo(
 		() => configs.slice().sort((a, b) => a.rotationSlNo - b.rotationSlNo),
 		[configs],
 	);
-
 	const enabledCount = useMemo(
-		() => configs.filter((c) => c.isEnabled).length,
+		() => configs.filter((config) => config.isEnabled).length,
 		[configs],
 	);
 	const coreEnabledCount = useMemo(
-		() => configs.filter((c) => !c.isElective && c.isEnabled).length,
+		() =>
+			configs.filter((config) => !config.isElective && config.isEnabled).length,
 		[configs],
 	);
 	const electiveEnabledCount = useMemo(
-		() => configs.filter((c) => c.isElective && c.isEnabled).length,
+		() =>
+			configs.filter((config) => config.isElective && config.isEnabled).length,
 		[configs],
 	);
-	const totalCount = ROTATION_POSTINGS.length;
+	const selectedStudentName = useMemo(() => {
+		if (selectedStudentId === ALL_STUDENTS_KEY) {
+			return "All students";
+		}
+		return (
+			students.find((student) => student.id === selectedStudentId)?.name ??
+			"Selected student"
+		);
+	}, [selectedStudentId, students]);
 
 	const handleToggle = useCallback(
 		async (rotationSlNo: number, currentIsEnabled: boolean) => {
@@ -123,22 +196,39 @@ export function RotationPostingConfigurationClient({
 
 			setTogglingSlNo(rotationSlNo);
 			try {
-				await updateRotationPostingConfig(
-					rotationSlNo,
-					batchId,
-					semester,
-					departmentId,
-					!currentIsEnabled, // Toggle
-				);
+				if (selectedStudentId === ALL_STUDENTS_KEY) {
+					await updateRotationPostingConfig(
+						rotationSlNo,
+						batchId,
+						semester,
+						departmentId,
+						!currentIsEnabled,
+					);
+				} else {
+					await updateRotationPostingConfigForSpecificStudent(
+						rotationSlNo,
+						batchId,
+						semester,
+						departmentId,
+						selectedStudentId,
+						!currentIsEnabled,
+					);
+				}
 
-				// Update local state
-				setConfigs((prev) =>
-					prev.map((c) =>
-						c.rotationSlNo === rotationSlNo ?
-							{ ...c, isEnabled: !currentIsEnabled }
-						:	c,
-					),
-				);
+				const refreshed =
+					selectedStudentId === ALL_STUDENTS_KEY ?
+						await getRotationPostingConfigurations(
+							batchId,
+							semester,
+							departmentId,
+						)
+					:	await getRotationPostingConfigurationsForSpecificStudent(
+							batchId,
+							semester,
+							departmentId,
+							selectedStudentId,
+						);
+				setConfigs(refreshed);
 
 				toast.success(
 					`${!currentIsEnabled ? "Enabled" : "Disabled"} successfully`,
@@ -151,18 +241,16 @@ export function RotationPostingConfigurationClient({
 				setTogglingSlNo(null);
 			}
 		},
-		[batchId, departmentId, onConfigChange, semester],
+		[batchId, departmentId, onConfigChange, selectedStudentId, semester],
 	);
 
 	return (
 		<div className="space-y-6 p-6">
-			{/* Filter Panel */}
 			<div className="rounded-xl border border-hospital-border bg-linear-to-br from-hospital-background to-hospital-surface/40 p-5">
 				<h2 className="mb-4 text-lg font-semibold text-hospital-text-primary">
 					Batch/Semester/Department Filter
 				</h2>
-				<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-					{/* Batch Filter */}
+				<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 					<div>
 						<label className="mb-2 block text-sm font-medium text-hospital-text-secondary">
 							Batch
@@ -172,38 +260,39 @@ export function RotationPostingConfigurationClient({
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{batches.map((b) => (
-									<SelectItem key={b.id} value={b.id}>
-										{b.name}
+								{batches.map((batch) => (
+									<SelectItem key={batch.id} value={batch.id}>
+										{batch.name}
 									</SelectItem>
 								))}
 							</SelectContent>
 						</Select>
 					</div>
 
-					{/* Semester Filter */}
 					<div>
 						<label className="mb-2 block text-sm font-medium text-hospital-text-secondary">
 							Semester
 						</label>
 						<Select
 							value={semester.toString()}
-							onValueChange={(v) => setSemester(parseInt(v, 10))}
+							onValueChange={(value) => setSemester(parseInt(value, 10))}
 						>
 							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{[1, 2, 3, 4, 5, 6].map((s) => (
-									<SelectItem key={s} value={s.toString()}>
-										Semester {s}
+								{[1, 2, 3, 4, 5, 6].map((semesterValue) => (
+									<SelectItem
+										key={semesterValue}
+										value={semesterValue.toString()}
+									>
+										Semester {semesterValue}
 									</SelectItem>
 								))}
 							</SelectContent>
 						</Select>
 					</div>
 
-					{/* Department Filter */}
 					<div>
 						<label className="mb-2 block text-sm font-medium text-hospital-text-secondary">
 							Department
@@ -213,25 +302,57 @@ export function RotationPostingConfigurationClient({
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{departments.map((d) => (
-									<SelectItem key={d.id} value={d.id}>
-										{d.name}
+								{departments.map((department) => (
+									<SelectItem key={department.id} value={department.id}>
+										{department.name}
 									</SelectItem>
 								))}
 							</SelectContent>
 						</Select>
 					</div>
 
-					{/* Summary */}
+					<div>
+						<label className="mb-2 block text-sm font-medium text-hospital-text-secondary">
+							Specific Student
+						</label>
+						<Select
+							value={selectedStudentId}
+							onValueChange={setSelectedStudentId}
+						>
+							<SelectTrigger>
+								<SelectValue
+									placeholder={
+										isLoadingStudents ? "Loading students..." : "All students"
+									}
+								/>
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value={ALL_STUDENTS_KEY}>
+									All students (batch-wide)
+								</SelectItem>
+								{students.map((student) => (
+									<SelectItem key={student.id} value={student.id}>
+										{student.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+
 					<div className="rounded-lg border border-hospital-primary/20 bg-hospital-primary/5 p-4">
 						<p className="text-xs font-medium uppercase tracking-wide text-hospital-text-secondary">
 							Enabled Cards
 						</p>
 						<p className="mt-1 text-2xl font-bold text-hospital-primary">
-							{isLoadingConfigs ? "..." : `${enabledCount}/${totalCount}`}
+							{isLoadingConfigs ?
+								"..."
+							:	`${enabledCount}/${ROTATION_POSTINGS.length}`}
 						</p>
 						<p className="mt-2 text-xs text-hospital-text-secondary">
 							Core: {coreEnabledCount}/7 | Elective: {electiveEnabledCount}/13
+						</p>
+						<p className="mt-1 text-xs text-hospital-text-secondary">
+							Target: {selectedStudentName}
 						</p>
 					</div>
 				</div>
@@ -243,7 +364,8 @@ export function RotationPostingConfigurationClient({
 						Rotation Cards (20)
 					</h3>
 					<p className="text-sm text-hospital-text-secondary">
-						Click a card to toggle the rotation flag for the selected filter.
+						Click a card to toggle the rotation flag for the selected filter and
+						student scope.
 					</p>
 				</div>
 				{isLoadingConfigs && (
@@ -269,8 +391,6 @@ export function RotationPostingConfigurationClient({
 		</div>
 	);
 }
-
-// ============== ROTATION CARD COMPONENT ==============
 
 interface RotationCardProps {
 	rotation: RotationConfigWithDetails;
@@ -311,7 +431,7 @@ function RotationCard({ rotation, isToggling, onToggle }: RotationCardProps) {
 				{rotation.rotationName}
 			</p>
 
-			<div className="mt-2">
+			<div className="mt-2 flex items-center gap-1.5">
 				<Badge
 					variant={rotation.isEnabled ? "default" : "secondary"}
 					className={cn(
@@ -323,6 +443,11 @@ function RotationCard({ rotation, isToggling, onToggle }: RotationCardProps) {
 				>
 					{rotation.isEnabled ? "Enabled" : "Disabled"}
 				</Badge>
+				{rotation.isOverridden && (
+					<Badge variant="outline" className="text-[10px]">
+						Override
+					</Badge>
+				)}
 			</div>
 		</button>
 	);

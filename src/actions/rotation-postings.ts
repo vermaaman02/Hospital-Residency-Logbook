@@ -122,6 +122,7 @@ export async function createRotationPosting(data: RotationPostingInput) {
 		rotationScope.batchId,
 		rotationScope.semester,
 		rotationScope.departmentId,
+		user.id,
 	);
 
 	// Validate rotation name
@@ -213,6 +214,7 @@ export async function updateRotationPosting(
 		rotationScope.batchId,
 		rotationScope.semester,
 		rotationScope.departmentId,
+		user.id,
 	);
 
 	const rotationConfig = ROTATION_POSTINGS.find(
@@ -287,6 +289,7 @@ export async function submitRotationPosting(id: string) {
 		rotationScope.batchId,
 		rotationScope.semester,
 		rotationScope.departmentId,
+		user.id,
 	);
 
 	await prisma.rotationPosting.update({
