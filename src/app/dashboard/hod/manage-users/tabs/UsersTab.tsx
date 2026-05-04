@@ -198,7 +198,7 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 		}
 	}
 
-	function _handleRoleChange(clerkId: string, newRole: string) {
+	function handleRoleChange(clerkId: string, newRole: string) {
 		if (newRole === "none") return;
 		startTransition(async () => {
 			try {
@@ -574,6 +574,39 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 												) : (
 													<span className="text-muted-foreground">—</span>
 												)}
+											</TableCell>
+
+											{/* Change Role */}
+											<TableCell>
+												<Select
+													value={user.role}
+													onValueChange={(v) => handleRoleChange(user.clerkId, v)}
+													disabled={isPending}
+												>
+													<SelectTrigger className="w-32 h-8 text-xs">
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="hod">
+															<span className="flex items-center gap-1.5">
+																<Shield className="h-3 w-3" />
+																HOD
+															</span>
+														</SelectItem>
+														<SelectItem value="faculty">
+															<span className="flex items-center gap-1.5">
+																<UserCog className="h-3 w-3" />
+																Faculty
+															</span>
+														</SelectItem>
+														<SelectItem value="student">
+															<span className="flex items-center gap-1.5">
+																<GraduationCap className="h-3 w-3" />
+																Student
+															</span>
+														</SelectItem>
+													</SelectContent>
+												</Select>
 											</TableCell>
 
 											{/* Actions */}
