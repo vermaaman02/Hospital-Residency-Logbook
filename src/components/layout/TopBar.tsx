@@ -45,6 +45,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
 import { RealtimeStatus } from "@/components/shared/RealtimeStatus";
+import { useSocketEvent } from "@/lib/socket";
 
 interface TopBarProps {
 	onMobileMenuToggle?: () => void;
@@ -60,13 +61,11 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 	const [notifOpen, setNotifOpen] = useState(false);
 	const markedSeenRef = useRef(false);
 
-	useEffect(() => {
+	const fetchCounts = useCallback(() => {
 		if (role === "faculty" || role === "hod") {
 			getPendingReviewCounts()
 				.then(setPendingCounts)
-				.catch(() => {
-					/* silently ignore */
-				});
+				.catch(() => {});
 		}
 		if (role === "student") {
 			getStudentNotifications()
@@ -74,11 +73,17 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 					setStudentNotifs(result.notifications);
 					setUnseenCount(result.unseenCount);
 				})
-				.catch(() => {
-					/* silently ignore */
-				});
+				.catch(() => {});
 		}
 	}, [role]);
+
+	useEffect(() => {
+		fetchCounts();
+	}, [fetchCounts]);
+
+	useSocketEvent("entry:updated", fetchCounts);
+	useSocketEvent("assessment:updated", fetchCounts);
+	useSocketEvent("system:updated", fetchCounts);
 
 	// When the notification popover opens, mark all as seen
 	const handleNotifOpenChange = useCallback((open: boolean) => {
@@ -219,11 +224,11 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 							</div>
 							<div className="border-t px-4 py-2">
 								<Link
-									href={`${basePath}/case-management`}
+									href={`${basePath}/inbox`}
 									onClick={() => setNotifOpen(false)}
 									className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
 								>
-									View all modules
+									Open Review Inbox
 									<ArrowRight className="h-3 w-3" />
 								</Link>
 							</div>

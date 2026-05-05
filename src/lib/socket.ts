@@ -51,3 +51,18 @@ export function destroySocket(): void {
 		socket = null;
 	}
 }
+
+import { useEffect } from "react";
+
+/**
+ * Hook to listen to a specific socket event.
+ */
+export function useSocketEvent(event: string, callback: (...args: any[]) => void) {
+	useEffect(() => {
+		const s = getSocket();
+		s.on(event, callback);
+		return () => {
+			s.off(event, callback);
+		};
+	}, [event, callback]);
+}
