@@ -16,6 +16,7 @@ import {
 	type ResidentEvaluationInput,
 } from "@/lib/validators/evaluation";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 function revalidateEvaluations() {
 	revalidatePath("/dashboard/student/evaluations");

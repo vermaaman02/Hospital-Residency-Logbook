@@ -17,6 +17,7 @@ import {
 	type TrainingMentoringInput,
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 /**
  * Faculty/HOD: Create or update a 5-domain training record for a student's semester.
