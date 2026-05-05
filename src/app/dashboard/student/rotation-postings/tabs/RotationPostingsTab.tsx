@@ -689,7 +689,14 @@ function ReadOnlyRow({
 			</TableCell>
 			<TableCell className="text-center">
 				{posting ?
-					<StatusBadge status={posting.status as EntryStatus} size="sm" />
+					<div>
+						<StatusBadge status={posting.status as EntryStatus} size="sm" />
+						{posting.status === "SIGNED" && posting.signedByName && (
+							<p className="text-xs text-muted-foreground mt-1">
+								by {posting.signedByName}
+							</p>
+						)}
+					</div>
 				:	<span className="text-xs text-muted-foreground">—</span>}
 			</TableCell>
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>

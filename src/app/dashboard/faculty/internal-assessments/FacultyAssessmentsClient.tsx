@@ -1397,17 +1397,24 @@ export function FacultyAssessmentsClient({
 																	{sub.student.firstName} {sub.student.lastName}
 																</TableCell>
 																<TableCell>
-																	{sub.status === "SIGNED" && sub.evaluation?.evaluatedBy ?
+																	{(
+																		sub.status === "SIGNED" &&
+																		sub.evaluation?.evaluatedBy
+																	) ?
 																		<div className="text-xs">
-																			<div className="font-medium text-green-600">Evaluated</div>
+																			<div className="font-medium text-green-600">
+																				Evaluated
+																			</div>
 																			<div className="text-muted-foreground">
-																				by {sub.evaluation.evaluatedBy.firstName} {sub.evaluation.evaluatedBy.lastName}
+																				by{" "}
+																				{sub.evaluation.evaluatedBy.firstName}{" "}
+																				{sub.evaluation.evaluatedBy.lastName}
 																			</div>
 																		</div>
 																	:	<StatusBadge
-																		status={sub.status as EntryStatus}
-																		size="sm"
-																	/>
+																			status={sub.status as EntryStatus}
+																			size="sm"
+																		/>
 																	}
 																</TableCell>
 																<TableCell className="text-center">
@@ -1494,12 +1501,14 @@ export function FacultyAssessmentsClient({
 					<DialogHeader>
 						<DialogTitle>Marks are Locked</DialogTitle>
 						<DialogDescription>
-							This submission has already been evaluated and the marks are locked.
+							This submission has already been evaluated and the marks are
+							locked.
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4">
 						<p className="text-sm text-muted-foreground">
-							Are you sure you want to edit the evaluation? This will update the marks and feedback for this submission.
+							Are you sure you want to edit the evaluation? This will update the
+							marks and feedback for this submission.
 						</p>
 					</div>
 					<DialogFooter>

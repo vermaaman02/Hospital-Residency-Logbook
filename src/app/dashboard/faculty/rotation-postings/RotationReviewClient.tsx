@@ -100,6 +100,7 @@ export interface RotationSubmission {
 	attachments?: string[];
 	facultyRemark: string | null;
 	createdAt: string;
+	signedByName?: string | null;
 	user: {
 		id: string;
 		firstName: string;
@@ -547,10 +548,17 @@ export function RotationReviewClient({
 												{sub.totalDuration ?? "—"}
 											</TableCell>
 											<TableCell className="text-center">
-												<StatusBadge
-													status={sub.status as EntryStatus}
-													size="sm"
-												/>
+												<div>
+													<StatusBadge
+														status={sub.status as EntryStatus}
+														size="sm"
+													/>
+													{sub.status === "SIGNED" && sub.signedByName && (
+														<p className="text-xs text-muted-foreground mt-1">
+															by {sub.signedByName}
+														</p>
+													)}
+												</div>
 											</TableCell>
 											<TableCell
 												className="text-center"
@@ -721,11 +729,19 @@ export function RotationReviewClient({
 
 								{/* Status */}
 								<DetailSection title="Status" icon={Clock}>
-									<div className="flex items-center gap-2">
-										<StatusBadge
-											status={detailEntry.status as EntryStatus}
-											size="sm"
-										/>
+									<div className="flex items-start gap-2">
+										<div>
+											<StatusBadge
+												status={detailEntry.status as EntryStatus}
+												size="sm"
+											/>
+											{detailEntry.status === "SIGNED" &&
+												detailEntry.signedByName && (
+													<p className="text-xs text-muted-foreground mt-1">
+														Signed by: {detailEntry.signedByName}
+													</p>
+												)}
+										</div>
 										{detailEntry.facultyRemark && (
 											<span className="text-sm text-muted-foreground">
 												— {detailEntry.facultyRemark}
@@ -742,36 +758,37 @@ export function RotationReviewClient({
 								</DetailSection>
 
 								{/* Attachments if any */}
-								{detailEntry.attachments && detailEntry.attachments.length > 0 && (
-									<DetailSection title="Attachments" icon={FileUp}>
-										<div className="space-y-2">
-											{detailEntry.attachments.map((url) => (
-												<div
-													key={url}
-													className="flex items-center justify-between p-2 bg-muted/50 rounded"
-												>
-													<span className="text-sm truncate flex-1">
-														{url.split("/").pop()}
-													</span>
-													<a
-														href={url}
-														target="_blank"
-														rel="noopener noreferrer"
-														className="ml-2"
+								{detailEntry.attachments &&
+									detailEntry.attachments.length > 0 && (
+										<DetailSection title="Attachments" icon={FileUp}>
+											<div className="space-y-2">
+												{detailEntry.attachments.map((url) => (
+													<div
+														key={url}
+														className="flex items-center justify-between p-2 bg-muted/50 rounded"
 													>
-														<Button
-															variant="ghost"
-															size="sm"
-															className="h-7 w-7 p-0"
+														<span className="text-sm truncate flex-1">
+															{url.split("/").pop()}
+														</span>
+														<a
+															href={url}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="ml-2"
 														>
-															<Download className="h-4 w-4" />
-														</Button>
-													</a>
-												</div>
-											))}
-										</div>
-									</DetailSection>
-								)}
+															<Button
+																variant="ghost"
+																size="sm"
+																className="h-7 w-7 p-0"
+															>
+																<Download className="h-4 w-4" />
+															</Button>
+														</a>
+													</div>
+												))}
+											</div>
+										</DetailSection>
+									)}
 
 								{/* Remark if exists */}
 								{detailEntry.facultyRemark && (

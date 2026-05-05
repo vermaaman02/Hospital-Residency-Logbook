@@ -17,7 +17,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { FileUp, X, Download, Loader2 } from "lucide-react";
+import { FileUp, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
 	addRotationPostingAttachment,
@@ -92,7 +92,9 @@ export function RotationPostingAttachments({
 			} catch (error) {
 				console.error("Upload error:", error);
 				toast.error(
-					error instanceof Error ? error.message : "Failed to upload attachment",
+					error instanceof Error ?
+						error.message
+					:	"Failed to upload attachment",
 				);
 			} finally {
 				setUploading(false);
@@ -118,13 +120,26 @@ export function RotationPostingAttachments({
 		[postingId, isStudent],
 	);
 
+	// Extract filename from URL, removing query params and hashes
+	const getFilename = (url: string): string => {
+		try {
+			const urlPath = url.split("?")[0].split("#")[0]; // Remove query params
+			const parts = urlPath.split("/");
+			const filename = parts[parts.length - 1];
+			// Decode and limit length
+			return decodeURIComponent(filename).substring(0, 40);
+		} catch {
+			return "Attachment";
+		}
+	};
+
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
 				<Button
 					variant="ghost"
 					size="sm"
-					className="h-8 w-8 p-0"
+					className="relative h-8 w-8 p-0"
 					disabled={isPending || uploading}
 				>
 					<FileUp className="h-4 w-4" />
@@ -136,7 +151,7 @@ export function RotationPostingAttachments({
 				</Button>
 			</DialogTrigger>
 
-			<DialogContent>
+			<DialogContent className="w-full max-w-sm sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>Attachments</DialogTitle>
 					<DialogDescription>
@@ -149,7 +164,7 @@ export function RotationPostingAttachments({
 				<div className="space-y-4">
 					{/* Upload section for students */}
 					{isStudent && (
-						<div className="border-2 border-dashed rounded-lg p-4 text-center">
+						<div className="border-2 border-dashed rounded-lg p-4 text-center hover:bg-muted/30 transition-colors">
 							<label className="cursor-pointer block">
 								<input
 									type="file"
@@ -175,39 +190,58 @@ export function RotationPostingAttachments({
 					)}
 
 					{/* Attachments list */}
-					<div className="space-y-2">
+					<div className="space-y-2 pr-2">
 						{attachments.length === 0 ?
-							<p className="text-sm text-muted-foreground">No attachments</p>
-						:	attachments.map((url) => (
-								<div
-									key={url}
-									className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
-								>
-									<div className="flex-1 truncate">
-										<p className="text-sm font-medium truncate">
-											{url.split("/").pop()}
-										</p>
-										<p className="text-xs text-muted-foreground">{url}</p>
-									</div>
-									<div className="flex gap-2 ml-2">
-										<a href={url} target="_blank" rel="noopener noreferrer">
-											<Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-												<Download className="h-4 w-4" />
-											</Button>
-										</a>
-										{isStudent && (
-											<Button
-												variant="ghost"
-												size="sm"
-												className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-												onClick={() => handleRemove(url)}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										)}
-									</div>
-								</div>
-							))
+							<div className="text-center py-4">
+								<p className="text-sm text-muted-foreground">No attachments</p>
+							</div>
+						:	<div className="max-h-64 overflow-y-auto space-y-2">
+								{attachments.map((url) => {
+									const filename = getFilename(url);
+									return (
+										<div
+											key={url}
+											className="flex items-center justify-between gap-3 p-2.5 border rounded-md hover:bg-hospital-primary/5 transition-colors group"
+										>
+											<div className="flex-1 min-w-0">
+												<p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+													{filename}
+												</p>
+												<p className="text-xs text-muted-foreground mt-0.5">
+													File attachment
+												</p>
+											</div>
+											<div className="flex gap-1 shrink-0">
+												<a
+													href={url}
+													target="_blank"
+													rel="noopener noreferrer"
+													title="Download attachment"
+												>
+													<Button
+														variant="ghost"
+														size="sm"
+														className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-hospital-primary/10"
+													>
+														<Download className="h-4 w-4 text-hospital-primary" />
+													</Button>
+												</a>
+												{isStudent && (
+													<Button
+														variant="ghost"
+														size="sm"
+														className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 dark:hover:bg-red-900/20"
+														onClick={() => handleRemove(url)}
+														title="Remove attachment"
+													>
+														<X className="h-4 w-4 text-red-600 dark:text-red-400" />
+													</Button>
+												)}
+											</div>
+										</div>
+									);
+								})}
+							</div>
 						}
 					</div>
 				</div>
