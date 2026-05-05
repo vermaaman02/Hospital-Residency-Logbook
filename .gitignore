@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+#graphiy
+./graphify-out
+graphify-out
+
 # vercel
 .vercel
 
