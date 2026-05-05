@@ -126,6 +126,7 @@ export async function upsertAttendanceConfig(data: {
 	});
 
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: config };
 }
 
@@ -162,6 +163,7 @@ export async function addHoliday(data: {
 		data: { date: data.date, name: data.name, batchId: data.batchId ?? null },
 	});
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: holiday };
 }
 
@@ -169,6 +171,7 @@ export async function removeHoliday(holidayId: string) {
 	await requireRole(["hod"]);
 	await prisma.attendanceHoliday.delete({ where: { id: holidayId } });
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -184,12 +187,14 @@ export async function toggleHoliday(data: {
 	if (existing) {
 		await prisma.attendanceHoliday.delete({ where: { id: existing.id } });
 		revalidatePath("/dashboard/hod/attendance");
-		return { success: true, action: "removed" as const };
+		emitRealtimeEvent("entry:updated");
+	return { success: true, action: "removed" as const };
 	}
 	const holiday = await prisma.attendanceHoliday.create({
 		data: { date: data.date, name: data.name, batchId: data.batchId ?? null },
 	});
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, action: "added" as const, data: holiday };
 }
 
@@ -460,6 +465,7 @@ export async function markDailyAttendance(data: DailyAttendanceInput) {
 	}
 
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -570,6 +576,7 @@ export async function markAttendanceForStudent(data: {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -733,6 +740,7 @@ export async function updateDailyEntry(
 	});
 
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -754,6 +762,7 @@ export async function deleteDailyEntry(entryId: string) {
 
 	await prisma.attendanceEntry.delete({ where: { id: entryId } });
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -792,6 +801,7 @@ export async function createAttendanceSheet(data: AttendanceSheetInput) {
 	});
 
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: sheet };
 }
 
@@ -842,6 +852,7 @@ export async function updateAttendanceSheet(
 	});
 
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: sheet };
 }
 
@@ -879,6 +890,7 @@ export async function submitAttendanceSheet(sheetId: string) {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -902,6 +914,7 @@ export async function retractAttendanceSheet(sheetId: string) {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -916,6 +929,7 @@ export async function deleteAttendanceSheet(sheetId: string) {
 
 	await prisma.attendanceSheet.delete({ where: { id: sheetId } });
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -1276,11 +1290,16 @@ export async function signAttendanceSheet(sheetId: string, remark?: string) {
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function rejectAttendanceSheet(sheetId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const sheet = await prisma.attendanceSheet.findUnique({
 		where: { id: sheetId },
@@ -1290,12 +1309,13 @@ export async function rejectAttendanceSheet(sheetId: string, remark: string) {
 
 	await prisma.attendanceSheet.update({
 		where: { id: sheetId },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -1315,7 +1335,7 @@ export async function bulkSignAttendanceSheets(
 
 		await prisma.attendanceSheet.update({
 			where: { id: sheetId },
-			data: { status: "SIGNED", facultyRemark: remark ?? null },
+			data: { status: "SIGNED", facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null },
 		});
 		await prisma.digitalSignature.create({
 			data: {
@@ -1331,6 +1351,7 @@ export async function bulkSignAttendanceSheets(
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount };
 }
 
@@ -1491,6 +1512,7 @@ export async function submitDailyEntry(entryId: string) {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -1533,6 +1555,7 @@ export async function submitMultipleDailyEntries(entryIds: string[]) {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, submittedCount };
 }
 
@@ -1560,6 +1583,7 @@ export async function retractDailyEntry(entryId: string) {
 	revalidatePath("/dashboard/student/attendance");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -1578,7 +1602,7 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 		where: { id: entryId },
 		data: {
 			status: "SIGNED",
-			facultyRemark: remark ?? null,
+			facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null,
 			signedAt: new Date(),
 			signedBy: user.id,
 		},
@@ -1595,12 +1619,17 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 /** Faculty/HOD: Reject a single daily entry with remark */
 export async function rejectDailyEntry(entryId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.attendanceEntry.findUnique({
 		where: { id: entryId },
@@ -1610,12 +1639,13 @@ export async function rejectDailyEntry(entryId: string, remark: string) {
 
 	await prisma.attendanceEntry.update({
 		where: { id: entryId },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -1638,7 +1668,7 @@ export async function bulkSignDailyEntries(
 			where: { id: entryId },
 			data: {
 				status: "SIGNED",
-				facultyRemark: remark ?? null,
+				facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null,
 				signedAt: new Date(),
 				signedBy: user.id,
 			},
@@ -1657,6 +1687,7 @@ export async function bulkSignDailyEntries(
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount };
 }
 

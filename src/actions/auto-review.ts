@@ -156,6 +156,7 @@ export async function toggleAutoReview(
 	revalidatePath("/dashboard/hod/diagnostics");
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, category, enabled };
 }
 

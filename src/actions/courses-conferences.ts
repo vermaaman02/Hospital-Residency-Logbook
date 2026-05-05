@@ -100,6 +100,7 @@ export async function submitCourseAttended(id: string) {
 
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -141,11 +142,16 @@ export async function signCourseAttended(id: string, _remark?: string) {
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
 export async function rejectCourseAttended(id: string, _remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 	const entry = await prisma.courseAttended.findFirst({
 		where: { id, status: "SUBMITTED" as never },
 	});
@@ -157,6 +163,7 @@ export async function rejectCourseAttended(id: string, _remark: string) {
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -234,6 +241,7 @@ export async function submitConferenceParticipation(id: string) {
 
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -278,6 +286,7 @@ export async function signConferenceParticipation(
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -297,6 +306,7 @@ export async function rejectConferenceParticipation(
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -370,6 +380,7 @@ export async function submitResearchActivity(id: string) {
 
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -411,11 +422,16 @@ export async function signResearchActivity(id: string, _remark?: string) {
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
 export async function rejectResearchActivity(id: string, _remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 	const entry = await prisma.researchActivity.findFirst({
 		where: { id, status: "SUBMITTED" as never },
 	});
@@ -427,5 +443,6 @@ export async function rejectResearchActivity(id: string, _remark: string) {
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }

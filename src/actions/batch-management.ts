@@ -76,6 +76,7 @@ export async function createBatch(formData: {
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, batch };
 }
 
@@ -130,6 +131,7 @@ export async function updateBatch(data: {
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, batch };
 }
 
@@ -153,6 +155,7 @@ export async function deleteBatch(batchId: string) {
 	await prisma.batch.delete({ where: { id: batchId } });
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -215,6 +218,7 @@ export async function assignStudentToBatch(studentId: string, batchId: string) {
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -233,6 +237,7 @@ export async function removeStudentFromBatch(studentId: string) {
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: "Removed from batch" };
 }
 
@@ -273,6 +278,7 @@ export async function assignFacultyToBatch(facultyId: string, batchId: string) {
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: `Faculty assigned to "${batch.name}"` };
 }
 
@@ -292,6 +298,7 @@ export async function removeFacultyFromBatch(
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: "Faculty removed from batch" };
 }
 
@@ -335,6 +342,7 @@ export async function bulkAssignStudentsToBatch(
 	});
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return {
 		success: true,
 		message: `${students.length} student(s) assigned to "${batch.name}"`,
@@ -397,6 +405,7 @@ export async function bulkAssignFacultyToBatch(
 		:	`${newFacultyIds.length} faculty assigned to "${batch.name}"`;
 
 	revalidatePath("/dashboard/hod/manage-users");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: msg };
 }
 

@@ -623,12 +623,12 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 		create: {
 			submissionId: input.submissionId,
 			evaluatedById: user.id,
-			rejectionReason: input.rejectionReason,
+			rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
 			evaluatedAt: new Date(),
 		},
 		update: {
 			evaluatedById: user.id,
-			rejectionReason: input.rejectionReason,
+			rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
 			evaluatedAt: new Date(),
 		},
 	});

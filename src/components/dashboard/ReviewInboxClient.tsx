@@ -101,6 +101,14 @@ export function ReviewInboxClient({ initialItems }: ReviewInboxClientProps) {
 											</span>{" "}
 											• {item.module}
 										</div>
+										{item.remark && (
+											<div className="mt-2 text-sm bg-muted/50 p-2 rounded-md border border-border text-foreground">
+												<span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground block mb-1">
+													Faculty Remark
+												</span>
+												{item.remark}
+											</div>
+										)}
 									</div>
 									<div className="mt-4 sm:mt-0 flex items-center gap-4">
 										<span className="text-xs text-muted-foreground whitespace-nowrap">

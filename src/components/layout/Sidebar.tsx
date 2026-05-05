@@ -52,7 +52,7 @@ import {
 	X,
 	Network,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
 	getPendingReviewCounts,
@@ -62,6 +62,7 @@ import {
 	getActiveFormsForUser,
 	type ActiveForm,
 } from "@/actions/form-definitions";
+import { useSocketEvent } from "@/lib/socket";
 
 interface NavItem {
 	title: string;
@@ -689,7 +690,7 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 	const [activeForms, setActiveForms] = useState<ActiveForm[] | null>(null);
 
 	// Fetch pending counts for faculty/hod
-	useEffect(() => {
+	const fetchCounts = useCallback(() => {
 		if (role === "faculty" || role === "hod") {
 			getPendingReviewCounts()
 				.then(setPendingCounts)
@@ -698,6 +699,16 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 				});
 		}
 	}, [role]);
+
+	useEffect(() => {
+		fetchCounts();
+	}, [fetchCounts]);
+
+	useSocketEvent("entry:updated", fetchCounts);
+	useSocketEvent("assessment:updated", fetchCounts);
+	useSocketEvent("system:updated", fetchCounts);
+	useSocketEvent("review:counts", fetchCounts);
+	useSocketEvent("rotation:updated", fetchCounts);
 
 	// Fetch department-aware active forms for students/faculty
 	useEffect(() => {

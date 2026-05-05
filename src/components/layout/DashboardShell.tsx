@@ -13,7 +13,6 @@ import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
-import { Footer } from "@/components/layout/Footer";
 
 interface DashboardShellProps {
 	children: React.ReactNode;
@@ -58,8 +57,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
 				<main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
 					{children}
 				</main>
-
-				<Footer />
 			</div>
 
 			{/* Mobile Bottom Nav */}

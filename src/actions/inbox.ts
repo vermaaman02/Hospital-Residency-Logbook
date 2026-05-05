@@ -17,6 +17,7 @@ export interface InboxItem {
 	status: string;
 	updatedAt: string;
 	href: string;
+	remark?: string | null;
 }
 
 export async function getUnifiedInbox(): Promise<InboxItem[]> {
@@ -199,115 +200,115 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	attendance.forEach(i => items.push({
 		id: i.id, module: "Attendance", title: "Attendance Entry",
 		studentName: `${i.attendanceSheet.user.firstName} ${i.attendanceSheet.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/attendance`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/attendance`
 	}));
 
 	rotations.forEach(i => items.push({
 		id: i.id, module: "Rotation Postings", title: i.rotationName,
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/rotation-postings`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/rotation-postings`
 	}));
 
 	casePresentations.forEach(i => items.push({
 		id: i.id, module: "Case Presentations", title: i.category || "Case Presentation",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-presentations`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-presentations`
 	}));
 
 	seminars.forEach(i => items.push({
 		id: i.id, module: "Seminars", title: i.category || "Seminar",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-presentations?tab=seminars`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-presentations?tab=seminars`
 	}));
 
 	thesis.forEach(i => items.push({
 		id: i.id, module: "Thesis", title: "Thesis Record",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/rotation-postings?tab=thesis`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/rotation-postings?tab=thesis`
 	}));
 
 	clinicalAdult.forEach(i => items.push({
 		id: i.id, module: "Clinical Skills (Adult)", title: i.skillName,
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/clinical-skills`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/clinical-skills`
 	}));
 
 	clinicalPed.forEach(i => items.push({
 		id: i.id, module: "Clinical Skills (Pediatric)", title: i.skillName,
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/clinical-skills?tab=pediatric`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/clinical-skills?tab=pediatric`
 	}));
 
 	caseMgmt.forEach(i => items.push({
 		id: i.id, module: "Case Management", title: i.caseSubCategory || "Case Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-management`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/case-management`
 	}));
 
 	procedures.forEach(i => items.push({
 		id: i.id, module: "Procedure Logs", title: i.procedureDescription || "Procedure Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures`
 	}));
 
 	imaging.forEach(i => items.push({
 		id: i.id, module: "Imaging Logs", title: i.procedureDescription || "Imaging Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=imaging`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=imaging`
 	}));
 
 	transport.forEach(i => items.push({
 		id: i.id, module: "Transport Logs", title: i.procedureDescription || "Transport Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=transport`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=transport`
 	}));
 
 	consent.forEach(i => items.push({
 		id: i.id, module: "Consent Logs", title: i.procedureDescription || "Consent Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=consent`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=consent`
 	}));
 
 	badNews.forEach(i => items.push({
 		id: i.id, module: "Bad News Logs", title: i.procedureDescription || "Bad News Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=bad-news`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=bad-news`
 	}));
 
 	courses.forEach(i => items.push({
 		id: i.id, module: "Courses Attended", title: i.courseName || "Course",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/courses`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/courses`
 	}));
 
 	conferences.forEach(i => items.push({
 		id: i.id, module: "Conferences", title: i.conferenceName || "Conference",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences`
 	}));
 
 	research.forEach(i => items.push({
 		id: i.id, module: "Research Activities", title: i.activity || "Activity",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=research`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=research`
 	}));
 
 	disaster.forEach(i => items.push({
 		id: i.id, module: "Disaster Drills", title: i.description || "Disaster Drill",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=disaster-drills`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=disaster-drills`
 	}));
 
 	qi.forEach(i => items.push({
 		id: i.id, module: "Quality Improvement", title: i.description || "QI Project",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=qi`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=qi`
 	}));
 
 	logbook.forEach(i => items.push({
 		id: i.id, module: "Logbook Reviews", title: "Logbook Review",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/logbook-reviews`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/logbook-reviews`
 	}));
 
 	items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

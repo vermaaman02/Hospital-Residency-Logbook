@@ -8,26 +8,26 @@ datasource db {
 }
 
 model User {
-  id                         String                     @id @default(cuid())
-  clerkId                    String                     @unique
-  email                      String                     @unique
+  id                         String                                @id @default(cuid())
+  clerkId                    String                                @unique
+  email                      String                                @unique
   firstName                  String
   lastName                   String
-  role                       Role                       @default(STUDENT)
+  role                       Role                                  @default(STUDENT)
   batch                      String?
-  currentSemester            Int?                       @default(1)
-  department                 String?                    @default("Emergency Medicine")
+  currentSemester            Int?                                  @default(1)
+  department                 String?                               @default("Emergency Medicine")
   profileImage               String?
-  createdAt                  DateTime                   @default(now())
-  updatedAt                  DateTime                   @updatedAt
+  createdAt                  DateTime                              @default(now())
+  updatedAt                  DateTime                              @updatedAt
   banReason                  String?
   bannedUntil                DateTime?
   batchId                    String?
-  status                     UserStatus                 @default(ACTIVE)
+  status                     UserStatus                            @default(ACTIVE)
   notificationsLastSeenAt    DateTime?
   departmentId               String?
-  assessmentEvaluations      AssessmentEvaluation[]     @relation("AssessmentEvaluations")
-  assessmentSubmissions      AssessmentSubmission[]     @relation("AssessmentSubmissions")
+  assessmentEvaluations      AssessmentEvaluation[]                @relation("AssessmentEvaluations")
+  assessmentSubmissions      AssessmentSubmission[]                @relation("AssessmentSubmissions")
   attendanceSheets           AttendanceSheet[]
   badNewsLogs                BadNewsLog[]
   caseManagementLogs         CaseManagementLog[]
@@ -40,12 +40,12 @@ model User {
   diagnosticSkills           DiagnosticSkill[]
   signedEntries              DigitalSignature[]
   disasterDrills             DisasterDrill[]
-  facultyBatchAssignments    FacultyBatchAssignment[]   @relation("FacultyBatchAssignments")
-  assignedStudents           FacultyStudentAssignment[] @relation("FacultyAssignments")
-  assignedFaculty            FacultyStudentAssignment[] @relation("StudentAssignments")
+  facultyBatchAssignments    FacultyBatchAssignment[]              @relation("FacultyBatchAssignments")
+  assignedStudents           FacultyStudentAssignment[]            @relation("FacultyAssignments")
+  assignedFaculty            FacultyStudentAssignment[]            @relation("StudentAssignments")
   imagingLogs                ImagingLog[]
-  assignedFacultyAssessments InternalAssessment[]       @relation("AssessmentAssignedFaculty")
-  assessmentsCreated         InternalAssessment[]       @relation("AssessmentsCreated")
+  assignedFacultyAssessments InternalAssessment[]                  @relation("AssessmentAssignedFaculty")
+  assessmentsCreated         InternalAssessment[]                  @relation("AssessmentsCreated")
   journalClubs               JournalClub[]
   logbookFacultyReviews      LogbookFacultyReview[]
   procedureLogs              ProcedureLog[]
@@ -58,9 +58,9 @@ model User {
   thesis                     Thesis?
   trainingMentoringRecords   TrainingMentoringRecord[]
   transportLogs              TransportLog[]
-  batchRelation              Batch?                     @relation(fields: [batchId], references: [id])
-  departmentRelation         Department?                @relation(fields: [departmentId], references: [id])
-  specificAssessments        InternalAssessment[]       @relation("AssessmentAssignedSpecificStudents")
+  batchRelation              Batch?                                @relation(fields: [batchId], references: [id])
+  departmentRelation         Department?                           @relation(fields: [departmentId], references: [id])
+  specificAssessments        InternalAssessment[]                  @relation("AssessmentAssignedSpecificStudents")
 
   @@index([clerkId])
   @@index([role])
@@ -70,23 +70,23 @@ model User {
 }
 
 model Batch {
-  id                 String                            @id @default(cuid())
-  name               String                            @unique
-  currentSemester    Int                               @default(1)
-  startDate          DateTime
-  endDate            DateTime?
-  isActive           Boolean                           @default(true)
-  description        String?
-  createdAt          DateTime                          @default(now())
-  updatedAt          DateTime                          @updatedAt
-  attendanceConfig   AttendanceConfig?
-  attendanceHolidays AttendanceHoliday[]
-  departmentBatches  DepartmentBatch[]
-  facultyAssignments FacultyBatchAssignment[]
-  assessments        InternalAssessment[]
-  students           User[]
-  rotationConfigs    RotationPostingConfiguration[]
+  id                     String                                @id @default(cuid())
+  name                   String                                @unique
+  currentSemester        Int                                   @default(1)
+  startDate              DateTime
+  endDate                DateTime?
+  isActive               Boolean                               @default(true)
+  description            String?
+  createdAt              DateTime                              @default(now())
+  updatedAt              DateTime                              @updatedAt
+  attendanceConfig       AttendanceConfig?
+  attendanceHolidays     AttendanceHoliday[]
+  departmentBatches      DepartmentBatch[]
+  facultyAssignments     FacultyBatchAssignment[]
+  assessments            InternalAssessment[]
+  rotationConfigs        RotationPostingConfiguration[]
   rotationStudentConfigs RotationPostingStudentConfiguration[]
+  students               User[]
 
   @@index([isActive])
 }
@@ -151,11 +151,11 @@ model RotationPosting {
   totalDuration String?
   status        EntryStatus @default(DRAFT)
   facultyRemark String?
-  attachments   String[]    @default([])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   durationDays  Int?
   facultyId     String?
+  attachments   String[]    @default([])
   user          User        @relation(fields: [userId], references: [id])
 
   @@index([userId])
@@ -164,16 +164,16 @@ model RotationPosting {
 }
 
 model RotationPostingConfiguration {
-  id             String     @id @default(cuid())
-  rotationSlNo   Int // 1-20, refers to ROTATION_POSTINGS constant
-  batchId        String
-  semester       Int // 1-6
-  departmentId   String
-  isEnabled      Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  batch          Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  department     Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  rotationSlNo Int
+  batchId      String
+  semester     Int
+  departmentId String
+  isEnabled    Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  batch        Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
   @@unique([rotationSlNo, batchId, semester, departmentId])
   @@index([batchId])
@@ -183,20 +183,20 @@ model RotationPostingConfiguration {
 }
 
 model RotationPostingStudentConfiguration {
-  id             String     @id @default(cuid())
-  rotationSlNo   Int // 1-20, refers to ROTATION_POSTINGS constant
-  batchId        String
-  semester       Int // 1-6
-  departmentId   String
-  studentId      String
-  isEnabled      Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  batch          Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  department     Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  student        User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  rotationSlNo Int
+  batchId      String
+  semester     Int
+  departmentId String
+  studentId    String
+  isEnabled    Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  batch        Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([rotationSlNo, batchId, semester, departmentId, studentId])
+  @@unique([rotationSlNo, batchId, semester, departmentId, studentId], map: "RotationPostingStudentConfiguration_rotationSlNo_batchId_semes_")
   @@index([batchId])
   @@index([departmentId])
   @@index([semester])
@@ -840,18 +840,18 @@ model AssessmentEvaluation {
 }
 
 model Department {
-  id                     String                           @id @default(cuid())
-  name                   String                           @unique
-  code                   String                           @unique
+  id                     String                                @id @default(cuid())
+  name                   String                                @unique
+  code                   String                                @unique
   description            String?
-  isActive               Boolean                          @default(true)
-  createdAt              DateTime                         @default(now())
-  updatedAt              DateTime                         @updatedAt
+  isActive               Boolean                               @default(true)
+  createdAt              DateTime                              @default(now())
+  updatedAt              DateTime                              @updatedAt
   departmentBatches      DepartmentBatch[]
   departmentForms        DepartmentForm[]
-  users                  User[]
   rotationConfigs        RotationPostingConfiguration[]
   rotationStudentConfigs RotationPostingStudentConfiguration[]
+  users                  User[]
 
   @@index([isActive])
 }
@@ -913,6 +913,7 @@ enum UserStatus {
   ACTIVE
   BANNED
   TEMPORARILY_BANNED
+  DELETED
 }
 
 enum DayOfWeek {

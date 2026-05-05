@@ -39,6 +39,11 @@ const banUserSchema = z.object({
 	bannedUntilDays: z.coerce.number().int().min(1).max(365).optional(),
 });
 
+const deleteUserSchema = z.object({
+	userId: z.string().min(1),
+	reason: z.string().max(500).optional(),
+});
+
 // ======================== USER CREATION ========================
 
 /**
@@ -170,6 +175,7 @@ export async function removeUserRole(userId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -220,6 +226,7 @@ export async function banUser(data: {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -248,6 +255,80 @@ export async function unbanUser(clerkId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
+	return { success: true };
+}
+
+// ======================== PERMANENT DELETE ========================
+
+/**
+ * Permanently delete a user in Clerk and soft-delete in local DB (HOD only).
+ * Local data is retained for compliance; user is hidden from the UI.
+ */
+export async function deleteUserPermanently(data: {
+	userId: string;
+	reason?: string;
+}) {
+	const { userId: actorId } = await requireRole(["hod"]);
+
+	const validated = deleteUserSchema.parse(data);
+
+	if (validated.userId === actorId) {
+		return { success: false, message: "You cannot delete your own account" };
+	}
+
+	const existing = await prisma.user.findUnique({
+		where: { clerkId: validated.userId },
+	});
+	if (!existing) {
+		return { success: false, message: "User not found" };
+	}
+	if (existing.role === "HOD") {
+		return {
+			success: false,
+			message: "Cannot delete an HOD account",
+		};
+	}
+	if (existing.status === "DELETED") {
+		return { success: false, message: "User is already deleted" };
+	}
+
+	const client = await clerkClient();
+	try {
+		await client.users.deleteUser(validated.userId);
+	} catch (err: unknown) {
+		const status =
+			typeof err === "object" && err && "status" in err ?
+				(err as { status?: number }).status
+			:	undefined;
+		if (status !== 404) {
+			const message =
+				err instanceof Error ? err.message : "Failed to delete user in Clerk";
+			console.error("[DELETE_USER_CLERK]", err);
+			return { success: false, message };
+		}
+	}
+
+	const obfuscatedEmail = `deleted+${existing.id}@deleted.local`;
+
+	await prisma.user.update({
+		where: { clerkId: validated.userId },
+		data: {
+			status: "DELETED",
+			email: obfuscatedEmail,
+			firstName: "Deleted",
+			lastName: "User",
+			profileImage: null,
+			banReason: validated.reason ?? "Deleted by HOD",
+			bannedUntil: null,
+		},
+	});
+
+	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("user:updated", {
+		userId: validated.userId,
+		status: "DELETED",
+	});
 	return { success: true };
 }
 
@@ -330,6 +411,7 @@ export async function promoteStudents(studentIds: string[]) {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return {
 		success: true,
 		message: `${promoted} student(s) promoted to next semester`,
@@ -352,6 +434,7 @@ export async function setStudentSemester(studentId: string, semester: number) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -396,6 +479,7 @@ export async function demoteStudents(studentIds: string[]) {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return {
 		success: true,
 		message: `${demoted} student(s) demoted to previous semester`,
@@ -462,6 +546,7 @@ export async function updateUserInfo(data: {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: "User info updated successfully" };
 }
 
@@ -486,7 +571,7 @@ export async function getBanStatus(email: string) {
 		},
 	});
 
-	if (!user) {
+	if (!user || user.status === "DELETED") {
 		return { found: false, message: "No account found with this email" };
 	}
 
@@ -603,6 +688,7 @@ export async function assignFacultyToStudent(
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -617,5 +703,6 @@ export async function removeFacultyAssignment(assignmentId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
