@@ -84,6 +84,8 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 	useSocketEvent("entry:updated", fetchCounts);
 	useSocketEvent("assessment:updated", fetchCounts);
 	useSocketEvent("system:updated", fetchCounts);
+	useSocketEvent("review:counts", fetchCounts);
+	useSocketEvent("rotation:updated", fetchCounts);
 
 	// When the notification popover opens, mark all as seen
 	const handleNotifOpenChange = useCallback((open: boolean) => {
