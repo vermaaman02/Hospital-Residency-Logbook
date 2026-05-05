@@ -17,6 +17,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod/v4";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 const REVALIDATE_PATH = "/dashboard/hod/manage-users";
 
@@ -129,6 +130,7 @@ export async function createUser(formData: {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("user:created", { clerkId: clerkUser.id });
 	return { success: true, clerkId: clerkUser.id };
 }
 
@@ -152,6 +154,7 @@ export async function setUserRole(userId: string, role: AllowedRole) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("user:updated", { userId, role });
 	return { success: true };
 }
 

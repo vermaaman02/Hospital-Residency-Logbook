@@ -44,6 +44,7 @@ import { markNotificationsSeen } from "@/actions/mark-notifications-seen";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
+import { RealtimeStatus } from "@/components/shared/RealtimeStatus";
 
 interface TopBarProps {
 	onMobileMenuToggle?: () => void;
@@ -157,6 +158,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 						{roleLabel}
 					</Badge>
 				)}
+
+				{/* Realtime connection indicator */}
+				<RealtimeStatus />
 
 				{/* Notification Bell */}
 				{role === "faculty" || role === "hod" ?

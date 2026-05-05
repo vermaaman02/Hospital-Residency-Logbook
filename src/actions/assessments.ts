@@ -13,6 +13,7 @@
 import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 // ======================== TYPES ========================
 
@@ -103,6 +104,7 @@ export async function createAssessment(input: CreateAssessmentInput) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:created", { assessmentId: assessment.id });
 	return assessment;
 }
 
@@ -166,6 +168,7 @@ export async function updateAssessment(
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:updated", { assessmentId: assessment.id });
 	return assessment;
 }
 
@@ -186,6 +189,7 @@ export async function deleteAssessment(assessmentId: string) {
 
 	await prisma.internalAssessment.delete({ where: { id: assessmentId } });
 	revalidateAll();
+	emitRealtimeEvent("assessment:updated", { assessmentId, deleted: true });
 	return { success: true };
 }
 
@@ -205,6 +209,7 @@ export async function togglePublishAssessment(assessmentId: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:updated", { assessmentId, published: !existing.isPublished });
 	return updated;
 }
 
@@ -467,6 +472,7 @@ export async function submitAssessment(
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:submitted", { assessmentId, submissionId: submission.id });
 	return submission;
 }
 
@@ -586,6 +592,7 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:evaluated", { submissionId: input.submissionId });
 	return evaluation;
 }
 
@@ -633,6 +640,7 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("assessment:evaluated", { submissionId: input.submissionId, rejected: true });
 	return { success: true };
 }
 

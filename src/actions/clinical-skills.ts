@@ -19,6 +19,7 @@ import {
 } from "@/lib/constants/clinical-skills";
 import { revalidatePath } from "next/cache";
 import { isAutoReviewEnabled } from "./auto-review";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 // ======================== PATHS ========================
 
@@ -158,6 +159,7 @@ export async function updateClinicalSkill(
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type, id });
 	return { success: true, data: entry };
 }
 
@@ -210,6 +212,7 @@ export async function submitClinicalSkill(
 	}
 
 	revalidateAll();
+	emitRealtimeEvent(autoReview ? "entry:signed" : "entry:created", { module: "clinical-skills", type, id });
 	return { success: true };
 }
 
@@ -307,6 +310,7 @@ export async function signClinicalSkill(
 	]);
 
 	revalidateAll();
+	emitRealtimeEvent("entry:signed", { module: "clinical-skills", type, id });
 	return { success: true };
 }
 
@@ -335,6 +339,7 @@ export async function rejectClinicalSkill(
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:rejected", { module: "clinical-skills", type, id });
 	return { success: true };
 }
 
@@ -374,6 +379,7 @@ export async function bulkSignClinicalSkills(
 	]);
 
 	revalidateAll();
+	emitRealtimeEvent("entry:bulk-signed", { module: "clinical-skills", type, count: entries.length });
 	return { success: true, signedCount: entries.length };
 }
 
