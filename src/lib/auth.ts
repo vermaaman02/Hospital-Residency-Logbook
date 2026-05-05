@@ -38,21 +38,48 @@ export async function ensureUserInDb() {
 	const clerkUser = await currentUser();
 	if (!clerkUser) return null;
 
+	const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+
+	// Check if user exists by email (if Clerk ID changed, e.g. manual creation)
+	const existingByEmail = await prisma.user.findUnique({ where: { email } });
+	if (existingByEmail) {
+		return prisma.user.update({
+			where: { id: existingByEmail.id },
+			data: { clerkId: userId },
+		});
+	}
+
 	const role = clerkRoleToPrismaRole(
 		(clerkUser.publicMetadata as { role?: string })?.role,
 	);
 
-	const user = await prisma.user.create({
-		data: {
-			clerkId: userId,
-			email: clerkUser.emailAddresses[0]?.emailAddress ?? "",
-			firstName: clerkUser.firstName ?? "",
-			lastName: clerkUser.lastName ?? "",
-			role: role as never,
-		},
-	});
-
-	return user;
+	try {
+		const user = await prisma.user.create({
+			data: {
+				clerkId: userId,
+				email,
+				firstName: clerkUser.firstName ?? "",
+				lastName: clerkUser.lastName ?? "",
+				role: role as never,
+			},
+		});
+		return user;
+	} catch (error: any) {
+		// Handle race condition where webhook creates the user simultaneously
+		if (error.code === "P2002") {
+			const raceUser = await prisma.user.findUnique({ where: { email } });
+			if (raceUser) {
+				if (raceUser.clerkId !== userId) {
+					return prisma.user.update({
+						where: { id: raceUser.id },
+						data: { clerkId: userId },
+					});
+				}
+				return raceUser;
+			}
+		}
+		throw error;
+	}
 }
 
 /**
