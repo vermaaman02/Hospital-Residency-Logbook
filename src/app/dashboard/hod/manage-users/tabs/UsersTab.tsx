@@ -49,6 +49,7 @@ import {
 	setUserRole,
 	banUser,
 	unbanUser,
+	deleteUserPermanently,
 	updateUserInfo,
 } from "@/actions/user-management";
 import {
@@ -70,6 +71,7 @@ import {
 	FolderPlus,
 	X,
 	Pencil,
+	Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { UserData, BatchData } from "../ManageUsersClient";
@@ -82,7 +84,12 @@ interface UsersTabProps {
 type SortField = "name" | "role" | "status" | "semester" | "createdAt";
 type SortOrder = "asc" | "desc";
 type RoleFilter = "all" | "hod" | "faculty" | "student";
-type StatusFilter = "all" | "ACTIVE" | "BANNED" | "TEMPORARILY_BANNED";
+type StatusFilter =
+	| "all"
+	| "ACTIVE"
+	| "BANNED"
+	| "TEMPORARILY_BANNED"
+	| "DELETED";
 
 const roleBadgeClasses: Record<string, string> = {
 	hod: "bg-purple-100 text-purple-800 border-purple-200",
@@ -94,6 +101,7 @@ const statusBadgeClasses: Record<string, string> = {
 	ACTIVE: "bg-emerald-100 text-emerald-800 border-emerald-200",
 	BANNED: "bg-red-100 text-red-800 border-red-200",
 	TEMPORARILY_BANNED: "bg-amber-100 text-amber-800 border-amber-200",
+	DELETED: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
 const roleIcons: Record<string, React.ReactNode> = {
@@ -133,6 +141,12 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 	const [editEmail, setEditEmail] = useState("");
 	const [editPassword, setEditPassword] = useState("");
 
+	// Delete user dialog
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+	const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
+	const [deleteConfirmText, setDeleteConfirmText] = useState("");
+	const [deleteReason, setDeleteReason] = useState("");
+
 	// Filter, search, sort
 	const filteredAndSorted = useMemo(() => {
 		let result = [...users];
@@ -158,6 +172,8 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 		// Status filter
 		if (statusFilter !== "all") {
 			result = result.filter((u) => u.status === statusFilter);
+		} else {
+			result = result.filter((u) => u.status !== "DELETED");
 		}
 
 		// Sort
@@ -337,6 +353,39 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 		});
 	}
 
+	function openDeleteDialog(user: UserData) {
+		setDeleteTarget(user);
+		setDeleteConfirmText("");
+		setDeleteReason("");
+		setDeleteDialogOpen(true);
+	}
+
+	function handleDeleteUser() {
+		if (!deleteTarget) return;
+		const confirmation = deleteConfirmText.trim().toUpperCase();
+		if (confirmation !== "DELETE") {
+			toast.error("Type DELETE to confirm");
+			return;
+		}
+		startTransition(async () => {
+			try {
+				const result = await deleteUserPermanently({
+					userId: deleteTarget.clerkId,
+					reason: deleteReason || undefined,
+				});
+				if (result.success) {
+					toast.success("User deleted successfully");
+					setDeleteDialogOpen(false);
+					router.refresh();
+				} else {
+					toast.error(result.message ?? "Failed to delete user");
+				}
+			} catch {
+				toast.error("Failed to delete user");
+			}
+		});
+	}
+
 	const activeBatches = batches.filter((b) => b.isActive);
 
 	return (
@@ -381,6 +430,7 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 							<SelectItem value="ACTIVE">Active</SelectItem>
 							<SelectItem value="BANNED">Banned</SelectItem>
 							<SelectItem value="TEMPORARILY_BANNED">Temp Banned</SelectItem>
+							<SelectItem value="DELETED">Deleted</SelectItem>
 						</SelectContent>
 					</Select>
 				</div>
@@ -535,7 +585,10 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 																</button>
 															</div>
 														:	<div className="flex flex-col items-start gap-1">
-																<Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider">
+																<Badge
+																	variant="outline"
+																	className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider"
+																>
 																	Unassigned
 																</Badge>
 																<button
@@ -553,8 +606,8 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 															</p>
 														)}
 													</div>
-												: user.role === "faculty" ? (
-													user.assignedBatches.length > 0 ? (
+												: user.role === "faculty" ?
+													user.assignedBatches.length > 0 ?
 														<div className="flex flex-wrap gap-1">
 															{user.assignedBatches.map((ab) => (
 																<Badge
@@ -566,21 +619,23 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 																</Badge>
 															))}
 														</div>
-													) : (
-														<Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider">
+													:	<Badge
+															variant="outline"
+															className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider"
+														>
 															Unassigned
 														</Badge>
-													)
-												) : (
-													<span className="text-muted-foreground">—</span>
-												)}
+
+												:	<span className="text-muted-foreground">—</span>}
 											</TableCell>
 
 											{/* Change Role */}
 											<TableCell>
 												<Select
 													value={user.role}
-													onValueChange={(v) => handleRoleChange(user.clerkId, v)}
+													onValueChange={(v) =>
+														handleRoleChange(user.clerkId, v)
+													}
 													disabled={isPending}
 												>
 													<SelectTrigger className="w-32 h-8 text-xs">
@@ -644,6 +699,21 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 															Unban
 														</Button>
 													}
+													<Button
+														variant="outline"
+														size="sm"
+														className="h-7 text-xs text-red-700 border-red-200 hover:bg-red-50 hover:text-red-800"
+														onClick={() => openDeleteDialog(user)}
+														disabled={isPending || user.role === "hod"}
+														title={
+															user.role === "hod" ?
+																"Cannot delete HOD"
+															:	"Delete user"
+														}
+													>
+														<Trash2 className="h-3 w-3 mr-1" />
+														Delete
+													</Button>
 												</div>
 											</TableCell>
 										</TableRow>
@@ -728,6 +798,65 @@ export function UsersTab({ users, batches }: UsersTabProps) {
 						>
 							{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
 							Confirm Ban
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Delete Dialog */}
+			<Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2 text-red-600">
+							<Trash2 className="h-5 w-5" />
+							Delete User
+						</DialogTitle>
+						<DialogDescription>
+							Permanently remove{" "}
+							<strong>
+								{deleteTarget?.firstName} {deleteTarget?.lastName}
+							</strong>
+							. This will delete the Clerk account and hide the user from the
+							dashboard.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4 py-2">
+						<div className="space-y-2">
+							<Label>Type DELETE to confirm</Label>
+							<Input
+								value={deleteConfirmText}
+								onChange={(e) => setDeleteConfirmText(e.target.value)}
+								placeholder="DELETE"
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label>
+								Reason <span className="text-muted-foreground">(optional)</span>
+							</Label>
+							<Textarea
+								value={deleteReason}
+								onChange={(e) => setDeleteReason(e.target.value)}
+								placeholder="Reason for deleting..."
+								rows={3}
+							/>
+						</div>
+					</div>
+					<DialogFooter>
+						<Button
+							variant="outline"
+							onClick={() => setDeleteDialogOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={handleDeleteUser}
+							disabled={
+								isPending || deleteConfirmText.trim().toUpperCase() !== "DELETE"
+							}
+						>
+							{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+							Confirm Delete
 						</Button>
 					</DialogFooter>
 				</DialogContent>
