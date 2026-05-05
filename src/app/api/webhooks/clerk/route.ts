@@ -80,24 +80,39 @@ export async function POST(req: NextRequest) {
 
 				const role = data.public_metadata?.role ?? "STUDENT";
 
-				await prisma.user.upsert({
-					where: { clerkId: data.id },
-					update: {
-						email,
-						firstName: data.first_name ?? "",
-						lastName: data.last_name ?? "",
-						profileImage: data.image_url,
-						role,
-					},
-					create: {
-						clerkId: data.id,
-						email,
-						firstName: data.first_name ?? "",
-						lastName: data.last_name ?? "",
-						profileImage: data.image_url,
-						role,
-					},
+				const existingUser = await prisma.user.findFirst({
+					where: { OR: [{ clerkId: data.id }, { email }] },
 				});
+
+				if (existingUser) {
+					await prisma.user.update({
+						where: { id: existingUser.id },
+						data: {
+							clerkId: data.id,
+							email,
+							firstName: data.first_name ?? "",
+							lastName: data.last_name ?? "",
+							profileImage: data.image_url,
+							role,
+						},
+					});
+				} else {
+					try {
+						await prisma.user.create({
+							data: {
+								clerkId: data.id,
+								email,
+								firstName: data.first_name ?? "",
+								lastName: data.last_name ?? "",
+								profileImage: data.image_url,
+								role,
+							},
+						});
+					} catch (err: any) {
+						if (err.code !== "P2002") throw err;
+						// If a simultaneous creation happened, it's fine
+					}
+				}
 
 				break;
 			}
