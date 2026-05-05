@@ -14,7 +14,10 @@
 "use server";
 
 const INTERNAL_EMIT_URL =
-	process.env.INTERNAL_EMIT_URL || "http://localhost:3000/_internal/emit";
+	process.env.INTERNAL_EMIT_URL ||
+	(process.env.NODE_ENV === "production"
+		? `http://${process.env.RAILWAY_PRIVATE_DOMAIN}:${process.env.PORT || 8080}/_internal/emit`
+		: "http://localhost:3000/_internal/emit");
 
 /**
  * Emit a realtime event to all connected clients.
