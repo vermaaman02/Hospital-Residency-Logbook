@@ -100,6 +100,7 @@ export async function submitCourseAttended(id: string) {
 
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -141,6 +142,7 @@ export async function signCourseAttended(id: string, _remark?: string) {
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -157,6 +159,7 @@ export async function rejectCourseAttended(id: string, _remark: string) {
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -234,6 +237,7 @@ export async function submitConferenceParticipation(id: string) {
 
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -278,6 +282,7 @@ export async function signConferenceParticipation(
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -297,6 +302,7 @@ export async function rejectConferenceParticipation(
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -370,6 +376,7 @@ export async function submitResearchActivity(id: string) {
 
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -411,6 +418,7 @@ export async function signResearchActivity(id: string, _remark?: string) {
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }
 
@@ -427,5 +435,6 @@ export async function rejectResearchActivity(id: string, _remark: string) {
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, entry: updated };
 }

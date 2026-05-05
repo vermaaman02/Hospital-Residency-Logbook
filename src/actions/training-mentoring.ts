@@ -113,6 +113,7 @@ export async function upsertTrainingRecord(
 	revalidatePath("/dashboard/student/rotation-postings");
 	revalidatePath("/dashboard/faculty/rotation-postings");
 	revalidatePath("/dashboard/hod/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: record };
 }
 
@@ -167,5 +168,6 @@ export async function signTrainingRecord(recordId: string) {
 
 	revalidatePath("/dashboard/student/rotation-postings");
 	revalidatePath("/dashboard/hod/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }

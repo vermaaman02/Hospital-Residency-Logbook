@@ -77,6 +77,7 @@ export async function createCasePresentation(data: CasePresentationInput) {
 
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -118,6 +119,7 @@ export async function updateCasePresentation(
 	});
 
 	revalidatePath(STUDENT_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -172,6 +174,7 @@ export async function submitCasePresentation(id: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -209,6 +212,7 @@ export async function deleteCasePresentation(id: string) {
 	}
 
 	revalidatePath(STUDENT_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -355,6 +359,7 @@ export async function signCasePresentation(id: string, remark?: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -378,6 +383,7 @@ export async function rejectCasePresentation(id: string, remark: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -415,5 +421,6 @@ export async function bulkSignCasePresentations(ids: string[]) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount };
 }

@@ -74,6 +74,7 @@ export async function updateThesis(data: ThesisInput) {
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: thesis };
 }
 
@@ -102,6 +103,7 @@ export async function submitThesis(thesisId: string) {
 	revalidatePath("/dashboard/student/rotation-postings");
 	revalidatePath("/dashboard/faculty/rotation-postings");
 	revalidatePath("/dashboard/hod/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -146,6 +148,7 @@ export async function upsertThesisSemesterRecord(
 	}
 
 	revalidatePath("/dashboard/student/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: record };
 }
 
@@ -178,6 +181,7 @@ export async function submitSemesterRecord(recordId: string) {
 	revalidatePath("/dashboard/student/rotation-postings");
 	revalidatePath("/dashboard/faculty/rotation-postings");
 	revalidatePath("/dashboard/hod/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -213,6 +217,7 @@ export async function signSemesterRecord(recordId: string, remark?: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/faculty/thesis-review");
 	revalidatePath("/dashboard/hod/thesis-review");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -237,6 +242,7 @@ export async function rejectSemesterRecord(recordId: string, remark: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/faculty/thesis-review");
 	revalidatePath("/dashboard/hod/thesis-review");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -339,6 +345,7 @@ export async function signThesis(thesisId: string, remark?: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/faculty/thesis-review");
 	revalidatePath("/dashboard/hod/thesis-review");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -364,6 +371,7 @@ export async function rejectThesis(thesisId: string, remark: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/faculty/thesis-review");
 	revalidatePath("/dashboard/hod/thesis-review");
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -392,5 +400,6 @@ export async function bulkSignTheses(thesisIds: string[]) {
 	revalidatePath("/dashboard/student/rotation-postings");
 	revalidatePath("/dashboard/faculty/rotation-postings");
 	revalidatePath("/dashboard/hod/rotation-postings");
+	emitRealtimeEvent("entry:updated");
 	return { success: true, count: thesisIds.length };
 }

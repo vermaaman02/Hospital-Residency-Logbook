@@ -75,6 +75,7 @@ export async function createSeminarDiscussion(data: SeminarInput) {
 
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -113,6 +114,7 @@ export async function updateSeminarDiscussion(id: string, data: SeminarInput) {
 	});
 
 	revalidatePath(STUDENT_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -167,6 +169,7 @@ export async function submitSeminarDiscussion(id: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -204,6 +207,7 @@ export async function deleteSeminarDiscussion(id: string) {
 	}
 
 	revalidatePath(STUDENT_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -319,6 +323,7 @@ export async function signSeminarDiscussion(id: string, remark?: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -342,6 +347,7 @@ export async function rejectSeminarDiscussion(id: string, remark: string) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -379,5 +385,6 @@ export async function bulkSignSeminarDiscussions(ids: string[]) {
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount };
 }

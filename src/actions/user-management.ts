@@ -170,6 +170,7 @@ export async function removeUserRole(userId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -220,6 +221,7 @@ export async function banUser(data: {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -248,6 +250,7 @@ export async function unbanUser(clerkId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -330,6 +333,7 @@ export async function promoteStudents(studentIds: string[]) {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return {
 		success: true,
 		message: `${promoted} student(s) promoted to next semester`,
@@ -352,6 +356,7 @@ export async function setStudentSemester(studentId: string, semester: number) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -396,6 +401,7 @@ export async function demoteStudents(studentIds: string[]) {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return {
 		success: true,
 		message: `${demoted} student(s) demoted to previous semester`,
@@ -462,6 +468,7 @@ export async function updateUserInfo(data: {
 	}
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true, message: "User info updated successfully" };
 }
 
@@ -603,6 +610,7 @@ export async function assignFacultyToStudent(
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -617,5 +625,6 @@ export async function removeFacultyAssignment(assignmentId: string) {
 	});
 
 	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
