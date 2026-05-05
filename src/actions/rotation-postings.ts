@@ -17,6 +17,7 @@ import {
 	type RotationPostingInput,
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 import { validateRotationEnabledForStudentDetails } from "@/actions/rotation-posting-config";
 import { jsPDF } from "jspdf";

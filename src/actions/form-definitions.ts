@@ -15,6 +15,7 @@ import { requireRole } from "@/lib/auth";
 import { ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 // ======================== FORM DEFINITIONS CRUD ========================
 
@@ -57,6 +58,7 @@ export async function toggleFormDefinition(formId: string, isActive: boolean) {
 	});
 
 	revalidatePath("/dashboard/hod/manage-system");
+	emitRealtimeEvent("system:updated");
 	return { success: true };
 }
 

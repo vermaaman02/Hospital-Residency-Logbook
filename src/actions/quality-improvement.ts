@@ -12,6 +12,7 @@
 import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 
 function revalidateAll() {

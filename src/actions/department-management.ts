@@ -13,6 +13,7 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { z } from "zod/v4";
 
 const REVALIDATE_PATHS = [
@@ -23,6 +24,7 @@ const REVALIDATE_PATHS = [
 function revalidate() {
 	for (const path of REVALIDATE_PATHS) {
 		revalidatePath(path);
+		emitRealtimeEvent("system:updated");
 	}
 }
 

@@ -18,6 +18,7 @@ import {
 	type ThesisSemesterRecordInput,
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 /**
  * Get or create the user's thesis record. Each student has exactly one.

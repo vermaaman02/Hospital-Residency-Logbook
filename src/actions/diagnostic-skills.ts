@@ -17,6 +17,7 @@ import {
 	type DiagnosticSkillInput,
 } from "@/lib/validators/diagnostic-skills";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "@/actions/auto-review";
 
 // ─── Helpers ────────────────────────────────────────────────

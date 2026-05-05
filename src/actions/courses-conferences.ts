@@ -20,6 +20,7 @@ import {
 	type ResearchActivityInput,
 } from "@/lib/validators/professional";
 import { revalidatePath } from "next/cache";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 function revalidateCourses() {
 	revalidatePath("/dashboard/student/courses-conferences");
