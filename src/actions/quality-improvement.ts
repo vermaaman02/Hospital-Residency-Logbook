@@ -251,6 +251,8 @@ export async function rejectQualityImprovementEntry(
 	remark: string,
 ) {
 	await requireRole(["faculty", "hod"]);
+	const user = await ensureUserInDb();
+	if (!user) throw new Error("User not found");
 
 	const entry = await prisma.qualityImprovement.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -262,7 +264,7 @@ export async function rejectQualityImprovementEntry(
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

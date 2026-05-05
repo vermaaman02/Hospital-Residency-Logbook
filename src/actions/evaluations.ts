@@ -325,6 +325,10 @@ export async function signEvaluation(id: string, _remark?: string) {
 
 export async function rejectEvaluation(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	if (!remark || remark.trim().length === 0) {
 		throw new Error("Remark is required when rejecting");
@@ -334,7 +338,7 @@ export async function rejectEvaluation(id: string, remark: string) {
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION" as never,
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

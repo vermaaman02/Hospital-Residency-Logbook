@@ -553,6 +553,10 @@ export async function signRotationPosting(id: string, remark?: string) {
  */
 export async function rejectRotationPosting(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.rotationPosting.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -560,7 +564,7 @@ export async function rejectRotationPosting(id: string, remark: string) {
 
 	await prisma.rotationPosting.update({
 		where: { id },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/faculty/rotation-postings");

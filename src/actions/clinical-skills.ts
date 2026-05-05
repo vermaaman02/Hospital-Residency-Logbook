@@ -322,7 +322,10 @@ export async function rejectClinicalSkill(
 	id: string,
 	remark: string,
 ) {
-	await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+	
 	const model = getModel(type);
 
 	const entry = await (model as typeof prisma.clinicalSkillAdult).findUnique({
@@ -334,7 +337,7 @@ export async function rejectClinicalSkill(
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

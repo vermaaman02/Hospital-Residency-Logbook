@@ -273,6 +273,10 @@ export async function signTransportLog(id: string, remark?: string) {
 
 export async function rejectTransportLog(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.transportLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -281,7 +285,7 @@ export async function rejectTransportLog(id: string, remark: string) {
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 
@@ -529,7 +533,7 @@ export async function signConsentLog(id: string, remark?: string) {
 			where: { id },
 			data: {
 				status: "SIGNED",
-				facultyRemark: remark || entry.facultyRemark,
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || entry.facultyRemark,
 			},
 		}),
 		prisma.digitalSignature.create({
@@ -548,6 +552,10 @@ export async function signConsentLog(id: string, remark?: string) {
 
 export async function rejectConsentLog(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.consentLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -556,7 +564,7 @@ export async function rejectConsentLog(id: string, remark: string) {
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 
@@ -804,7 +812,7 @@ export async function signBadNewsLog(id: string, remark?: string) {
 			where: { id },
 			data: {
 				status: "SIGNED",
-				facultyRemark: remark || entry.facultyRemark,
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || entry.facultyRemark,
 			},
 		}),
 		prisma.digitalSignature.create({
@@ -823,6 +831,10 @@ export async function signBadNewsLog(id: string, remark?: string) {
 
 export async function rejectBadNewsLog(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.badNewsLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -831,7 +843,7 @@ export async function rejectBadNewsLog(id: string, remark: string) {
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

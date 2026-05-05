@@ -226,6 +226,10 @@ export async function signSemesterRecord(recordId: string, remark?: string) {
  */
 export async function rejectSemesterRecord(recordId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const record = await prisma.thesisSemesterRecord.findUnique({
 		where: { id: recordId },
@@ -234,7 +238,7 @@ export async function rejectSemesterRecord(recordId: string, remark: string) {
 
 	await prisma.thesisSemesterRecord.update({
 		where: { id: recordId },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -327,7 +331,7 @@ export async function signThesis(thesisId: string, remark?: string) {
 		where: { id: thesisId },
 		data: {
 			status: "SIGNED",
-			facultyRemark: remark || null,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || null,
 		},
 	});
 
@@ -354,6 +358,10 @@ export async function signThesis(thesisId: string, remark?: string) {
  */
 export async function rejectThesis(thesisId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const thesis = await prisma.thesis.findUnique({ where: { id: thesisId } });
 	if (!thesis) throw new Error("Thesis not found");
@@ -362,7 +370,7 @@ export async function rejectThesis(thesisId: string, remark: string) {
 		where: { id: thesisId },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

@@ -297,7 +297,7 @@ export async function rejectDiagnosticSkillEntry(id: string, remark: string) {
 		data: {
 			status: "NEEDS_REVISION" as never,
 			facultyId: user.id,
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

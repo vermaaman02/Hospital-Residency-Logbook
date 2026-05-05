@@ -345,6 +345,10 @@ export async function signProcedureLogEntry(id: string, remark?: string) {
 
 export async function rejectProcedureLogEntry(id: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -353,7 +357,7 @@ export async function rejectProcedureLogEntry(id: string, remark: string) {
 		where: { id },
 		data: {
 			status: "NEEDS_REVISION",
-			facultyRemark: remark,
+			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		},
 	});
 

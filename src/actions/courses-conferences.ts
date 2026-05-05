@@ -148,6 +148,10 @@ export async function signCourseAttended(id: string, _remark?: string) {
 
 export async function rejectCourseAttended(id: string, _remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 	const entry = await prisma.courseAttended.findFirst({
 		where: { id, status: "SUBMITTED" as never },
 	});
@@ -424,6 +428,10 @@ export async function signResearchActivity(id: string, _remark?: string) {
 
 export async function rejectResearchActivity(id: string, _remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 	const entry = await prisma.researchActivity.findFirst({
 		where: { id, status: "SUBMITTED" as never },
 	});

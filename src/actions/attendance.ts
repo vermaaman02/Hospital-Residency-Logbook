@@ -1296,6 +1296,10 @@ export async function signAttendanceSheet(sheetId: string, remark?: string) {
 
 export async function rejectAttendanceSheet(sheetId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const sheet = await prisma.attendanceSheet.findUnique({
 		where: { id: sheetId },
@@ -1305,7 +1309,7 @@ export async function rejectAttendanceSheet(sheetId: string, remark: string) {
 
 	await prisma.attendanceSheet.update({
 		where: { id: sheetId },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");
@@ -1331,7 +1335,7 @@ export async function bulkSignAttendanceSheets(
 
 		await prisma.attendanceSheet.update({
 			where: { id: sheetId },
-			data: { status: "SIGNED", facultyRemark: remark ?? null },
+			data: { status: "SIGNED", facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null },
 		});
 		await prisma.digitalSignature.create({
 			data: {
@@ -1598,7 +1602,7 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 		where: { id: entryId },
 		data: {
 			status: "SIGNED",
-			facultyRemark: remark ?? null,
+			facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null,
 			signedAt: new Date(),
 			signedBy: user.id,
 		},
@@ -1622,6 +1626,10 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 /** Faculty/HOD: Reject a single daily entry with remark */
 export async function rejectDailyEntry(entryId: string, remark: string) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 
 	const entry = await prisma.attendanceEntry.findUnique({
 		where: { id: entryId },
@@ -1631,7 +1639,7 @@ export async function rejectDailyEntry(entryId: string, remark: string) {
 
 	await prisma.attendanceEntry.update({
 		where: { id: entryId },
-		data: { status: "NEEDS_REVISION", facultyRemark: remark },
+		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");
@@ -1660,7 +1668,7 @@ export async function bulkSignDailyEntries(
 			where: { id: entryId },
 			data: {
 				status: "SIGNED",
-				facultyRemark: remark ?? null,
+				facultyRemark: remark ? `[${user.firstName} ${user.lastName}] ${remark}` : null,
 				signedAt: new Date(),
 				signedBy: user.id,
 			},
