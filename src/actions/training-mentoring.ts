@@ -18,6 +18,7 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordReview } from "@/lib/entry-revisions";
 
 /**
  * Faculty/HOD: Create or update a 5-domain training record for a student's semester.
@@ -108,6 +109,15 @@ export async function upsertTrainingRecord(
 				},
 			});
 		}
+		await recordReview(prisma, {
+			entityType: "TrainingMentoringRecord",
+			entityId: record.id,
+			ownerId: record.userId,
+			reviewerId: facultyUser.id,
+			reviewerRole: "hod",
+			decision: "SIGNED",
+			remark: null,
+		});
 	}
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -153,17 +163,27 @@ export async function signTrainingRecord(recordId: string) {
 	});
 	if (!record) throw new Error("Record not found");
 
-	await prisma.trainingMentoringRecord.update({
-		where: { id: recordId },
-		data: { status: "SIGNED" },
-	});
-
-	await prisma.digitalSignature.create({
-		data: {
-			signedById: user.id,
+	await prisma.$transaction(async (tx) => {
+		await tx.trainingMentoringRecord.update({
+			where: { id: recordId },
+			data: { status: "SIGNED" },
+		});
+		await tx.digitalSignature.create({
+			data: {
+				signedById: user.id,
+				entityType: "TrainingMentoringRecord",
+				entityId: recordId,
+			},
+		});
+		await recordReview(tx, {
 			entityType: "TrainingMentoringRecord",
 			entityId: recordId,
-		},
+			ownerId: record.userId,
+			reviewerId: user.id,
+			reviewerRole: "hod",
+			decision: "SIGNED",
+			remark: null,
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");

@@ -20,6 +20,11 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 import { validateRotationEnabledForStudentDetails } from "@/actions/rotation-posting-config";
+import {
+	buildSnapshot,
+	recordReview,
+	recordSubmission,
+} from "@/lib/entry-revisions";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -286,18 +291,26 @@ export async function submitRotationPosting(id: string) {
 		throw new Error("Cannot submit this entry");
 	}
 
-	// Check if rotation is enabled - throws error if disabled
 	await validateRotationEnabledForStudentDetails(
 		existing.rotationName,
-		rotationScope.batchId,
-		rotationScope.semester,
-		rotationScope.departmentId,
+		user.batchId,
+		user.currentSemester,
+		user.departmentId,
 		user.id,
 	);
 
-	await prisma.rotationPosting.update({
-		where: { id },
-		data: { status: "SUBMITTED" },
+	await prisma.$transaction(async (tx) => {
+		const updated = await tx.rotationPosting.update({
+			where: { id },
+			data: { status: "SUBMITTED" },
+		});
+		await recordSubmission(tx, {
+			entityType: "RotationPosting",
+			entityId: id,
+			ownerId: user.id,
+			snapshot: buildSnapshot(updated),
+			attachments: updated.attachments,
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -519,7 +532,7 @@ export async function getStudentRotationPostings(studentId: string) {
  * Faculty/HOD: sign a rotation posting.
  */
 export async function signRotationPosting(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
 
@@ -527,9 +540,20 @@ export async function signRotationPosting(id: string, remark?: string) {
 	if (!entry) throw new Error("Entry not found");
 	if (entry.status !== "SUBMITTED") throw new Error("Entry is not submitted");
 
-	await prisma.rotationPosting.update({
-		where: { id },
-		data: { status: "SIGNED", facultyRemark: remark ?? null },
+	await prisma.$transaction(async (tx) => {
+		await tx.rotationPosting.update({
+			where: { id },
+			data: { status: "SIGNED", facultyRemark: remark ?? null },
+		});
+		await recordReview(tx, {
+			entityType: "RotationPosting",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
 	});
 
 	await prisma.digitalSignature.create({
@@ -552,8 +576,7 @@ export async function signRotationPosting(id: string, remark?: string) {
  * Faculty/HOD: reject/request revision.
  */
 export async function rejectRotationPosting(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
@@ -562,9 +585,23 @@ export async function rejectRotationPosting(id: string, remark: string) {
 	if (!entry) throw new Error("Entry not found");
 	if (entry.status !== "SUBMITTED") throw new Error("Entry is not submitted");
 
-	await prisma.rotationPosting.update({
-		where: { id },
-		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
+	await prisma.$transaction(async (tx) => {
+		await tx.rotationPosting.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "RotationPosting",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidatePath("/dashboard/faculty/rotation-postings");

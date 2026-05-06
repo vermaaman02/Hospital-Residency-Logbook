@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/quality-improvement");
@@ -157,9 +158,29 @@ export async function submitQualityImprovementEntry(id: string) {
 	const autoReview = await isAutoReviewEnabled("qualityImprovement");
 	const newStatus = autoReview ? "SIGNED" : "SUBMITTED";
 
-	await prisma.qualityImprovement.update({
-		where: { id },
-		data: { status: newStatus },
+	await prisma.$transaction(async (tx) => {
+		await tx.qualityImprovement.update({
+			where: { id },
+			data: { status: newStatus },
+		});
+		if (autoReview) {
+			await recordReview(tx, {
+				entityType: "QualityImprovement",
+				entityId: id,
+				ownerId: entry.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed",
+			});
+		} else {
+			await recordSubmission(tx, {
+				entityType: "QualityImprovement",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: { status: "SUBMITTED" },
+			});
+		}
 	});
 
 	revalidateAll();
@@ -224,23 +245,32 @@ export async function signQualityImprovementEntry(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.qualityImprovement.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.qualityImprovement.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				...(remark ? { facultyRemark: remark } : {}),
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				entityId: id,
 				entityType: "QualityImprovement",
 				signedById: user.id,
 				signedAt: new Date(),
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "QualityImprovement",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark,
+		});
+	});
 
 	revalidateAll();
 	return { success: true };
@@ -260,12 +290,23 @@ export async function rejectQualityImprovementEntry(
 		throw new Error("Entry must be submitted before rejection");
 	}
 
-	await prisma.qualityImprovement.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.qualityImprovement.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "QualityImprovement",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
 	revalidateAll();
@@ -283,22 +324,31 @@ export async function bulkSignQualityImprovementEntries(ids: string[]) {
 
 	if (entries.length === 0) throw new Error("No valid entries to sign");
 
-	await prisma.$transaction([
-		prisma.qualityImprovement.updateMany({
+	await prisma.$transaction(async (tx) => {
+		await tx.qualityImprovement.updateMany({
 			where: { id: { in: ids }, status: "SUBMITTED" },
 			data: { status: "SIGNED" },
-		}),
-		...entries.map((e) =>
-			prisma.digitalSignature.create({
+		});
+		for (const e of entries) {
+			await tx.digitalSignature.create({
 				data: {
 					entityId: e.id,
 					entityType: "QualityImprovement",
 					signedById: user.id,
 					signedAt: new Date(),
 				},
-			}),
-		),
-	]);
+			});
+			await recordReview(tx, {
+				entityType: "QualityImprovement",
+				entityId: e.id,
+				ownerId: e.userId,
+				reviewerId: user.id,
+				reviewerRole: "faculty",
+				decision: "SIGNED",
+				remark: "Bulk signed",
+			});
+		}
+	});
 
 	revalidateAll();
 	return { success: true, count: entries.length };

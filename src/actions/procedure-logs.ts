@@ -16,6 +16,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import {
+	buildSnapshot,
+	recordReview,
+	recordSubmission,
+} from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -252,9 +257,17 @@ export async function submitProcedureLogEntry(id: string) {
 			}),
 		]);
 	} else {
-		await prisma.procedureLog.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+		await prisma.$transaction(async (tx) => {
+			const updated = await tx.procedureLog.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "ProcedureLog",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: buildSnapshot(updated),
+			});
 		});
 	}
 
@@ -312,7 +325,7 @@ export async function getProcedureLogsForReview(procedureCategory?: string) {
 }
 
 export async function signProcedureLogEntry(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
@@ -321,44 +334,62 @@ export async function signProcedureLogEntry(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.procedureLog.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.procedureLog.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await recordReview(tx, {
+			entityType: "ProcedureLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "ProcedureLog",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+	});
 
 	revalidateAll();
 	return { success: true };
 }
 
 export async function rejectProcedureLogEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.procedureLog.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.procedureLog.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "ProcedureLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidateAll();

@@ -18,6 +18,7 @@ import {
 } from "@/lib/validators/diagnostic-skills";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 import { isAutoReviewEnabled } from "@/actions/auto-review";
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -122,9 +123,31 @@ export async function submitDiagnosticSkillEntry(id: string) {
 	const autoReview = await isAutoReviewEnabled("diagnosticSkills");
 	const newStatus = autoReview ? "SIGNED" : "SUBMITTED";
 
-	const entry = await prisma.diagnosticSkill.update({
-		where: { id },
-		data: { status: newStatus as never },
+	// Use transaction for revision recording
+	const entry = await prisma.$transaction(async (tx) => {
+		const updated = await tx.diagnosticSkill.update({
+			where: { id },
+			data: { status: newStatus as never },
+		});
+		if (autoReview) {
+			await recordReview(tx, {
+				entityType: "DiagnosticSkill",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed",
+			});
+		} else {
+			await recordSubmission(tx, {
+				entityType: "DiagnosticSkill",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: { status: "SUBMITTED" },
+			});
+		}
+		return updated;
 	});
 
 	revalidate(existing.diagnosticCategory);
@@ -257,24 +280,33 @@ export async function signDiagnosticSkillEntry(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.diagnosticSkill.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.diagnosticSkill.update({
 			where: { id },
 			data: {
 				status: "SIGNED" as never,
 				facultyId: user.id,
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "DiagnosticSkill",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "DiagnosticSkill",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark,
+		});
+	});
 
 	revalidateAll();
 	return { success: true };
@@ -292,13 +324,24 @@ export async function rejectDiagnosticSkillEntry(id: string, remark: string) {
 		throw new Error("Entry must be submitted before rejecting");
 	}
 
-	await prisma.diagnosticSkill.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION" as never,
-			facultyId: user.id,
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.diagnosticSkill.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION" as never,
+				facultyId: user.id,
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "DiagnosticSkill",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
 	revalidateAll();
@@ -317,24 +360,33 @@ export async function bulkSignDiagnosticSkillEntries(ids: string[]) {
 
 	if (entries.length === 0) throw new Error("No valid entries to sign");
 
-	await prisma.$transaction([
-		prisma.diagnosticSkill.updateMany({
+	await prisma.$transaction(async (tx) => {
+		await tx.diagnosticSkill.updateMany({
 			where: { id: { in: entries.map((e) => e.id) } },
 			data: {
 				status: "SIGNED" as never,
 				facultyId: user.id,
 			},
-		}),
-		...entries.map((entry) =>
-			prisma.digitalSignature.create({
+		});
+		for (const entry of entries) {
+			await tx.digitalSignature.create({
 				data: {
 					signedById: user.id,
 					entityType: "DiagnosticSkill",
 					entityId: entry.id,
 				},
-			}),
-		),
-	]);
+			});
+			await recordReview(tx, {
+				entityType: "DiagnosticSkill",
+				entityId: entry.id,
+				ownerId: entry.userId,
+				reviewerId: user.id,
+				reviewerRole: "faculty",
+				decision: "SIGNED",
+				remark: "Bulk signed",
+			});
+		}
+	});
 
 	revalidateAll();
 	return { success: true, signedCount: entries.length };

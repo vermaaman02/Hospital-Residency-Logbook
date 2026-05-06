@@ -11,6 +11,7 @@
 
 import { requireAuth, requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 import {
 	courseAttendedSchema,
 	type CourseAttendedInput,
@@ -93,9 +94,17 @@ export async function submitCourseAttended(id: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not in draft");
 
-	await prisma.courseAttended.update({
-		where: { id },
-		data: { status: "SUBMITTED" as never },
+	await prisma.$transaction(async (tx) => {
+		await tx.courseAttended.update({
+			where: { id },
+			data: { status: "SUBMITTED" as never },
+		});
+		await recordSubmission(tx, {
+			entityType: "CourseAttended",
+			entityId: id,
+			ownerId: userId,
+			snapshot: { status: "SUBMITTED" },
+		});
 	});
 
 	revalidateCourses();
@@ -136,9 +145,21 @@ export async function signCourseAttended(id: string, _remark?: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.courseAttended.update({
-		where: { id },
-		data: { status: "SIGNED" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.courseAttended.update({
+			where: { id },
+			data: { status: "SIGNED" as never },
+		});
+		await recordReview(tx, {
+			entityType: "CourseAttended",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: "faculty",
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
@@ -157,9 +178,21 @@ export async function rejectCourseAttended(id: string, _remark: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.courseAttended.update({
-		where: { id },
-		data: { status: "NEEDS_REVISION" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.courseAttended.update({
+			where: { id },
+			data: { status: "NEEDS_REVISION" as never },
+		});
+		await recordReview(tx, {
+			entityType: "CourseAttended",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
@@ -234,9 +267,17 @@ export async function submitConferenceParticipation(id: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not in draft");
 
-	await prisma.conferenceParticipation.update({
-		where: { id },
-		data: { status: "SUBMITTED" as never },
+	await prisma.$transaction(async (tx) => {
+		await tx.conferenceParticipation.update({
+			where: { id },
+			data: { status: "SUBMITTED" as never },
+		});
+		await recordSubmission(tx, {
+			entityType: "ConferenceParticipation",
+			entityId: id,
+			ownerId: userId,
+			snapshot: { status: "SUBMITTED" },
+		});
 	});
 
 	revalidateCourses();
@@ -280,9 +321,21 @@ export async function signConferenceParticipation(
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.conferenceParticipation.update({
-		where: { id },
-		data: { status: "SIGNED" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.conferenceParticipation.update({
+			where: { id },
+			data: { status: "SIGNED" as never },
+		});
+		await recordReview(tx, {
+			entityType: "ConferenceParticipation",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: "faculty",
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
@@ -295,14 +348,30 @@ export async function rejectConferenceParticipation(
 	_remark: string,
 ) {
 	await requireRole(["faculty", "hod"]);
+	const clerkId = await requireAuth();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
+	if (!user) throw new Error("User not found");
+
 	const entry = await prisma.conferenceParticipation.findFirst({
 		where: { id, status: "SUBMITTED" as never },
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.conferenceParticipation.update({
-		where: { id },
-		data: { status: "NEEDS_REVISION" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.conferenceParticipation.update({
+			where: { id },
+			data: { status: "NEEDS_REVISION" as never },
+		});
+		await recordReview(tx, {
+			entityType: "ConferenceParticipation",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateCourses();
 	revalidatePath("/dashboard/faculty/reviews");
@@ -373,9 +442,17 @@ export async function submitResearchActivity(id: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not in draft");
 
-	await prisma.researchActivity.update({
-		where: { id },
-		data: { status: "SUBMITTED" as never },
+	await prisma.$transaction(async (tx) => {
+		await tx.researchActivity.update({
+			where: { id },
+			data: { status: "SUBMITTED" as never },
+		});
+		await recordSubmission(tx, {
+			entityType: "ResearchActivity",
+			entityId: id,
+			ownerId: userId,
+			snapshot: { status: "SUBMITTED" },
+		});
 	});
 
 	revalidateResearch();
@@ -416,9 +493,21 @@ export async function signResearchActivity(id: string, _remark?: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.researchActivity.update({
-		where: { id },
-		data: { status: "SIGNED" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.researchActivity.update({
+			where: { id },
+			data: { status: "SIGNED" as never },
+		});
+		await recordReview(tx, {
+			entityType: "ResearchActivity",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: "faculty",
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");
@@ -437,9 +526,21 @@ export async function rejectResearchActivity(id: string, _remark: string) {
 	});
 	if (!entry) throw new Error("Entry not found or not submitted");
 
-	const updated = await prisma.researchActivity.update({
-		where: { id },
-		data: { status: "NEEDS_REVISION" as never },
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await tx.researchActivity.update({
+			where: { id },
+			data: { status: "NEEDS_REVISION" as never },
+		});
+		await recordReview(tx, {
+			entityType: "ResearchActivity",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: _remark ?? null,
+		});
+		return result;
 	});
 	revalidateResearch();
 	revalidatePath("/dashboard/faculty/reviews");

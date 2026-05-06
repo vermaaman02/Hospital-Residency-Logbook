@@ -17,6 +17,7 @@ import {
 } from "@/lib/validators/evaluation";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 function revalidateEvaluations() {
 	revalidatePath("/dashboard/student/evaluations");
@@ -109,9 +110,18 @@ export async function submitPeriodicReview(id: string) {
 	});
 	if (!existing) throw new Error("Evaluation not found");
 
-	const entry = await prisma.residentEvaluation.update({
-		where: { id },
-		data: { status: "SUBMITTED" as never },
+	const entry = await prisma.$transaction(async (tx) => {
+		const updated = await tx.residentEvaluation.update({
+			where: { id },
+			data: { status: "SUBMITTED" as never },
+		});
+		await recordSubmission(tx, {
+			entityType: "ResidentEvaluation",
+			entityId: id,
+			ownerId: userId,
+			snapshot: { status: "SUBMITTED" },
+		});
+		return updated;
 	});
 
 	revalidateEvaluations();
@@ -297,11 +307,12 @@ export async function setEndSemesterAssessment(
 export async function signEvaluation(id: string, _remark?: string) {
 	const { role, userId } = await requireRole(["faculty", "hod"]);
 
+	// Get user for reviewer info
+	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+	if (!user) throw new Error("User not found");
+
 	// Verify faculty assignment
 	if (role === "faculty") {
-		const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-		if (!user) throw new Error("User not found");
-
 		const evaluation = await prisma.residentEvaluation.findUnique({
 			where: { id },
 		});
@@ -311,12 +322,24 @@ export async function signEvaluation(id: string, _remark?: string) {
 		}
 	}
 
-	const entry = await prisma.residentEvaluation.update({
-		where: { id },
-		data: {
-			status: "SIGNED" as never,
-			facultyRemark: _remark ?? null,
-		},
+	const entry = await prisma.$transaction(async (tx) => {
+		const updated = await tx.residentEvaluation.update({
+			where: { id },
+			data: {
+				status: "SIGNED" as never,
+				facultyRemark: _remark ?? null,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "ResidentEvaluation",
+			entityId: id,
+			ownerId: updated.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: _remark ?? null,
+		});
+		return updated;
 	});
 
 	revalidateEvaluations();
@@ -329,17 +352,28 @@ export async function rejectEvaluation(id: string, remark: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	if (!remark || remark.trim().length === 0) {
 		throw new Error("Remark is required when rejecting");
 	}
 
-	const entry = await prisma.residentEvaluation.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION" as never,
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	const entry = await prisma.$transaction(async (tx) => {
+		const updated = await tx.residentEvaluation.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION" as never,
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "ResidentEvaluation",
+			entityId: id,
+			ownerId: updated.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
+		return updated;
 	});
 
 	revalidateEvaluations();

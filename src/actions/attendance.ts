@@ -22,6 +22,11 @@ import {
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "@/actions/auto-review";
+import {
+	buildSnapshot,
+	recordReview,
+	recordSubmission,
+} from "@/lib/entry-revisions";
 
 const DAYS_OF_WEEK = [
 	"MONDAY",
@@ -871,9 +876,19 @@ export async function submitAttendanceSheet(sheetId: string) {
 	const autoReview = await isAutoReviewEnabled("attendance");
 	const newStatus = autoReview ? "SIGNED" : "SUBMITTED";
 
-	await prisma.attendanceSheet.update({
-		where: { id: sheetId },
-		data: { status: newStatus, facultyRemark: null },
+	await prisma.$transaction(async (tx) => {
+		const updated = await tx.attendanceSheet.update({
+			where: { id: sheetId },
+			data: { status: newStatus, facultyRemark: null },
+		});
+		if (!autoReview) {
+			await recordSubmission(tx, {
+				entityType: "AttendanceSheet",
+				entityId: sheetId,
+				ownerId: user.id,
+				snapshot: buildSnapshot(updated),
+			});
+		}
 	});
 
 	if (autoReview) {
@@ -1265,7 +1280,7 @@ export async function getStudentAttendanceAnalytics(studentId: string) {
 }
 
 export async function signAttendanceSheet(sheetId: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const sheet = await prisma.attendanceSheet.findUnique({
@@ -1274,17 +1289,28 @@ export async function signAttendanceSheet(sheetId: string, remark?: string) {
 	if (!sheet) throw new Error("Sheet not found");
 	if (sheet.status !== "SUBMITTED") throw new Error("Sheet is not submitted");
 
-	await prisma.attendanceSheet.update({
-		where: { id: sheetId },
-		data: { status: "SIGNED", facultyRemark: remark ?? null },
-	});
-	await prisma.digitalSignature.create({
-		data: {
-			signedById: user.id,
+	await prisma.$transaction(async (tx) => {
+		await tx.attendanceSheet.update({
+			where: { id: sheetId },
+			data: { status: "SIGNED", facultyRemark: remark ?? null },
+		});
+		await recordReview(tx, {
 			entityType: "AttendanceSheet",
 			entityId: sheetId,
-			remark,
-		},
+			ownerId: sheet.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
+		await tx.digitalSignature.create({
+			data: {
+				signedById: user.id,
+				entityType: "AttendanceSheet",
+				entityId: sheetId,
+				remark,
+			},
+		});
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");
@@ -1295,11 +1321,9 @@ export async function signAttendanceSheet(sheetId: string, remark?: string) {
 }
 
 export async function rejectAttendanceSheet(sheetId: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
 
 	const sheet = await prisma.attendanceSheet.findUnique({
 		where: { id: sheetId },
@@ -1307,9 +1331,20 @@ export async function rejectAttendanceSheet(sheetId: string, remark: string) {
 	if (!sheet) throw new Error("Sheet not found");
 	if (sheet.status !== "SUBMITTED") throw new Error("Sheet is not submitted");
 
-	await prisma.attendanceSheet.update({
-		where: { id: sheetId },
-		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
+	await prisma.$transaction(async (tx) => {
+		await tx.attendanceSheet.update({
+			where: { id: sheetId },
+			data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
+		});
+		await recordReview(tx, {
+			entityType: "AttendanceSheet",
+			entityId: sheetId,
+			ownerId: sheet.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidatePath("/dashboard/faculty/attendance");

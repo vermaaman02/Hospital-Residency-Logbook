@@ -54,6 +54,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Search,
 	CheckCircle2,
@@ -598,6 +599,16 @@ export function RotationReviewClient({
 															</Button>
 														</>
 													)}
+													<RevisionThreadButton
+														entityType="RotationPosting"
+														entityId={sub.id}
+														title={`History — ${sub.rotationName}`}
+														description={`Submission and review history for ${sub.user.firstName} ${sub.user.lastName}`}
+														variant="ghost"
+														size="sm"
+														className="h-7 w-7 p-0"
+														label=""
+													/>
 												</div>
 											</TableCell>
 										</TableRow>
