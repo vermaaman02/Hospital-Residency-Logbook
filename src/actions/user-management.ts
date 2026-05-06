@@ -652,6 +652,142 @@ export async function getAllUsers(_query?: string) {
 	return enrichedUsers;
 }
 
+// ======================== PULL FROM CLERK ========================
+
+/**
+ * Fetch all Clerk users that are NOT yet in the local DB (HOD only).
+ * Returns a preview list the HOD can choose to sync.
+ */
+export async function pullUsersFromClerk() {
+	await requireRole(["hod"]);
+
+	const client = await clerkClient();
+
+	// Fetch up to 500 users from Clerk (paginated)
+	const clerkResponse = await client.users.getUserList({ limit: 500 });
+	const clerkUsers = clerkResponse.data;
+
+	// Get all existing clerkIds from DB
+	const existingClerkIds = new Set(
+		(await prisma.user.findMany({ select: { clerkId: true } })).map(
+			(u) => u.clerkId,
+		),
+	);
+
+	// Filter to only users not yet in DB
+	const unsynced = clerkUsers
+		.filter((cu) => !existingClerkIds.has(cu.id))
+		.map((cu) => ({
+			clerkId: cu.id,
+			firstName: cu.firstName ?? "",
+			lastName: cu.lastName ?? "",
+			email: cu.emailAddresses[0]?.emailAddress ?? "",
+			imageUrl: cu.imageUrl,
+			role: (cu.publicMetadata?.role as string | undefined) ?? null,
+			createdAt: new Date(cu.createdAt).toISOString(),
+		}));
+
+	return { success: true, users: unsynced };
+}
+
+/**
+ * Sync selected Clerk users into the local DB (HOD only).
+ * Creates a DB record for each provided clerkId if not already present.
+ */
+export async function syncClerkUsersToDB(
+	clerkIds: string[],
+	roleOverride?: "student" | "faculty",
+) {
+	await requireRole(["hod"]);
+
+	if (!clerkIds || clerkIds.length === 0) {
+		return { success: false, message: "No users selected" };
+	}
+
+	const client = await clerkClient();
+	let synced = 0;
+	const errors: string[] = [];
+
+	for (const clerkId of clerkIds) {
+		// Skip if already in DB
+		const existing = await prisma.user.findUnique({ where: { clerkId } });
+		if (existing) continue;
+
+		let clerkUser;
+		try {
+			clerkUser = await client.users.getUser(clerkId);
+		} catch {
+			errors.push(`Could not fetch Clerk user: ${clerkId}`);
+			continue;
+		}
+
+		const email = clerkUser.emailAddresses[0]?.emailAddress;
+		if (!email) {
+			errors.push(`No email for Clerk user: ${clerkId}`);
+			continue;
+		}
+
+		// Check email collision in DB
+		const emailExists = await prisma.user.findUnique({ where: { email } });
+		if (emailExists) {
+			errors.push(`Email already in DB: ${email}`);
+			continue;
+		}
+
+		// Determine role: prefer Clerk metadata, fallback to override, then STUDENT
+		const clerkRole = clerkUser.publicMetadata?.role as string | undefined;
+		const rawRole =
+			roleOverride ?? (clerkRole as "student" | "faculty" | "hod" | undefined);
+		const dbRole =
+			rawRole === "hod" ? "HOD"
+			: rawRole === "faculty" ? "FACULTY"
+			: "STUDENT";
+
+		try {
+			await prisma.user.create({
+				data: {
+					clerkId: clerkUser.id,
+					email,
+					firstName: clerkUser.firstName ?? "",
+					lastName: clerkUser.lastName ?? "",
+					role: dbRole as "HOD" | "FACULTY" | "STUDENT",
+					profileImage: clerkUser.imageUrl ?? null,
+					status: clerkUser.banned ? ("BANNED" as never) : ("ACTIVE" as never),
+				},
+			});
+
+			// Also set Clerk public metadata role if not already set
+			if (!clerkRole && rawRole) {
+				await client.users.updateUserMetadata(clerkUser.id, {
+					publicMetadata: { role: rawRole },
+				});
+			}
+
+			synced++;
+		} catch (err) {
+			console.error(`[SYNC_CLERK_USER] Failed for ${clerkId}:`, err);
+			errors.push(`DB error for ${email}`);
+		}
+	}
+
+	revalidatePath(REVALIDATE_PATH);
+	emitRealtimeEvent("user:created", { synced });
+
+	if (synced === 0 && errors.length > 0) {
+		return { success: false, message: errors.join("; ") };
+	}
+
+	return {
+		success: true,
+		message:
+			errors.length > 0
+				? `${synced} user(s) synced. Errors: ${errors.join("; ")}`
+				: `${synced} user(s) synced successfully`,
+		synced,
+		errors,
+	};
+}
+
 // ======================== FACULTY ASSIGNMENT ========================
 
 /**
