@@ -293,9 +293,9 @@ export async function submitRotationPosting(id: string) {
 
 	await validateRotationEnabledForStudentDetails(
 		existing.rotationName,
-		user.batchId,
-		user.currentSemester,
-		user.departmentId,
+		rotationScope.batchId,
+		rotationScope.semester,
+		rotationScope.departmentId,
 		user.id,
 	);
 
@@ -579,7 +579,6 @@ export async function rejectRotationPosting(id: string, remark: string) {
 	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
 
 	const entry = await prisma.rotationPosting.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
