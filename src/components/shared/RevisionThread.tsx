@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
 	getEntryRevisions,
 	type RevisionThreadItem,
@@ -106,14 +106,57 @@ export function RevisionThread({
 }: RevisionThreadProps) {
 	const [items, setItems] = useState<RevisionThreadItem[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [facultyMap, setFacultyMap] = useState<
+		Map<string, { firstName: string; lastName: string }>
+	>(new Map());
 
 	useEffect(() => {
 		let cancelled = false;
-		setItems(null);
-		setError(null);
 		getEntryRevisions(entityType, entityId)
 			.then((res) => {
-				if (!cancelled) setItems(res);
+				if (!cancelled) {
+					setItems(res);
+
+					// Extract all facultyId values from revisions for rotation postings
+					if (entityType === "RotationPosting") {
+						const facultyIds = new Set<string>();
+						for (const item of res) {
+							if (
+								item.kind === "SUBMISSION" &&
+								item.snapshot &&
+								item.snapshot.facultyId
+							) {
+								facultyIds.add(item.snapshot.facultyId as string);
+							}
+						}
+
+						// Fetch faculty information for these IDs
+						if (facultyIds.size > 0) {
+							fetch("/api/faculty/names", {
+								method: "POST",
+								headers: { "Content-Type": "application/json" },
+								body: JSON.stringify({
+									facultyIds: Array.from(facultyIds),
+								}),
+							})
+								.then((r) => r.json())
+								.then(
+									(
+										data: Record<
+											string,
+											{ firstName: string; lastName: string }
+										>,
+									) => {
+										const map = new Map(Object.entries(data));
+										if (!cancelled) setFacultyMap(map);
+									},
+								)
+								.catch((e) =>
+									console.error("Failed to fetch faculty names:", e),
+								);
+						}
+					}
+				}
 			})
 			.catch((e: unknown) => {
 				if (!cancelled) {
@@ -125,13 +168,49 @@ export function RevisionThread({
 		};
 	}, [entityType, entityId]);
 
-	const hideSet = new Set([
-		"id",
-		"userId",
-		"thesisId",
-		"attendanceSheetId",
-		...hideFields,
-	]);
+	// Pre-compute processed items with submission numbers and diffs
+	const processedItems = useMemo(() => {
+		if (!items) return [];
+
+		const hideSet = new Set([
+			"id",
+			"userId",
+			"thesisId",
+			"attendanceSheetId",
+			...hideFields,
+		]);
+
+		let prevSubmission: Record<string, unknown> | null = null;
+		let submissionCount = 0;
+
+		return items.map((item) => {
+			if (item.kind === "SUBMISSION") {
+				submissionCount += 1;
+				const diff = diffSnapshots(prevSubmission, item.snapshot, hideSet);
+				prevSubmission = item.snapshot;
+				return {
+					...item,
+					submissionNumber: submissionCount,
+					diff,
+				};
+			}
+			return item;
+		});
+	}, [items, hideFields]);
+
+	// Helper to format values with faculty name resolution
+	const formatValueWithResolution = (
+		fieldName: string,
+		value: unknown,
+	): string => {
+		if (fieldName === "facultyId" && typeof value === "string") {
+			const faculty = facultyMap.get(value);
+			if (faculty) {
+				return `${faculty.firstName} ${faculty.lastName}`;
+			}
+		}
+		return formatValue(value);
+	};
 
 	if (error) {
 		return (
@@ -163,21 +242,26 @@ export function RevisionThread({
 		);
 	}
 
-	// Build a map of submission index -> snapshot, so we can diff each
-	// new submission against the previous one.
-	let prevSubmission: Record<string, unknown> | null = null;
-	let submissionCount = 0;
-
 	return (
 		<ol className="relative border-l-2 border-muted ml-3 space-y-4 pl-6 py-2">
-			{items.map((item) => {
+			{processedItems.map((item) => {
 				if (item.kind === "SUBMISSION") {
-					submissionCount += 1;
-					const diff = diffSnapshots(prevSubmission, item.snapshot, hideSet);
-					prevSubmission = item.snapshot;
+					const submissionNumber = (
+						item as RevisionThreadItem & { submissionNumber: number }
+					).submissionNumber;
+					const diff = (
+						item as RevisionThreadItem & {
+							diff: Array<{
+								field: string;
+								before: unknown;
+								after: unknown;
+								isNew: boolean;
+							}>;
+						}
+					).diff;
 					return (
 						<li key={item.id} className="relative">
-							<span className="absolute -left-[34px] flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 ring-4 ring-background">
+							<span className="absolute -left-8.5 flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 ring-4 ring-background">
 								<CloudUpload className="h-3.5 w-3.5" />
 							</span>
 							<div className="rounded-lg border bg-indigo-50/40 px-4 py-3">
@@ -186,51 +270,64 @@ export function RevisionThread({
 										variant="outline"
 										className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px]"
 									>
-										Submission #{submissionCount}
+										Submission #{submissionNumber}
 									</Badge>
 									<span className="text-xs text-muted-foreground">
-										{new Date(item.submittedAt ?? item.createdAt).toLocaleString()}
+										{new Date(
+											item.submittedAt ?? item.createdAt,
+										).toLocaleString()}
 									</span>
 								</div>
-								{diff.length === 0 ? (
+								{diff.length === 0 ?
 									<p className="text-xs text-muted-foreground italic">
 										No field-level changes recorded.
 									</p>
-								) : (
-									<div className="space-y-1">
+								:	<div className="space-y-1">
 										<p className="text-xs font-medium text-muted-foreground">
-											{submissionCount === 1
-												? "Submitted fields:"
-												: "Changes since previous submission:"}
+											{submissionNumber === 1 ?
+												"Submitted fields:"
+											:	"Changes since previous submission:"}
 										</p>
 										<dl className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-x-4 gap-y-1 text-xs">
-											{diff.map((d) => (
-												<div key={d.field} className="contents">
-													<dt className="font-mono text-muted-foreground">
-														{d.field}
-													</dt>
-													<dd className="font-mono">
-														{d.isNew ? (
-															<span className="text-emerald-700">
-																{formatValue(d.after)}
-															</span>
-														) : (
-															<span>
-																<span className="text-red-600 line-through">
-																	{formatValue(d.before)}
-																</span>{" "}
-																→{" "}
+											{diff.map(
+												(d: {
+													field: string;
+													before: unknown;
+													after: unknown;
+													isNew: boolean;
+												}) => (
+													<div key={d.field} className="contents">
+														<dt className="font-mono text-muted-foreground">
+															{d.field}
+														</dt>
+														<dd className="font-mono">
+															{d.isNew ?
 																<span className="text-emerald-700">
-																	{formatValue(d.after)}
+																	{formatValueWithResolution(d.field, d.after)}
 																</span>
-															</span>
-														)}
-													</dd>
-												</div>
-											))}
+															:	<span>
+																	<span className="text-red-600 line-through">
+																		{formatValueWithResolution(
+																			d.field,
+																			d.before,
+																		)}
+																	</span>{" "}
+																	→{" "}
+																	<span className="text-emerald-700">
+																		{formatValueWithResolution(
+																			d.field,
+																			d.after,
+																		)}
+																	</span>
+																</span>
+															}
+														</dd>
+													</div>
+												),
+											)}
 										</dl>
 									</div>
-								)}
+								}
 								{item.attachments.length > 0 && (
 									<p className="text-[11px] text-muted-foreground mt-2">
 										{item.attachments.length} attachment(s)
@@ -248,7 +345,7 @@ export function RevisionThread({
 				return (
 					<li key={item.id} className="relative">
 						<span
-							className={`absolute -left-[34px] flex h-6 w-6 items-center justify-center rounded-full ring-4 ring-background ${meta.className}`}
+							className={`absolute -left-8.5 flex h-6 w-6 items-center justify-center rounded-full ring-4 ring-background ${meta.className}`}
 						>
 							{meta.icon}
 						</span>
@@ -274,13 +371,12 @@ export function RevisionThread({
 									{new Date(item.createdAt).toLocaleString()}
 								</span>
 							</div>
-							{item.remark ? (
+							{item.remark ?
 								<p className="text-xs whitespace-pre-wrap">{item.remark}</p>
-							) : (
-								<p className="text-xs italic text-muted-foreground">
+							:	<p className="text-xs italic text-muted-foreground">
 									No remark provided.
 								</p>
-							)}
+							}
 						</div>
 					</li>
 				);

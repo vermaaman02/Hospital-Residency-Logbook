@@ -479,7 +479,41 @@ export async function getRotationPostingsForReview() {
 		}),
 	);
 
-	return postingsWithSigners;
+	// Fetch faculty information for postings with facultyId
+	const facultyIds = [
+		...new Set(
+			postingsWithSigners
+				.filter((p) => p.facultyId)
+				.map((p) => p.facultyId as string),
+		),
+	];
+
+	const facultyMap = new Map<string, { firstName: string; lastName: string }>();
+
+	if (facultyIds.length > 0) {
+		const faculty = await prisma.user.findMany({
+			where: { id: { in: facultyIds } },
+			select: { id: true, firstName: true, lastName: true },
+		});
+
+		for (const fac of faculty) {
+			facultyMap.set(fac.id, {
+				firstName: fac.firstName,
+				lastName: fac.lastName,
+			});
+		}
+	}
+
+	// Map faculty info to postings
+	const postingsWithFaculty = postingsWithSigners.map((posting) => ({
+		...posting,
+		facultyName:
+			posting.facultyId && facultyMap.has(posting.facultyId) ?
+				`${facultyMap.get(posting.facultyId)!.firstName} ${facultyMap.get(posting.facultyId)!.lastName}`
+			:	null,
+	}));
+
+	return postingsWithFaculty;
 }
 
 /**

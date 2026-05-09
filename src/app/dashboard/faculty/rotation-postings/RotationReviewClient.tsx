@@ -97,6 +97,7 @@ export interface RotationSubmission {
 	totalDuration: string | null;
 	durationDays: number | null;
 	facultyId: string | null;
+	facultyName: string | null;
 	status: string;
 	attachments?: string[];
 	facultyRemark: string | null;
@@ -707,6 +708,16 @@ export function RotationReviewClient({
 										value={detailEntry.slNo.toString()}
 									/>
 								</DetailSection>
+
+								{/* Faculty Information */}
+								{detailEntry.facultyName && (
+									<DetailSection title="Faculty Supervisor" icon={User}>
+										<DetailRow
+											label="Faculty"
+											value={detailEntry.facultyName}
+										/>
+									</DetailSection>
+								)}
 
 								{/* Dates & Duration */}
 								<DetailSection title="Dates & Duration" icon={CalendarDays}>
