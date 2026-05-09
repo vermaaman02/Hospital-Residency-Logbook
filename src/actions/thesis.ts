@@ -19,6 +19,11 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import {
+	buildSnapshot,
+	recordReview,
+	recordSubmission,
+} from "@/lib/entry-revisions";
 
 /**
  * Get or create the user's thesis record. Each student has exactly one.
@@ -95,9 +100,17 @@ export async function submitThesis(thesisId: string) {
 		throw new Error("Thesis is already submitted");
 	if (thesis.status === "SIGNED") throw new Error("Thesis is already approved");
 
-	await prisma.thesis.update({
-		where: { id: thesisId },
-		data: { status: "SUBMITTED" },
+	await prisma.$transaction(async (tx) => {
+		const updated = await tx.thesis.update({
+			where: { id: thesisId },
+			data: { status: "SUBMITTED" },
+		});
+		await recordSubmission(tx, {
+			entityType: "Thesis",
+			entityId: thesisId,
+			ownerId: user.id,
+			snapshot: buildSnapshot(updated),
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -173,9 +186,17 @@ export async function submitSemesterRecord(recordId: string) {
 		throw new Error("Already submitted for review");
 	if (record.status === "SIGNED") throw new Error("Already approved");
 
-	await prisma.thesisSemesterRecord.update({
-		where: { id: recordId },
-		data: { status: "SUBMITTED" },
+	await prisma.$transaction(async (tx) => {
+		const updated = await tx.thesisSemesterRecord.update({
+			where: { id: recordId },
+			data: { status: "SUBMITTED" },
+		});
+		await recordSubmission(tx, {
+			entityType: "ThesisSemesterRecord",
+			entityId: recordId,
+			ownerId: user.id,
+			snapshot: buildSnapshot(updated),
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -189,18 +210,30 @@ export async function submitSemesterRecord(recordId: string) {
  * Faculty/HOD: Sign (approve) a semester record.
  */
 export async function signSemesterRecord(recordId: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
 
 	const record = await prisma.thesisSemesterRecord.findUnique({
 		where: { id: recordId },
+		include: { thesis: { select: { userId: true } } },
 	});
 	if (!record) throw new Error("Semester record not found");
 
-	await prisma.thesisSemesterRecord.update({
-		where: { id: recordId },
-		data: { status: "SIGNED", facultyRemark: remark || null },
+	await prisma.$transaction(async (tx) => {
+		await tx.thesisSemesterRecord.update({
+			where: { id: recordId },
+			data: { status: "SIGNED", facultyRemark: remark || null },
+		});
+		await recordReview(tx, {
+			entityType: "ThesisSemesterRecord",
+			entityId: recordId,
+			ownerId: record.thesis.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
 	});
 
 	await prisma.digitalSignature.create({
@@ -225,20 +258,30 @@ export async function signSemesterRecord(recordId: string, remark?: string) {
  * Faculty/HOD: Reject a semester record with remark.
  */
 export async function rejectSemesterRecord(recordId: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	const record = await prisma.thesisSemesterRecord.findUnique({
 		where: { id: recordId },
+		include: { thesis: { select: { userId: true } } },
 	});
 	if (!record) throw new Error("Semester record not found");
 
-	await prisma.thesisSemesterRecord.update({
-		where: { id: recordId },
-		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
+	await prisma.$transaction(async (tx) => {
+		await tx.thesisSemesterRecord.update({
+			where: { id: recordId },
+			data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
+		});
+		await recordReview(tx, {
+			entityType: "ThesisSemesterRecord",
+			entityId: recordId,
+			ownerId: record.thesis.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");
@@ -320,19 +363,30 @@ export async function getThesesForReview() {
  * Faculty/HOD: Sign (approve) a thesis record.
  */
 export async function signThesis(thesisId: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
 
 	const thesis = await prisma.thesis.findUnique({ where: { id: thesisId } });
 	if (!thesis) throw new Error("Thesis not found");
 
-	await prisma.thesis.update({
-		where: { id: thesisId },
-		data: {
-			status: "SIGNED",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || null,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.thesis.update({
+			where: { id: thesisId },
+			data: {
+				status: "SIGNED",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || null,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "Thesis",
+			entityId: thesisId,
+			ownerId: thesis.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
 	});
 
 	await prisma.digitalSignature.create({
@@ -357,21 +411,30 @@ export async function signThesis(thesisId: string, remark?: string) {
  * Faculty/HOD: Reject a thesis record with remark.
  */
 export async function rejectThesis(thesisId: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
 
 	const thesis = await prisma.thesis.findUnique({ where: { id: thesisId } });
 	if (!thesis) throw new Error("Thesis not found");
 
-	await prisma.thesis.update({
-		where: { id: thesisId },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.thesis.update({
+			where: { id: thesisId },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "Thesis",
+			entityId: thesisId,
+			ownerId: thesis.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidatePath("/dashboard/student/rotation-postings");

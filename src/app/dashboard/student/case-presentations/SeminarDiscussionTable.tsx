@@ -91,6 +91,7 @@ import {
 	deleteSeminarDiscussion,
 } from "@/actions/seminar-discussions";
 import type { EntryStatus } from "@/types";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 
 // ======================== TYPES ========================
 
@@ -1075,6 +1076,12 @@ function ReadRow({
 							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
 					)}
+					<RevisionThreadButton
+						entityType="Seminar"
+						entityId={entry.id}
+						size="sm"
+						className="h-7 w-7 p-0"
+					/>
 				</div>
 			</TableCell>
 		</TableRow>

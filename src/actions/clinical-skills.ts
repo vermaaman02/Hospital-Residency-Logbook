@@ -20,6 +20,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { isAutoReviewEnabled } from "./auto-review";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 // ======================== PATHS ========================
 
@@ -190,24 +191,43 @@ export async function submitClinicalSkill(
 		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
 
 	if (autoReview) {
-		await prisma.$transaction([
-			(model as typeof prisma.clinicalSkillAdult).update({
+		await prisma.$transaction(async (tx) => {
+			await (model as typeof prisma.clinicalSkillAdult).update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			prisma.digitalSignature.create({
+			});
+			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
 					entityType,
 					entityId: id,
 					remark: "Auto-approved",
 				},
-			}),
-		]);
+			});
+			// Record auto-sign as review revision
+			await recordReview(tx, {
+				entityType,
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-approved",
+			});
+		});
 	} else {
-		await (model as typeof prisma.clinicalSkillAdult).update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+		await prisma.$transaction(async (tx) => {
+			await (model as typeof prisma.clinicalSkillAdult).update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			// Record submission revision
+			await recordSubmission(tx, {
+				entityType,
+				entityId: id,
+				ownerId: user.id,
+				snapshot: { status: "SUBMITTED" },
+			});
 		});
 	}
 
@@ -291,23 +311,33 @@ export async function signClinicalSkill(
 	const entityType =
 		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
 
-	await prisma.$transaction([
-		(model as typeof prisma.clinicalSkillAdult).update({
+	await prisma.$transaction(async (tx) => {
+		await (model as typeof prisma.clinicalSkillAdult).update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType,
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		// Record sign review revision
+		await recordReview(tx, {
+			entityType,
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark,
+		});
+	});
 
 	revalidateAll();
 	emitRealtimeEvent("entry:signed", { module: "clinical-skills", type, id });
@@ -325,20 +355,34 @@ export async function rejectClinicalSkill(
 	const { userId } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) throw new Error("User not found");
-	
+
 	const model = getModel(type);
+	const entityType =
+		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
 
 	const entry = await (model as typeof prisma.clinicalSkillAdult).findUnique({
 		where: { id },
 	});
 	if (!entry) throw new Error("Entry not found");
 
-	await (model as typeof prisma.clinicalSkillAdult).update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await (model as typeof prisma.clinicalSkillAdult).update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		// Record reject review revision
+		await recordReview(tx, {
+			entityType,
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
 	revalidateAll();
@@ -365,21 +409,31 @@ export async function bulkSignClinicalSkills(
 
 	if (entries.length === 0) throw new Error("No submittable entries found");
 
-	await prisma.$transaction([
-		(model as typeof prisma.clinicalSkillAdult).updateMany({
+	await prisma.$transaction(async (tx) => {
+		await (model as typeof prisma.clinicalSkillAdult).updateMany({
 			where: { id: { in: entries.map((e) => e.id) } },
 			data: { status: "SIGNED" },
-		}),
-		...entries.map((entry) =>
-			prisma.digitalSignature.create({
+		});
+		for (const entry of entries) {
+			await tx.digitalSignature.create({
 				data: {
 					signedById: user.id,
 					entityType,
 					entityId: entry.id,
 				},
-			}),
-		),
-	]);
+			});
+			// Record bulk sign review revision for each entry
+			await recordReview(tx, {
+				entityType,
+				entityId: entry.id,
+				ownerId: entry.userId,
+				reviewerId: user.id,
+				reviewerRole: "faculty",
+				decision: "SIGNED",
+				remark: "Bulk signed",
+			});
+		}
+	});
 
 	revalidateAll();
 	emitRealtimeEvent("entry:bulk-signed", { module: "clinical-skills", type, count: entries.length });

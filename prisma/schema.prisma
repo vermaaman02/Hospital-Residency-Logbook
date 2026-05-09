@@ -48,6 +48,7 @@ model User {
   assessmentsCreated         InternalAssessment[]                  @relation("AssessmentsCreated")
   journalClubs               JournalClub[]
   logbookFacultyReviews      LogbookFacultyReview[]
+  notificationSubscriptions  NotificationSubscription[]
   procedureLogs              ProcedureLog[]
   qualityImprovement         QualityImprovement[]
   researchActivities         ResearchActivity[]
@@ -58,6 +59,8 @@ model User {
   thesis                     Thesis?
   trainingMentoringRecords   TrainingMentoringRecord[]
   transportLogs              TransportLog[]
+  entryRevisionsOwned        EntryRevision[]                       @relation("EntryRevisionsOwned")
+  entryRevisionsReviewed     EntryRevision[]                       @relation("EntryRevisionsReviewed")
   batchRelation              Batch?                                @relation(fields: [batchId], references: [id])
   departmentRelation         Department?                           @relation(fields: [departmentId], references: [id])
   specificAssessments        InternalAssessment[]                  @relation("AssessmentAssignedSpecificStudents")
@@ -1059,6 +1062,58 @@ enum EntryStatus {
   SIGNED
   REJECTED
   NEEDS_REVISION
+}
+
+model EntryRevision {
+  id           String                 @id @default(cuid())
+  entityType   String
+  entityId     String
+  ownerId      String
+  version      Int
+  kind         EntryRevisionKind
+
+  snapshot     Json?
+  attachments  String[]               @default([])
+  submittedAt  DateTime?
+
+  reviewerId   String?
+  reviewerRole String?
+  decision     EntryRevisionDecision?
+  remark       String?
+
+  createdAt    DateTime               @default(now())
+
+  owner        User                   @relation("EntryRevisionsOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+  reviewer     User?                  @relation("EntryRevisionsReviewed", fields: [reviewerId], references: [id])
+
+  @@index([entityType, entityId, version])
+  @@index([ownerId])
+  @@index([reviewerId])
+  @@index([entityType, ownerId])
+}
+
+enum EntryRevisionKind {
+  SUBMISSION
+  REVIEW
+}
+
+enum EntryRevisionDecision {
+  SIGNED
+  NEEDS_REVISION
+  REJECTED
+}
+
+// Store web push subscriptions for users
+model NotificationSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 enum PatientCategory {

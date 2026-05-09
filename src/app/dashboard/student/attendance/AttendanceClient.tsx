@@ -735,8 +735,8 @@ export function AttendanceClient({
 											<SelectValue placeholder="Select HoD..." />
 										</SelectTrigger>
 										<SelectContent>
-											{facultyNames.map((n) => (
-												<SelectItem key={n} value={n}>
+											{facultyNames.map((n, i) => (
+												<SelectItem key={`${n}-${i}`} value={n}>
 													{n}
 												</SelectItem>
 											))}
@@ -970,8 +970,8 @@ export function AttendanceClient({
 																</SelectTrigger>
 																<SelectContent>
 																	<SelectItem value="">None</SelectItem>
-																	{facultyNames.map((n) => (
-																		<SelectItem key={n} value={n}>
+																	{facultyNames.map((n, i) => (
+																		<SelectItem key={`${n}-${i}`} value={n}>
 																			{n}
 																		</SelectItem>
 																	))}

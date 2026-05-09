@@ -49,6 +49,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RotationPostingAttachments } from "@/components/shared/RotationPostingAttachments";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	CalendarIcon,
 	Loader2,
@@ -752,6 +753,17 @@ function ReadOnlyRow({
 										<Send className="h-3.5 w-3.5" />
 									</Button>
 								)}
+							{posting.status !== "DRAFT" && (
+								<RevisionThreadButton
+									entityType="RotationPosting"
+									entityId={posting.id}
+									title={`History — ${config.name}`}
+									description="Submission and review history for this rotation posting."
+									variant="ghost"
+									className="h-7 w-7 p-0"
+									label=""
+								/>
+							)}
 							{posting.status === "DRAFT" && onDelete && (
 								<Button
 									variant="ghost"

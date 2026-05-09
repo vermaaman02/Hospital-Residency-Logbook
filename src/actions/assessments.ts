@@ -14,6 +14,7 @@ import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 // ======================== TYPES ========================
 
@@ -451,29 +452,41 @@ export async function submitAssessment(
 		throw new Error("Submission deadline has passed");
 	}
 
-	const submission = await prisma.assessmentSubmission.upsert({
-		where: {
-			assessmentId_studentId: { assessmentId, studentId: user.id },
-		},
-		create: {
-			assessmentId,
-			studentId: user.id,
-			content: content ?? null,
-			attachments: attachments ?? [],
-			status: "SUBMITTED",
-			submittedAt: new Date(),
-		},
-		update: {
-			content: content ?? null,
-			...(attachments !== undefined && { attachments }),
-			status: "SUBMITTED",
-			submittedAt: new Date(),
-		},
+	// Use transaction to record submission with revision
+	const result = await prisma.$transaction(async (tx) => {
+		const submission = await tx.assessmentSubmission.upsert({
+			where: {
+				assessmentId_studentId: { assessmentId, studentId: user.id },
+			},
+			create: {
+				assessmentId,
+				studentId: user.id,
+				content: content ?? null,
+				attachments: attachments ?? [],
+				status: "SUBMITTED",
+				submittedAt: new Date(),
+			},
+			update: {
+				content: content ?? null,
+				...(attachments !== undefined && { attachments }),
+				status: "SUBMITTED",
+				submittedAt: new Date(),
+			},
+		});
+
+		await recordSubmission(tx, {
+			entityType: "AssessmentSubmission",
+			entityId: submission.id,
+			ownerId: user.id,
+			snapshot: { content, attachments },
+		});
+
+		return submission;
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("assessment:submitted", { assessmentId, submissionId: submission.id });
-	return submission;
+	emitRealtimeEvent("assessment:submitted", { assessmentId, submissionId: result.id });
+	return result;
 }
 
 export async function saveDraftSubmission(
@@ -526,7 +539,7 @@ export async function saveDraftSubmission(
 // ======================== EVALUATION ACTIONS (FACULTY / HOD) ========================
 
 export async function evaluateSubmission(input: EvaluateSubmissionInput) {
-	await requireRole(["hod", "faculty"]);
+	const { role } = await requireRole(["hod", "faculty"]);
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
 
@@ -537,7 +550,6 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 	if (!submission) throw new Error("Submission not found");
 
 	// Feature 5 constraint: If a specific faculty is assigned, only they can evaluate (for faculty)
-	const { role } = await requireRole(["hod", "faculty"]);
 	if (
 		role === "faculty" &&
 		submission.assessment.assignedFacultyId &&
@@ -563,32 +575,48 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 		}
 	}
 
-	// Upsert evaluation — lock marks after first evaluation
-	const evaluation = await prisma.assessmentEvaluation.upsert({
-		where: { submissionId: input.submissionId },
-		create: {
-			submissionId: input.submissionId,
-			evaluatedById: user.id,
-			marks: input.marks ?? null,
-			grade: input.grade ?? null,
-			feedback: input.feedback ?? null,
-			isMarksLocked: true, // Lock on first evaluation
-			evaluatedAt: new Date(),
-		},
-		update: {
-			evaluatedById: user.id,
-			marks: input.marks ?? null,
-			grade: input.grade ?? null,
-			feedback: input.feedback ?? null,
-			isMarksLocked: true, // Lock after HOD/faculty edits
-			evaluatedAt: new Date(),
-		},
-	});
+	// Use transaction for evaluation with revision recording
+	const evaluation = await prisma.$transaction(async (tx) => {
+		// Upsert evaluation — lock marks after first evaluation
+		const evalRecord = await tx.assessmentEvaluation.upsert({
+			where: { submissionId: input.submissionId },
+			create: {
+				submissionId: input.submissionId,
+				evaluatedById: user.id,
+				marks: input.marks ?? null,
+				grade: input.grade ?? null,
+				feedback: input.feedback ?? null,
+				isMarksLocked: true,
+				evaluatedAt: new Date(),
+			},
+			update: {
+				evaluatedById: user.id,
+				marks: input.marks ?? null,
+				grade: input.grade ?? null,
+				feedback: input.feedback ?? null,
+				isMarksLocked: true,
+				evaluatedAt: new Date(),
+			},
+		});
 
-	// Update submission status to SIGNED
-	await prisma.assessmentSubmission.update({
-		where: { id: input.submissionId },
-		data: { status: "SIGNED" },
+		// Update submission status to SIGNED
+		await tx.assessmentSubmission.update({
+			where: { id: input.submissionId },
+			data: { status: "SIGNED" },
+		});
+
+		// Record review revision
+		await recordReview(tx, {
+			entityType: "AssessmentSubmission",
+			entityId: input.submissionId,
+			ownerId: submission.studentId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: input.feedback,
+		});
+
+		return evalRecord;
 	});
 
 	revalidateAll();
@@ -597,7 +625,7 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 }
 
 export async function rejectSubmission(input: RejectSubmissionInput) {
-	await requireRole(["hod", "faculty"]);
+	const { role } = await requireRole(["hod", "faculty"]);
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
 
@@ -608,7 +636,6 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 	if (!submission) throw new Error("Submission not found");
 
 	// Feature 5 constraint: If a specific faculty is assigned, only they can reject (for faculty)
-	const { role } = await requireRole(["hod", "faculty"]);
 	if (
 		role === "faculty" &&
 		submission.assessment.assignedFacultyId &&
@@ -617,26 +644,40 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 		throw new Error("You are not the designated evaluator for this assessment");
 	}
 
-	// Upsert evaluation with rejection
-	await prisma.assessmentEvaluation.upsert({
-		where: { submissionId: input.submissionId },
-		create: {
-			submissionId: input.submissionId,
-			evaluatedById: user.id,
-			rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
-			evaluatedAt: new Date(),
-		},
-		update: {
-			evaluatedById: user.id,
-			rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
-			evaluatedAt: new Date(),
-		},
-	});
+	// Use transaction for rejection with revision recording
+	await prisma.$transaction(async (tx) => {
+		// Upsert evaluation with rejection
+		await tx.assessmentEvaluation.upsert({
+			where: { submissionId: input.submissionId },
+			create: {
+				submissionId: input.submissionId,
+				evaluatedById: user.id,
+				rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
+				evaluatedAt: new Date(),
+			},
+			update: {
+				evaluatedById: user.id,
+				rejectionReason: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
+				evaluatedAt: new Date(),
+			},
+		});
 
-	// Update submission status to NEEDS_REVISION
-	await prisma.assessmentSubmission.update({
-		where: { id: input.submissionId },
-		data: { status: "NEEDS_REVISION" },
+		// Update submission status to NEEDS_REVISION
+		await tx.assessmentSubmission.update({
+			where: { id: input.submissionId },
+			data: { status: "NEEDS_REVISION" },
+		});
+
+		// Record review revision
+		await recordReview(tx, {
+			entityType: "AssessmentSubmission",
+			entityId: input.submissionId,
+			ownerId: submission.studentId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "REJECTED",
+			remark: `[${user.firstName} ${user.lastName}] ${input.rejectionReason}`,
+		});
 	});
 
 	revalidateAll();

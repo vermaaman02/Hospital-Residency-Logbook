@@ -54,6 +54,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Search,
 	CheckCircle2,
@@ -96,6 +97,7 @@ export interface RotationSubmission {
 	totalDuration: string | null;
 	durationDays: number | null;
 	facultyId: string | null;
+	facultyName: string | null;
 	status: string;
 	attachments?: string[];
 	facultyRemark: string | null;
@@ -598,6 +600,16 @@ export function RotationReviewClient({
 															</Button>
 														</>
 													)}
+													<RevisionThreadButton
+														entityType="RotationPosting"
+														entityId={sub.id}
+														title={`History — ${sub.rotationName}`}
+														description={`Submission and review history for ${sub.user.firstName} ${sub.user.lastName}`}
+														variant="ghost"
+														size="sm"
+														className="h-7 w-7 p-0"
+														label=""
+													/>
 												</div>
 											</TableCell>
 										</TableRow>
@@ -696,6 +708,16 @@ export function RotationReviewClient({
 										value={detailEntry.slNo.toString()}
 									/>
 								</DetailSection>
+
+								{/* Faculty Information */}
+								{detailEntry.facultyName && (
+									<DetailSection title="Faculty Supervisor" icon={User}>
+										<DetailRow
+											label="Faculty"
+											value={detailEntry.facultyName}
+										/>
+									</DetailSection>
+								)}
 
 								{/* Dates & Duration */}
 								<DetailSection title="Dates & Duration" icon={CalendarDays}>

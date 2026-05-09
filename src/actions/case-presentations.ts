@@ -17,6 +17,7 @@ import {
 } from "@/lib/validators/academics";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 const STUDENT_PATH = "/dashboard/student/case-presentations";
 const FACULTY_PATH = "/dashboard/faculty/case-presentation-reviews";
@@ -146,28 +147,45 @@ export async function submitCasePresentation(id: string) {
 	});
 
 	if (autoReview?.enabled) {
-		await prisma.$transaction([
-			prisma.casePresentation.update({
+		await prisma.$transaction(async (tx) => {
+			await tx.casePresentation.update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			...(existing.facultyId ?
-				[
-					prisma.digitalSignature.create({
-						data: {
-							signedById: existing.facultyId,
-							entityType: "CasePresentation",
-							entityId: id,
-							remark: "Auto-signed",
-						},
-					}),
-				]
-			:	[]),
-		]);
+			});
+			if (existing.facultyId) {
+				await tx.digitalSignature.create({
+					data: {
+						signedById: existing.facultyId,
+						entityType: "CasePresentation",
+						entityId: id,
+						remark: "Auto-signed",
+					},
+				});
+			}
+			// Record auto-sign as review revision
+			await recordReview(tx, {
+				entityType: "CasePresentation",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: existing.facultyId || "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-signed",
+			});
+		});
 	} else {
-		await prisma.casePresentation.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+		await prisma.$transaction(async (tx) => {
+			await tx.casePresentation.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			// Record submission revision
+			await recordSubmission(tx, {
+				entityType: "CasePresentation",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: { status: "SUBMITTED" },
+			});
 		});
 	}
 
@@ -338,23 +356,33 @@ export async function signCasePresentation(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.casePresentation.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.casePresentation.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "CasePresentation",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		// Record sign review revision
+		await recordReview(tx, {
+			entityType: "CasePresentation",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark,
+		});
+	});
 
 	revalidatePath(STUDENT_PATH);
 	revalidatePath(FACULTY_PATH);
@@ -372,16 +400,27 @@ export async function rejectCasePresentation(id: string, remark: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	const entry = await prisma.casePresentation.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.casePresentation.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.casePresentation.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		// Record reject review revision
+		await recordReview(tx, {
+			entityType: "CasePresentation",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
 	revalidatePath(STUDENT_PATH);
@@ -404,20 +443,30 @@ export async function bulkSignCasePresentations(ids: string[]) {
 	for (const id of ids) {
 		const entry = await prisma.casePresentation.findUnique({ where: { id } });
 		if (entry && entry.status === "SUBMITTED") {
-			await prisma.$transaction([
-				prisma.casePresentation.update({
+			await prisma.$transaction(async (tx) => {
+				await tx.casePresentation.update({
 					where: { id },
 					data: { status: "SIGNED" },
-				}),
-				prisma.digitalSignature.create({
+				});
+				await tx.digitalSignature.create({
 					data: {
 						signedById: user.id,
 						entityType: "CasePresentation",
 						entityId: id,
 						remark: "Bulk signed",
 					},
-				}),
-			]);
+				});
+				// Record bulk sign review revision
+				await recordReview(tx, {
+					entityType: "CasePresentation",
+					entityId: id,
+					ownerId: entry.userId,
+					reviewerId: user.id,
+					reviewerRole: "faculty",
+					decision: "SIGNED",
+					remark: "Bulk signed",
+				});
+			});
 			signedCount++;
 		}
 	}

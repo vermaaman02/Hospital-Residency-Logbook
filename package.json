@@ -51,6 +51,7 @@
 		"shadcn": "^3.8.4",
 		"socket.io": "^4.8.3",
 		"socket.io-client": "^4.8.3",
+		"web-push": "^3.5.0",
 		"sonner": "^2.0.7",
 		"svix": "^1.84.1",
 		"tailwind-merge": "^3.4.0",

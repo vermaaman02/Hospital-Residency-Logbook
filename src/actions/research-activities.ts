@@ -15,12 +15,13 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import { recordSubmission, recordReview } from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
 async function resolveUser(clerkId: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found in database");
+	if (!user) throw new Error("User not found");
 	return user;
 }
 
@@ -195,24 +196,41 @@ export async function submitResearchEntry(id: string) {
 	const autoReview = await isAutoReviewEnabled("researchActivities");
 
 	if (autoReview) {
-		await prisma.$transaction([
-			prisma.researchActivity.update({
+		await prisma.$transaction(async (tx) => {
+			await tx.researchActivity.update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			prisma.digitalSignature.create({
+			});
+			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
 					entityType: "ResearchActivity",
 					entityId: id,
 					remark: "Auto-reviewed by system",
 				},
-			}),
-		]);
+			});
+			await recordReview(tx, {
+				entityType: "ResearchActivity",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed by system",
+			});
+		});
 	} else {
-		await prisma.researchActivity.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+		await prisma.$transaction(async (tx) => {
+			await tx.researchActivity.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "ResearchActivity",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: { status: "SUBMITTED" },
+			});
 		});
 	}
 
@@ -280,23 +298,32 @@ export async function signResearchEntry(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.researchActivity.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.researchActivity.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				...(remark ? { facultyRemark: remark } : {}),
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "ResearchActivity",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "ResearchActivity",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark,
+		});
+	});
 
 	revalidateAll();
 	return { success: true };
@@ -308,18 +335,28 @@ export async function rejectResearchEntry(id: string, remark: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	const entry = await prisma.researchActivity.findUnique({
 		where: { id },
 	});
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.researchActivity.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.researchActivity.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "ResearchActivity",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
 	revalidateAll();
@@ -336,21 +373,30 @@ export async function bulkSignResearchEntries(ids: string[]) {
 
 	if (entries.length === 0) throw new Error("No valid entries to sign");
 
-	await prisma.$transaction([
-		prisma.researchActivity.updateMany({
+	await prisma.$transaction(async (tx) => {
+		await tx.researchActivity.updateMany({
 			where: { id: { in: entries.map((e) => e.id) } },
 			data: { status: "SIGNED" },
-		}),
-		...entries.map((entry) =>
-			prisma.digitalSignature.create({
+		});
+		for (const entry of entries) {
+			await tx.digitalSignature.create({
 				data: {
 					signedById: user.id,
 					entityType: "ResearchActivity",
 					entityId: entry.id,
 				},
-			}),
-		),
-	]);
+			});
+			await recordReview(tx, {
+				entityType: "ResearchActivity",
+				entityId: entry.id,
+				ownerId: entry.userId,
+				reviewerId: user.id,
+				reviewerRole: "faculty",
+				decision: "SIGNED",
+				remark: "Bulk signed",
+			});
+		}
+	});
 
 	revalidateAll();
 	return { success: true, signedCount: entries.length };

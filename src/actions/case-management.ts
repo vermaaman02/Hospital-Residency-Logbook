@@ -16,6 +16,11 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { getSubCategories } from "@/lib/constants/case-categories";
+import {
+	buildSnapshot,
+	recordReview,
+	recordSubmission,
+} from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -299,9 +304,17 @@ export async function submitCaseManagementEntry(id: string) {
 			}),
 		]);
 	} else {
-		await prisma.caseManagementLog.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+		await prisma.$transaction(async (tx) => {
+			const updated = await tx.caseManagementLog.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "CaseManagementLog",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: buildSnapshot(updated),
+			});
 		});
 	}
 
@@ -359,7 +372,7 @@ export async function getCaseManagementForReview(category?: string) {
 }
 
 export async function signCaseManagementEntry(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRole(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
@@ -368,31 +381,39 @@ export async function signCaseManagementEntry(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.caseManagementLog.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.caseManagementLog.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await recordReview(tx, {
+			entityType: "CaseManagementLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark ?? null,
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "CaseManagementLog",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+	});
 
 	revalidateAll();
 	return { success: true };
 }
 
 export async function rejectCaseManagementEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
@@ -400,12 +421,23 @@ export async function rejectCaseManagementEntry(id: string, remark: string) {
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.caseManagementLog.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.caseManagementLog.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "CaseManagementLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark,
+		});
 	});
 
 	revalidateAll();
