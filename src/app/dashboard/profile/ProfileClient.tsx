@@ -14,6 +14,11 @@ import { UserProfile } from "@clerk/nextjs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+// Removed unused import useEffect
+import {
+	useNotifications,
+	DemoNotificationButton,
+} from "@/components/shared/NotificationProvider";
 import {
 	User,
 	BookOpen,
@@ -53,6 +58,8 @@ type TabId = "overview" | "account";
 
 export function ProfileClient({ profileData }: ProfileClientProps) {
 	const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+	// Notification provider is used inside OverviewTab where needed
 
 	return (
 		<div className="space-y-4 sm:space-y-6">
@@ -97,6 +104,8 @@ function OverviewTab({
 	profileData: ProfileData;
 	onSwitchToAccount: () => void;
 }) {
+	// Use notifications hook inside this component (client-side)
+	const notif = useNotifications();
 	const isStudent = profileData.role === "Student";
 	const isFaculty = profileData.role === "Faculty";
 
@@ -263,6 +272,38 @@ function OverviewTab({
 
 			{/* Right column — Quick stats & actions */}
 			<div className="space-y-4">
+				{/* Web Push config (available to all users in profile) */}
+				<Card className="border-0 shadow-sm">
+					<CardHeader className="pb-3">
+						<CardTitle className="text-base">Notifications</CardTitle>
+					</CardHeader>
+					<CardContent className="p-4">
+						<div className="space-y-3">
+							<p className="text-sm text-muted-foreground">
+								Manage browser push notifications and demo settings.
+							</p>
+							<div className="flex gap-2">
+								{notif ?
+									notif.isSubscribed ?
+										<Button onClick={() => notif.unsubscribe()}>
+											Disable Notifications
+										</Button>
+									:	<Button onClick={() => notif.subscribe()}>
+											Enable Notifications
+										</Button>
+
+								:	<Button onClick={() => window.location.reload()}>
+										Init Notifications
+									</Button>
+								}
+								{/* Only show demo button for HODs */}
+								{profileData.role === "HOD" && notif && (
+									<DemoNotificationButton />
+								)}
+							</div>
+						</div>
+					</CardContent>
+				</Card>
 				{/* Logbook stats (students) */}
 				{isStudent && Object.keys(profileData.logbookStats).length > 0 && (
 					<Card className="border-0 shadow-sm">

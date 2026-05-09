@@ -48,6 +48,7 @@ model User {
   assessmentsCreated         InternalAssessment[]                  @relation("AssessmentsCreated")
   journalClubs               JournalClub[]
   logbookFacultyReviews      LogbookFacultyReview[]
+  notificationSubscriptions  NotificationSubscription[]
   procedureLogs              ProcedureLog[]
   qualityImprovement         QualityImprovement[]
   researchActivities         ResearchActivity[]
@@ -1100,6 +1101,19 @@ enum EntryRevisionDecision {
   SIGNED
   NEEDS_REVISION
   REJECTED
+}
+
+// Store web push subscriptions for users
+model NotificationSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 enum PatientCategory {
