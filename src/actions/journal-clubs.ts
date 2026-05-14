@@ -77,6 +77,7 @@ export async function createJournalClub(data: JournalClubData) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -108,6 +109,7 @@ export async function updateJournalClub(id: string, data: JournalClubData) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -169,6 +171,7 @@ export async function submitJournalClub(id: string) {
 	}
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -190,6 +193,7 @@ export async function deleteJournalClub(id: string) {
 	await prisma.journalClub.delete({ where: { id } });
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -252,7 +256,7 @@ export async function getJournalClubsForReview() {
 
 	const where = studentIds.length > 0 ? { userId: { in: studentIds } } : {};
 
-	return prisma.journalClub.findMany({
+	const journalClubs = await prisma.journalClub.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -268,6 +272,31 @@ export async function getJournalClubsForReview() {
 			},
 		},
 	});
+
+	// Fetch signatures separately
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "JournalClub",
+			entityId: { in: journalClubs.map((j) => j.id) },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Attach signatures to journal clubs
+	const journalClubsWithSignatures = journalClubs.map((j) => ({
+		...j,
+		signatures: signatures.filter((sig) => sig.entityId === j.id),
+	}));
+
+	return journalClubsWithSignatures;
 }
 
 /**
@@ -311,6 +340,7 @@ export async function signJournalClub(id: string, remark?: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -346,6 +376,7 @@ export async function rejectJournalClub(id: string, remark: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -388,6 +419,7 @@ export async function bulkSignJournalClubs(ids: string[]) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
