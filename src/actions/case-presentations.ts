@@ -321,7 +321,7 @@ export async function getCasePresentationsForReview() {
 		studentFilter = { userId: { in: studentIds } };
 	}
 
-	return prisma.casePresentation.findMany({
+	const presentations = await prisma.casePresentation.findMany({
 		where: {
 			...studentFilter,
 			status: { not: "DRAFT" as never },
@@ -339,6 +339,31 @@ export async function getCasePresentationsForReview() {
 		},
 		orderBy: { createdAt: "desc" },
 	});
+
+	// Fetch signatures separately
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "CasePresentation",
+			entityId: { in: presentations.map((p) => p.id) },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Attach signatures to presentations
+	const presentationsWithSignatures = presentations.map((p) => ({
+		...p,
+		signatures: signatures.filter((s) => s.entityId === p.id),
+	}));
+
+	return presentationsWithSignatures;
 }
 
 /**
