@@ -295,7 +295,7 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	}));
 
 	conferences.forEach(i => items.push({
-		id: i.id, module: "Conferences", title: i.conferenceName || "Conference",
+		id: i.id, module: "Conferences", title: "Conference Participation",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
 		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences`
 	}));

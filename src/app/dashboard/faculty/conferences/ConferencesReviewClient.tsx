@@ -11,6 +11,8 @@
 "use client";
 
 import { useState, useTransition, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/hooks/useSocketEvent";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +67,7 @@ import {
 	renderMarkdown,
 } from "@/components/shared/MarkdownEditor";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Search,
 	CheckCircle2,
@@ -88,7 +91,6 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
 	signConferenceEntry,
@@ -111,6 +113,14 @@ export interface ConferenceSubmission {
 	facultyId: string | null;
 	status: string;
 	createdAt: string;
+	signatures?: Array<{
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+		remark?: string | null;
+	}>;
 	user: {
 		id: string;
 		firstName: string;
@@ -140,6 +150,11 @@ export function ConferencesReviewClient({
 }: ConferencesReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on conference events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
@@ -981,6 +996,29 @@ export function ConferencesReviewClient({
 									</DetailSection>
 								)}
 
+								{/* Signer Information */}
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signed By" icon={CheckCircle2}>
+										<div className="space-y-3">
+											{detailEntry.signatures.map((sig, idx) => (
+												<div
+													key={idx}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-semibold text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div className="text-green-800 mt-1">
+															{sig.remark}
+														</div>
+													)}
+												</div>
+											))}
+										</div>
+									</DetailSection>
+								)}
+
 								{/* Status Info */}
 								<DetailSection title="Status" icon={Tag}>
 									<div className="flex items-center gap-2">
@@ -996,6 +1034,15 @@ export function ConferencesReviewClient({
 											"dd MMM yyyy, HH:mm",
 										)}
 									</div>
+								</DetailSection>
+
+								{/* Revision History */}
+								<DetailSection title="Revision History" icon={Briefcase}>
+									<RevisionThreadButton
+										entityId={detailEntry.id}
+										entityType="ConferenceParticipation"
+										label="View History"
+									/>
 								</DetailSection>
 
 								{/* Action Buttons */}
