@@ -18,8 +18,9 @@ import {
 } from "@/lib/validators/diagnostic-skills";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
-import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
 import { isAutoReviewEnabled } from "@/actions/auto-review";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export async function createDiagnosticSkillEntry(data: DiagnosticSkillInput) {
 	});
 
 	revalidate(validated.diagnosticCategory);
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, entry };
 }
 
@@ -104,7 +106,21 @@ export async function updateDiagnosticSkillEntry(
 		},
 	});
 
+	// Record update revision for tracking changes
+	await prisma.entryRevision.create({
+		data: {
+			entityType: "DiagnosticSkill",
+			entityId: id,
+			ownerId: user.id,
+			version: await prisma.entryRevision.count({ where: { entityId: id } }) + 1,
+			kind: "SUBMISSION",
+			snapshot: buildSnapshot(entry) as any,
+			attachments: entry.imageUrls,
+		},
+	}).catch((e) => console.error("[REVISION_ERROR]", e));
+
 	revalidate(validated.diagnosticCategory);
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, entry };
 }
 
@@ -144,13 +160,26 @@ export async function submitDiagnosticSkillEntry(id: string) {
 				entityType: "DiagnosticSkill",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: buildSnapshot(existing),
+				attachments: existing.imageUrls,
 			});
 		}
 		return updated;
 	});
 
+	// Send notification to student on submission
+	if (!autoReview) {
+		await sendNotificationToUser(user.id, {
+			title: "Diagnostic Skill Submitted",
+			body: `Your diagnostic skill entry "${existing.skillName}" has been submitted for review.`,
+			type: "entry_submitted",
+			entityType: "DiagnosticSkill",
+			entityId: id,
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+	}
+
 	revalidate(existing.diagnosticCategory);
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, entry, autoSigned: autoReview };
 }
 
@@ -170,6 +199,7 @@ export async function deleteDiagnosticSkillEntry(id: string) {
 	await prisma.diagnosticSkill.delete({ where: { id } });
 
 	revalidate(existing.diagnosticCategory);
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -250,7 +280,7 @@ export async function getDiagnosticSkillsForReview(category?: string) {
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 	if (category) where.diagnosticCategory = category as never;
 
-	return prisma.diagnosticSkill.findMany({
+	const entries = await prisma.diagnosticSkill.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -266,6 +296,40 @@ export async function getDiagnosticSkillsForReview(category?: string) {
 			},
 		},
 	});
+
+	// Fetch digital signatures for all entries
+	const entryIds = entries.map((e) => e.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "DiagnosticSkill",
+			entityId: { in: entryIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+		orderBy: { signedAt: "desc" },
+	});
+
+	// Create a map of entityId to signatures
+	const signaturesMap = new Map<string, typeof signatures>();
+	for (const sig of signatures) {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)?.push(sig);
+	}
+
+	// Attach signatures to entries
+	return entries.map((entry) => ({
+		...entry,
+		signatures: signaturesMap.get(entry.id) || [],
+	}));
 }
 
 // ─── Sign Entry ──────────────────────────────────────────────
@@ -308,7 +372,17 @@ export async function signDiagnosticSkillEntry(id: string, remark?: string) {
 		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Diagnostic Skill Signed",
+		body: `Your diagnostic skill entry "${entry.skillName}" has been signed.`,
+		type: "entry_signed",
+		entityType: "DiagnosticSkill",
+		entityId: id,
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -344,7 +418,17 @@ export async function rejectDiagnosticSkillEntry(id: string, remark: string) {
 		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Diagnostic Skill Needs Revision",
+		body: `Your diagnostic skill entry "${entry.skillName}" needs revision: ${remark}`,
+		type: "entry_rejected",
+		entityType: "DiagnosticSkill",
+		entityId: id,
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -389,6 +473,7 @@ export async function bulkSignDiagnosticSkillEntries(ids: string[]) {
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

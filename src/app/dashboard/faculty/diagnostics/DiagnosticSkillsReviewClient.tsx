@@ -75,6 +75,7 @@ import {
 	renderMarkdown,
 } from "@/components/shared/MarkdownEditor";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Search,
 	CheckCircle2,
@@ -102,6 +103,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { format } from "date-fns";
+import { useSocketEvent } from "@/lib/socket";
 import {
 	signDiagnosticSkillEntry,
 	rejectDiagnosticSkillEntry,
@@ -138,6 +141,16 @@ export interface DiagnosticSkillSubmission {
 		currentSemester: number | null;
 		batchRelation: { name: string } | null;
 	};
+	signatures?: Array<{
+		id: string;
+		remark: string | null;
+		signedAt: Date;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+	}>;
 }
 
 interface DiagnosticSkillsReviewClientProps {
@@ -180,6 +193,11 @@ export function DiagnosticSkillsReviewClient({
 }: DiagnosticSkillsReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on diagnostic skill events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	const searchParams = useSearchParams();
 	const initialTab = searchParams.get("tab") || "ABG_ANALYSIS";
@@ -269,6 +287,21 @@ export function DiagnosticSkillsReviewClient({
 	// Pagination
 	const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 	const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+	// Pending submission counts for each tab (to show badge indicators)
+	const pendingCounts = useMemo(() => {
+		const counts: Record<string, number> = {
+			ABG_ANALYSIS: 0,
+			ECG_ANALYSIS: 0,
+			OTHER_DIAGNOSTIC: 0,
+		};
+		submissions.forEach((s) => {
+			if (s.status === "SUBMITTED" && counts[s.diagnosticCategory] !== undefined) {
+				counts[s.diagnosticCategory]++;
+			}
+		});
+		return counts;
+	}, [submissions]);
 
 	// Counts for the active tab (based on tabSubmissions, not filtered)
 	const counts = useMemo(() => {
@@ -482,6 +515,14 @@ export function DiagnosticSkillsReviewClient({
 							<tab.icon className="h-4 w-4" />
 							<span className="hidden sm:inline">{tab.label}</span>
 							<span className="sm:hidden">{tab.shortLabel}</span>
+							{pendingCounts[tab.value] > 0 && (
+								<Badge
+									variant="destructive"
+									className="h-5 min-w-[20px] px-1.5 text-[10px] font-medium flex items-center justify-center"
+								>
+									{pendingCounts[tab.value]}
+								</Badge>
+							)}
 						</TabsTrigger>
 					))}
 				</TabsList>
@@ -758,11 +799,37 @@ export function DiagnosticSkillsReviewClient({
 								{detailEntry.facultyRemark && (
 									<DetailSection title="Faculty Remark" icon={MessageSquare}>
 										<div
-											className="prose prose-sm bg-muted/30 p-3 rounded-md"
+											className="bg-amber-50/50 border border-amber-200/50 rounded-lg p-3 text-sm prose prose-sm max-w-none"
 											dangerouslySetInnerHTML={{
 												__html: renderMarkdown(detailEntry.facultyRemark),
 											}}
 										/>
+									</DetailSection>
+								)}
+
+								{/* Signer Information */}
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signer Information" icon={Activity}>
+										<div className="space-y-3">
+											{detailEntry.signatures.map((sig) => (
+												<div
+													key={sig.id}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-medium text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div className="text-green-800 mt-1 text-xs">
+															{sig.remark}
+														</div>
+													)}
+													<div className="text-green-700 mt-1 text-xs">
+														{format(new Date(sig.signedAt), "MMM d, yyyy · h:mm a")}
+													</div>
+												</div>
+											))}
+										</div>
 									</DetailSection>
 								)}
 
@@ -1204,6 +1271,16 @@ function DiagnosticCategoryReview({
 															</Button>
 														</>
 													)}
+													<RevisionThreadButton
+														entityType="DiagnosticSkill"
+														entityId={entry.id}
+														title={`History — ${entry.skillName}`}
+														description={`Submission and review history for ${entry.user.firstName} ${entry.user.lastName}`}
+														variant="ghost"
+														size="sm"
+														className="h-7 w-7"
+														label=""
+													/>
 												</div>
 											</TableCell>
 										</TableRow>
