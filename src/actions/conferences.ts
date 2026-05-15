@@ -202,6 +202,13 @@ export async function submitConferenceEntry(id: string) {
         where: { id },
         data: { status: "SIGNED" },
       });
+      await recordSubmission(tx, {
+        entityType: "ConferenceParticipation",
+        entityId: id,
+        ownerId: existing.userId,
+        snapshot: buildSnapshot(existing),
+        attachments: [],
+      });
       await tx.digitalSignature.create({
         data: {
           signedById: "auto-review",
@@ -238,7 +245,8 @@ export async function submitConferenceEntry(id: string) {
         entityType: "ConferenceParticipation",
         entityId: id,
         ownerId: user.id,
-        snapshot: { status: "SUBMITTED" },
+        snapshot: buildSnapshot(existing),
+        attachments: [],
       });
     });
     await sendNotificationToUser(user.id, {

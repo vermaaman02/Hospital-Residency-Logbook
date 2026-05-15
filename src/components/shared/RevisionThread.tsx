@@ -117,14 +117,16 @@ export function RevisionThread({
 				if (!cancelled) {
 					setItems(res);
 
-					// Extract all facultyId values from revisions for rotation postings, case management, procedure logs, diagnostic skills, imaging logs, and transport logs
+					// Extract all facultyId values from revisions for rotation postings, case management, procedure logs, diagnostic skills, imaging logs, transport logs, disaster drills, research activities
 					if (
 						entityType === "RotationPosting" ||
 						entityType === "CaseManagementLog" ||
 						entityType === "ProcedureLog" ||
 						entityType === "DiagnosticSkill" ||
 						entityType === "ImagingLog" ||
-						entityType === "TransportLog"
+						entityType === "TransportLog" ||
+						entityType === "DisasterDrill" ||
+						entityType === "ResearchActivity"
 					) {
 						const facultyIds = new Set<string>();
 						for (const item of res) {

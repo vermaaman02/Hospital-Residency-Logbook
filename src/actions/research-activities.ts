@@ -16,6 +16,8 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { buildSnapshot } from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -201,6 +203,13 @@ export async function submitResearchEntry(id: string) {
 				where: { id },
 				data: { status: "SIGNED" },
 			});
+			await recordSubmission(tx, {
+				entityType: "ResearchActivity",
+				entityId: id,
+				ownerId: existing.userId,
+				snapshot: buildSnapshot(existing),
+				attachments: [],
+			});
 			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
@@ -219,6 +228,14 @@ export async function submitResearchEntry(id: string) {
 				remark: "Auto-reviewed by system",
 			});
 		});
+		await sendNotificationToUser(user.id, {
+			title: "Research & Outreach",
+			body: `Your research entry${existing.activity ? ` for "${existing.activity}"` : ""} has been auto-reviewed and signed.`,
+			type: "entry_signed",
+			entityType: "ResearchActivity",
+			entityId: id,
+			href: "/dashboard/student/research-activities",
+		});
 	} else {
 		await prisma.$transaction(async (tx) => {
 			await tx.researchActivity.update({
@@ -229,12 +246,22 @@ export async function submitResearchEntry(id: string) {
 				entityType: "ResearchActivity",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: buildSnapshot(existing),
+				attachments: [],
 			});
+		});
+		await sendNotificationToUser(user.id, {
+			title: "Research & Outreach",
+			body: `Your research entry${existing.activity ? ` for "${existing.activity}"` : ""} has been submitted for review.`,
+			type: "entry_submitted",
+			entityType: "ResearchActivity",
+			entityId: id,
+			href: "/dashboard/student/research-activities",
 		});
 	}
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -268,7 +295,7 @@ export async function getResearchForReview() {
 	};
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 
-	return prisma.researchActivity.findMany({
+	const researchActivities = await prisma.researchActivity.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -284,6 +311,38 @@ export async function getResearchForReview() {
 			},
 		},
 	});
+
+	// Fetch signatures separately
+	const researchIds = researchActivities.map((r) => r.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "ResearchActivity",
+			entityId: { in: researchIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Map signatures to research activities
+	const signaturesMap = new Map<string, typeof signatures>();
+	signatures.forEach((sig) => {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)!.push(sig);
+	});
+
+	return researchActivities.map((research) => ({
+		...research,
+		signatures: signaturesMap.get(research.id) || [],
+	}));
 }
 
 export async function signResearchEntry(id: string, remark?: string) {
@@ -325,7 +384,17 @@ export async function signResearchEntry(id: string, remark?: string) {
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Research & Outreach",
+		body: `Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} has been signed off.`,
+		type: "entry_signed",
+		entityType: "ResearchActivity",
+		entityId: id,
+		href: "/dashboard/student/research-activities",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -359,7 +428,17 @@ export async function rejectResearchEntry(id: string, remark: string) {
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Research & Outreach",
+		body: `Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} needs revision: ${remark}`,
+		type: "entry_needs_revision",
+		entityType: "ResearchActivity",
+		entityId: id,
+		href: "/dashboard/student/research-activities",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -395,10 +474,19 @@ export async function bulkSignResearchEntries(ids: string[]) {
 				decision: "SIGNED",
 				remark: "Bulk signed",
 			});
+			await sendNotificationToUser(entry.userId, {
+				title: "Research & Outreach",
+				body: `Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} has been bulk signed.`,
+				type: "entry_signed",
+				entityType: "ResearchActivity",
+				entityId: entry.id,
+				href: "/dashboard/student/research-activities",
+			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

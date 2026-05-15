@@ -301,15 +301,15 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	}));
 
 	research.forEach(i => items.push({
-		id: i.id, module: "Research Activities", title: i.activity || "Activity",
+		id: i.id, module: "Research Activities", title: "Research & Outreach",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=research`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/research-activities`
 	}));
 
 	disaster.forEach(i => items.push({
-		id: i.id, module: "Disaster Drills", title: i.description || "Disaster Drill",
+		id: i.id, module: "Disaster Drills", title: "Disaster Drills",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=disaster-drills`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/disaster-drills`
 	}));
 
 	qi.forEach(i => items.push({

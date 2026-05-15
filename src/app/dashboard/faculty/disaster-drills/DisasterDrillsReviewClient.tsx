@@ -10,6 +10,9 @@
 "use client";
 
 import { useState, useTransition, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/hooks/useSocketEvent";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +88,6 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import {
 	signDisasterDrillEntry,
 	rejectDisasterDrillEntry,
@@ -106,6 +108,15 @@ export interface DisasterDrillSubmission {
 	facultyId: string | null;
 	status: string;
 	createdAt: string;
+	signatures?: Array<{
+		id: string;
+		remark: string | null;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+	}>;
 	user: {
 		id: string;
 		firstName: string;
@@ -135,6 +146,11 @@ export function DisasterDrillsReviewClient({
 }: DisasterDrillsReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on disaster drill events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
@@ -868,6 +884,58 @@ export function DisasterDrillsReviewClient({
 										/>
 									</div>
 								)}
+
+								{/* Signatures */}
+								{detailEntry.signatures &&
+									detailEntry.signatures.length > 0 && (
+									<div className="space-y-1">
+										<div className="flex items-center gap-2">
+											<CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+											<span className="text-xs font-medium text-muted-foreground">
+												Signed By
+											</span>
+										</div>
+										<div className="pl-6 space-y-2">
+											{detailEntry.signatures.map((sig) => (
+												<div
+													key={sig.id}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-semibold text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div
+															className="prose prose-xs max-w-none mt-1 text-green-700"
+															dangerouslySetInnerHTML={{
+																__html: renderMarkdown(sig.remark),
+															}}
+														/>
+													)}
+												</div>
+											))}
+										</div>
+									</div>
+								)}
+
+								{/* Revision History */}
+								<div className="space-y-1">
+									<div className="flex items-center gap-2">
+										<Activity className="h-4 w-4 text-muted-foreground" />
+										<span className="text-xs font-medium text-muted-foreground">
+											Revision History
+										</span>
+									</div>
+									<div className="pl-6">
+										<RevisionThreadButton
+											entityId={detailEntry.id}
+											entityType="DisasterDrill"
+											title="Disaster Drill Revision History"
+											description={`Entry #${detailEntry.slNo} - ${detailEntry.description || "Activity"}`}
+											label="View History"
+										/>
+									</div>
+								</div>
 
 								<div className="flex items-center gap-2 pt-2">
 									<StatusBadge status={detailEntry.status as EntryStatus} />

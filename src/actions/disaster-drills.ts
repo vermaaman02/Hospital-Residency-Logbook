@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/disaster-drills");
@@ -164,6 +166,13 @@ export async function submitDisasterDrillEntry(id: string) {
 			data: { status: newStatus },
 		});
 		if (autoReview) {
+			await recordSubmission(tx, {
+				entityType: "DisasterDrill",
+				entityId: id,
+				ownerId: entry.userId,
+				snapshot: buildSnapshot(entry),
+				attachments: [],
+			});
 			await recordReview(tx, {
 				entityType: "DisasterDrill",
 				entityId: id,
@@ -173,30 +182,48 @@ export async function submitDisasterDrillEntry(id: string) {
 				decision: "SIGNED",
 				remark: "Auto-reviewed",
 			});
+			await sendNotificationToUser(entry.userId, {
+				title: "Disaster Drills",
+				body: `Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} has been auto-reviewed and signed.`,
+				type: "entry_signed",
+				entityType: "DisasterDrill",
+				entityId: id,
+				href: "/dashboard/student/disaster-drills",
+			});
 		} else {
 			await recordSubmission(tx, {
 				entityType: "DisasterDrill",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: buildSnapshot(entry),
+				attachments: [],
+			});
+			await sendNotificationToUser(user.id, {
+				title: "Disaster Drills",
+				body: `Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} has been submitted for review.`,
+				type: "entry_submitted",
+				entityType: "DisasterDrill",
+				entityId: id,
+				href: "/dashboard/student/disaster-drills",
 			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, autoSigned: newStatus === "SIGNED" };
 }
 
 // ======================== FACULTY/HOD REVIEW ACTIONS ========================
 
 export async function getDisasterDrillsForReview() {
-	const { role } = await requireRole(["faculty", "hod"]);
+	await requireRole(["faculty", "hod"]);
 	const user = await ensureUserInDb();
 	if (!user) throw new Error("User not found");
 
 	let whereClause: Record<string, unknown> = {};
 
-	if (role === "faculty") {
+	if (user.role === "FACULTY") {
 		const batchAssignments = await prisma.facultyBatchAssignment.findMany({
 			where: { facultyId: user.id },
 			select: { batchId: true },
@@ -214,7 +241,39 @@ export async function getDisasterDrillsForReview() {
 		whereClause = { userId: { in: studentIds } };
 	}
 
-	return prisma.disasterDrill.findMany({
+	const disasterDrills = await prisma.disasterDrill.findMany({
+		where: whereClause,
+		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+		select: { id: true },
+	});
+
+	const disasterDrillIds = disasterDrills.map((d) => d.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "DisasterDrill",
+			entityId: { in: disasterDrillIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Map signatures to disaster drills
+	const signaturesMap = new Map<string, typeof signatures>();
+	signatures.forEach((sig) => {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)!.push(sig);
+	});
+
+	const disasterDrillsWithUser = await prisma.disasterDrill.findMany({
 		where: whereClause,
 		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
 		include: {
@@ -230,6 +289,11 @@ export async function getDisasterDrillsForReview() {
 			},
 		},
 	});
+
+	return disasterDrillsWithUser.map((drill) => ({
+		...drill,
+		signatures: signaturesMap.get(drill.id) || [],
+	}));
 }
 
 export async function signDisasterDrillEntry(id: string, remark?: string) {
@@ -259,6 +323,7 @@ export async function signDisasterDrillEntry(id: string, remark?: string) {
 				entityType: "DisasterDrill",
 				signedById: user.id,
 				signedAt: new Date(),
+				...(remark ? { remark } : {}),
 			},
 		});
 		await recordReview(tx, {
@@ -272,7 +337,17 @@ export async function signDisasterDrillEntry(id: string, remark?: string) {
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Disaster Drills",
+		body: `Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+		type: "entry_signed",
+		entityType: "DisasterDrill",
+		entityId: id,
+		href: "/dashboard/student/disaster-drills",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -307,7 +382,17 @@ export async function rejectDisasterDrillEntry(id: string, remark: string) {
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Disaster Drills",
+		body: `Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+		type: "entry_needs_revision",
+		entityType: "DisasterDrill",
+		entityId: id,
+		href: "/dashboard/student/disaster-drills",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -334,6 +419,7 @@ export async function bulkSignDisasterDrillEntries(ids: string[]) {
 					entityType: "DisasterDrill",
 					signedById: user.id,
 					signedAt: new Date(),
+					remark: "Bulk signed",
 				},
 			});
 			await recordReview(tx, {
@@ -345,10 +431,19 @@ export async function bulkSignDisasterDrillEntries(ids: string[]) {
 				decision: "SIGNED",
 				remark: "Bulk signed",
 			});
+			await sendNotificationToUser(e.userId, {
+				title: "Disaster Drills",
+				body: `Your disaster drill entry${e.description ? ` for "${e.description}"` : ""} has been bulk signed.`,
+				type: "entry_signed",
+				entityType: "DisasterDrill",
+				entityId: e.id,
+				href: "/dashboard/student/disaster-drills",
+			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 

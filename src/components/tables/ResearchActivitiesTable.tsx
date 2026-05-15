@@ -11,6 +11,10 @@
 "use client";
 
 import { useState, useTransition, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/hooks/useSocketEvent";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
+import React from "react";
 import {
 	Card,
 	CardContent,
@@ -61,9 +65,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import type { EntryStatus } from "@/types";
+import { renderMarkdown } from "@/components/shared/MarkdownEditor";
 
 // ======================== CONSTANTS ========================
 
@@ -137,6 +141,11 @@ export function ResearchActivitiesTable({
 }: ResearchActivitiesTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on research events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// ---- Pagination ----
 	const [page, setPage] = useState(1);
@@ -358,6 +367,7 @@ export function ResearchActivitiesTable({
 								<TableHead className="w-40">Participation Role</TableHead>
 								<TableHead className="w-40">Faculty</TableHead>
 								<TableHead className="w-24 text-center">Status</TableHead>
+								<TableHead className="w-24 text-center">History</TableHead>
 								<TableHead className="w-28 text-center">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -365,7 +375,7 @@ export function ResearchActivitiesTable({
 							{pageEntries.length === 0 ?
 								<TableRow>
 									<TableCell
-										colSpan={8}
+										colSpan={9}
 										className="text-center text-muted-foreground py-8"
 									>
 										No entries yet. Click &quot;Add Row&quot; to start.
@@ -379,17 +389,17 @@ export function ResearchActivitiesTable({
 									const canEdit = !isSigned && !isSubmitted;
 
 									return (
-										<TableRow
-											key={entry.id}
-											className={cn(
-												"group hover:bg-muted/30",
-												isEditing && "bg-blue-50/50 dark:bg-blue-950/20",
-												isNeedsRevision && "bg-red-50/50 dark:bg-red-950/20",
-											)}
-											onClick={() =>
-												!isEditing && canEdit && startEditing(entry)
-											}
-										>
+										<React.Fragment key={entry.id}>
+											<TableRow
+												className={cn(
+													"group hover:bg-muted/30",
+													isEditing && "bg-blue-50/50 dark:bg-blue-950/20",
+													isNeedsRevision && "bg-red-50/50 dark:bg-red-950/20",
+												)}
+												onClick={() =>
+													!isEditing && canEdit && startEditing(entry)
+												}
+											>
 											{/* Sl No */}
 											<TableCell className="text-center font-medium text-muted-foreground">
 												{entry.slNo}
@@ -569,6 +579,17 @@ export function ResearchActivitiesTable({
 												<StatusBadge status={entry.status as EntryStatus} />
 											</TableCell>
 
+											{/* History */}
+											<TableCell className="text-center">
+												<RevisionThreadButton
+													entityId={entry.id}
+													entityType="ResearchActivity"
+													title="Research Activity Revision History"
+													description={`Entry #${entry.slNo} - ${entry.activity || "Activity"}`}
+													label="History"
+												/>
+											</TableCell>
+
 											{/* Actions */}
 											<TableCell
 												className="text-center"
@@ -640,6 +661,28 @@ export function ResearchActivitiesTable({
 												}
 											</TableCell>
 										</TableRow>
+
+										{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+											<TableRow>
+												<TableCell colSpan={9} className="bg-orange-50/50">
+													<div className="flex items-start gap-2 py-2 px-3">
+														<AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
+														<div className="flex-1">
+															<p className="text-xs font-semibold text-orange-900 mb-1">
+																Revision required
+															</p>
+															<div
+																className="prose prose-sm max-w-none text-xs text-orange-800"
+																dangerouslySetInnerHTML={{
+																	__html: renderMarkdown(entry.facultyRemark || ""),
+																}}
+															/>
+														</div>
+													</div>
+												</TableCell>
+											</TableRow>
+										)}
+										</React.Fragment>
 									);
 								})
 							}
