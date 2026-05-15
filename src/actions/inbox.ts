@@ -313,9 +313,9 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	}));
 
 	qi.forEach(i => items.push({
-		id: i.id, module: "Quality Improvement", title: i.description || "QI Project",
+		id: i.id, module: "Quality Improvement", title: "Quality Improvement",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=qi`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `/dashboard/${role}/quality-improvement`
 	}));
 
 	logbook.forEach(i => items.push({

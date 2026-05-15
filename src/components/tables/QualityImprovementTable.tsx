@@ -10,6 +10,9 @@
 "use client";
 
 import { useState, useTransition, useCallback, useMemo } from "react";
+import { useSocketEvent } from "@/hooks/useSocketEvent";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
+import { renderMarkdown } from "@/components/shared/MarkdownEditor";
 import {
 	Card,
 	CardContent,
@@ -131,6 +134,11 @@ export function QualityImprovementTable({
 }: QualityImprovementTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on quality improvement events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// ---- Pagination ----
 	const [page, setPage] = useState(1);
@@ -325,6 +333,7 @@ export function QualityImprovementTable({
 								</TableHead>
 								<TableHead className="w-44">Role in Activity</TableHead>
 								<TableHead className="w-40">Faculty Mentor</TableHead>
+								<TableHead className="w-24 text-center">History</TableHead>
 								<TableHead className="w-24 text-center">Status</TableHead>
 								<TableHead className="w-28 text-center">Actions</TableHead>
 							</TableRow>
@@ -333,7 +342,7 @@ export function QualityImprovementTable({
 							{pageEntries.length === 0 ?
 								<TableRow>
 									<TableCell
-										colSpan={7}
+										colSpan={8}
 										className="text-center text-muted-foreground py-8"
 									>
 										No entries yet. Click &quot;Add Row&quot; to start.
@@ -428,9 +437,12 @@ export function QualityImprovementTable({
 															</span>
 														)}
 														{isNeedsRevision && entry.facultyRemark && (
-															<div className="text-xs text-red-600 mt-1">
-																<strong>Remark:</strong> {entry.facultyRemark}
-															</div>
+															<div
+																className="prose prose-xs max-w-none mt-1 text-red-600"
+																dangerouslySetInnerHTML={{
+																	__html: renderMarkdown(entry.facultyRemark),
+																}}
+															/>
 														)}
 													</div>
 												}
@@ -515,6 +527,14 @@ export function QualityImprovementTable({
 														{getFacultyName(entry.facultyId) || "—"}
 													</span>
 												}
+											</TableCell>
+
+											{/* History */}
+											<TableCell className="text-center">
+												<RevisionThreadButton
+													entityType="QualityImprovement"
+													entityId={entry.id}
+												/>
 											</TableCell>
 
 											{/* Status */}
