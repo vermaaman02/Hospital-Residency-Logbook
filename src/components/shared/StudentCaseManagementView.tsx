@@ -50,8 +50,14 @@ export interface CaseManagementViewEntry {
 	completeDiagnosis: string | null;
 	competencyLevel: string | null;
 	totalCaseTally: number;
+	facultyId: string | null;
 	facultyRemark: string | null;
 	status: string;
+	faculty?: {
+		id: string;
+		firstName: string;
+		lastName: string;
+	} | null;
 }
 
 interface StudentCaseManagementViewProps {
@@ -153,6 +159,7 @@ export function StudentCaseManagementView({
 										<TableHead className="min-w-36">Diagnosis</TableHead>
 										<TableHead className="w-28">Competency</TableHead>
 										<TableHead className="w-16 text-center">Tally</TableHead>
+										<TableHead className="w-32">Faculty</TableHead>
 										<TableHead className="min-w-32">Faculty Remark</TableHead>
 										<TableHead className="w-24 text-center">Status</TableHead>
 									</TableRow>
@@ -161,7 +168,7 @@ export function StudentCaseManagementView({
 									{filtered.length === 0 ?
 										<TableRow>
 											<TableCell
-												colSpan={selectedCategory === "ALL" ? 10 : 9}
+												colSpan={selectedCategory === "ALL" ? 11 : 10}
 												className="text-center py-12 text-muted-foreground"
 											>
 												No case management entries yet.
@@ -225,6 +232,11 @@ export function StudentCaseManagementView({
 												</TableCell>
 												<TableCell className="text-center font-mono">
 													{entry.totalCaseTally}
+												</TableCell>
+												<TableCell className="text-sm">
+													{entry.faculty ?
+														`Dr. ${entry.faculty.firstName} ${entry.faculty.lastName}`
+													:	"—"}
 												</TableCell>
 												<TableCell className="text-sm">
 													{entry.facultyRemark ?

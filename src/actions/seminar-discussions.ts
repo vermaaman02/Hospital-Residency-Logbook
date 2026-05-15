@@ -283,7 +283,7 @@ export async function getSeminarDiscussionsForReview() {
 		studentFilter = { userId: { in: studentIds } };
 	}
 
-	return prisma.seminar.findMany({
+	const seminars = await prisma.seminar.findMany({
 		where: {
 			...studentFilter,
 			status: { not: "DRAFT" as never },
@@ -301,6 +301,31 @@ export async function getSeminarDiscussionsForReview() {
 		},
 		orderBy: { createdAt: "desc" },
 	});
+
+	// Fetch signatures separately
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "Seminar",
+			entityId: { in: seminars.map((s) => s.id) },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Attach signatures to seminars
+	const seminarsWithSignatures = seminars.map((s) => ({
+		...s,
+		signatures: signatures.filter((sig) => sig.entityId === s.id),
+	}));
+
+	return seminarsWithSignatures;
 }
 
 /**

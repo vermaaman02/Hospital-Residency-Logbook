@@ -57,6 +57,7 @@ import {
 	CommandList,
 } from "@/components/ui/command";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, Check, X, ChevronsUpDown, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -310,6 +311,7 @@ export function ClinicalSkillTable({
 											isPending={isPending}
 											getFacultyName={getFacultyName}
 											confidenceLabel={confidenceLabel}
+											type={type}
 										/>,
 								)}
 							</TableBody>
@@ -500,6 +502,7 @@ function ReadRow({
 	isPending,
 	getFacultyName,
 	confidenceLabel,
+	type,
 }: {
 	entry: ClinicalSkillEntry;
 	onEdit: () => void;
@@ -507,85 +510,107 @@ function ReadRow({
 	isPending: boolean;
 	getFacultyName: (id: string | null) => string;
 	confidenceLabel: (val: string | null) => string;
+	type: "adult" | "pediatric";
 }) {
 	const isEditable = entry.status !== "SUBMITTED" && entry.status !== "SIGNED";
 
 	return (
-		<TableRow
-			className={cn(
-				"transition-colors",
-				isEditable && "cursor-pointer hover:bg-muted/30",
-				entry.status === "SIGNED" && "bg-green-50/50",
-				entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
-				entry.status === "SUBMITTED" && "bg-amber-50/30",
-			)}
-			onClick={isEditable ? onEdit : undefined}
-		>
-			{/* Sl. No */}
-			<TableCell className="text-center font-medium text-muted-foreground">
-				{entry.slNo}
-			</TableCell>
+		<>
+			<TableRow
+				className={cn(
+					"transition-colors",
+					isEditable && "cursor-pointer hover:bg-muted/30",
+					entry.status === "SIGNED" && "bg-green-50/50",
+					entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
+					entry.status === "SUBMITTED" && "bg-amber-50/30",
+				)}
+				onClick={isEditable ? onEdit : undefined}
+			>
+				{/* Sl. No */}
+				<TableCell className="text-center font-medium text-muted-foreground">
+					{entry.slNo}
+				</TableCell>
 
-			{/* Skill Name */}
-			<TableCell className="font-medium text-sm">{entry.skillName}</TableCell>
+				{/* Skill Name */}
+				<TableCell className="font-medium text-sm">{entry.skillName}</TableCell>
 
-			{/* Representative Diagnosis */}
-			<TableCell className="text-sm max-w-52">
-				{entry.representativeDiagnosis ?
-					<span className="line-clamp-2">{entry.representativeDiagnosis}</span>
-				:	<span className="text-muted-foreground italic">Not filled</span>}
-			</TableCell>
+				{/* Representative Diagnosis */}
+				<TableCell className="text-sm max-w-52">
+					{entry.representativeDiagnosis ?
+						<span className="line-clamp-2">{entry.representativeDiagnosis}</span>
+					:	<span className="text-muted-foreground italic">Not filled</span>}
+				</TableCell>
 
-			{/* Confidence Level */}
-			<TableCell>
-				{entry.confidenceLevel ?
-					<Badge variant="outline" className="text-xs">
-						{confidenceLabel(entry.confidenceLevel)}
-					</Badge>
-				:	<span className="text-muted-foreground">—</span>}
-			</TableCell>
+				{/* Confidence Level */}
+				<TableCell>
+					{entry.confidenceLevel ?
+						<Badge variant="outline" className="text-xs">
+							{confidenceLabel(entry.confidenceLevel)}
+						</Badge>
+					:	<span className="text-muted-foreground">—</span>}
+				</TableCell>
 
-			{/* Observing Faculty Sign */}
-			<TableCell className="text-sm">
-				{getFacultyName(entry.facultyId)}
-			</TableCell>
+				{/* Observing Faculty Sign */}
+				<TableCell className="text-sm">
+					{getFacultyName(entry.facultyId)}
+				</TableCell>
 
-			{/* Total Times / Tally */}
-			<TableCell className="text-center font-mono">
-				{entry.totalTimesPerformed}
-			</TableCell>
+				{/* Total Times / Tally */}
+				<TableCell className="text-center font-mono">
+					{entry.totalTimesPerformed}
+				</TableCell>
 
-			{/* Status */}
-			<TableCell className="text-center">
-				<div>
+				{/* Status */}
+				<TableCell className="text-center">
 					<StatusBadge status={entry.status as EntryStatus} size="sm" />
-					{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
-						<p className="text-[10px] text-red-600 mt-0.5 line-clamp-1">
-							Reason: {entry.facultyRemark}
-						</p>
-					)}
-				</div>
-			</TableCell>
+				</TableCell>
 
-			{/* Actions */}
-			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-				<div className="flex items-center justify-center gap-0.5">
-					{entry.status === "DRAFT" && entry.confidenceLevel && (
-						<Button
+				{/* Actions */}
+				<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+					<div className="flex items-center justify-center gap-0.5">
+						<RevisionThreadButton
+							entityType={type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric"}
+							entityId={entry.id}
+							title={`History — ${entry.skillName}`}
+							description={`Submission and review history for ${entry.skillName}`}
 							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-hospital-primary"
-							title="Submit for review"
-							onClick={onSubmit}
-							disabled={isPending}
-						>
-							{isPending ?
-								<Loader2 className="h-3.5 w-3.5 animate-spin" />
-							:	<Send className="h-3.5 w-3.5" />}
-						</Button>
-					)}
-				</div>
-			</TableCell>
-		</TableRow>
+							size="sm"
+							className="h-7 w-7"
+							label=""
+						/>
+						{entry.status === "DRAFT" && entry.confidenceLevel && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-hospital-primary"
+								title="Submit for review"
+								onClick={onSubmit}
+								disabled={isPending}
+							>
+								{isPending ?
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+								:	<Send className="h-3.5 w-3.5" />}
+							</Button>
+						)}
+					</div>
+				</TableCell>
+			</TableRow>
+
+			{/* Rejection Reason Row for Needs Revision */}
+			{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+				<TableRow className="bg-orange-100/50">
+					<TableCell colSpan={8} className="p-3">
+						<div className="flex items-start gap-2">
+							<div className="text-orange-700 font-medium text-sm shrink-0">
+								Rejection Reason:
+							</div>
+							<div className="text-sm text-orange-800">
+								{entry.facultyRemark}
+							</div>
+						</div>
+					</TableCell>
+				</TableRow>
+			)}
+		</>
 	);
 }

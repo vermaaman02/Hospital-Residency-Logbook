@@ -86,6 +86,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { format } from "date-fns";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
+import { useSocketEvent } from "@/lib/socket";
 import {
 	signClinicalSkill,
 	rejectClinicalSkill,
@@ -116,6 +119,17 @@ export interface ClinicalSkillSubmission {
 		currentSemester: number | null;
 		batchRelation: { name: string } | null;
 	};
+	signatures?: Array<{
+		id: string;
+		signedById: string;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+		remark: string | null;
+		signedAt: string;
+	}>;
 }
 
 interface ClinicalSkillReviewClientProps {
@@ -169,6 +183,11 @@ export function ClinicalSkillReviewClient({
 
 	// Auto-review
 	const [autoReview, setAutoReview] = useState(autoReviewEnabled ?? false);
+
+	// Real-time refresh on clinical skills events - re-fetch data from server
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Student filter
 	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
@@ -753,6 +772,16 @@ export function ClinicalSkillReviewClient({
 													>
 														<Eye className="h-3.5 w-3.5" />
 													</Button>
+													<RevisionThreadButton
+														entityType={currentTab === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric"}
+														entityId={entry.id}
+														title={`History — ${entry.skillName}`}
+														description={`Submission and review history for ${entry.user.firstName} ${entry.user.lastName}`}
+														variant="ghost"
+														size="sm"
+														className="h-7 w-7"
+														label=""
+													/>
 													{entry.status === "SUBMITTED" && (
 														<>
 															<Button
@@ -914,6 +943,31 @@ export function ClinicalSkillReviewClient({
 										/>
 									</div>
 								</DetailSection>
+
+								{/* Signer Information */}
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signed By" icon={CheckCircle2}>
+										{detailEntry.signatures.map((sig) => (
+											<div
+												key={sig.id}
+												className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+											>
+												<div className="font-medium text-green-800">
+													Dr. {sig.signedBy.firstName}{" "}
+													{sig.signedBy.lastName}
+												</div>
+												{sig.remark && (
+													<div className="mt-1 text-green-700">
+														{sig.remark}
+													</div>
+												)}
+												<div className="mt-1 text-xs text-green-600">
+													{format(new Date(sig.signedAt), "dd MMM yyyy, HH:mm")}
+												</div>
+											</div>
+										))}
+									</DetailSection>
+								)}
 
 								{detailEntry.status === "SUBMITTED" && (
 									<div className="flex gap-3 pt-4 border-t">

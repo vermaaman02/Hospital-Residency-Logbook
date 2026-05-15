@@ -90,6 +90,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { format } from "date-fns";
+import { useSocketEvent } from "@/lib/socket";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	signCaseManagementEntry,
 	rejectCaseManagementEntry,
@@ -130,6 +133,21 @@ export interface CaseManagementSubmission {
 		currentSemester: number | null;
 		batchRelation: { name: string } | null;
 	};
+	faculty?: {
+		id: string;
+		firstName: string;
+		lastName: string;
+	} | null;
+	signatures?: Array<{
+		id: string;
+		remark: string | null;
+		signedAt: Date;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+	}>;
 }
 
 interface CaseManagementReviewClientProps {
@@ -184,6 +202,11 @@ export function CaseManagementReviewClient({
 
 	// Auto-review
 	const [autoReview, setAutoReview] = useState(autoReviewEnabled ?? false);
+
+	// Real-time refresh on case management events - re-fetch data from server
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Student filter
 	const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
@@ -457,16 +480,68 @@ export function CaseManagementReviewClient({
 			await import("@/lib/export/export-pdf");
 		const label =
 			categoryFilter !== "ALL" ? categoryLabel(categoryFilter) : "All";
-		await exportCaseManagementReviewToPdf(buildExportData(), role, label);
-	}, [buildExportData, role, categoryFilter]);
+		const exportData = categoryFiltered
+			.filter((e) => {
+				const s = e.status as EntryStatus;
+				if (exportStatusFilter === "ALL") return true;
+				return s === exportStatusFilter;
+			})
+			.map((e) => ({
+				slNo: e.slNo,
+				categoryLabel: categoryLabel(e.category),
+				caseSubCategory: e.caseSubCategory,
+				date: e.date,
+				patientName: e.patientName,
+				patientAge: e.patientAge,
+				patientSex: e.patientSex,
+				uhid: e.uhid,
+				completeDiagnosis: e.completeDiagnosis,
+				competencyLevel: competencyLabel(e.competencyLevel),
+				totalCaseTally: e.totalCaseTally,
+				status: e.status,
+				studentName: `${e.user.firstName} ${e.user.lastName}`.trim(),
+				batch: e.user.batchRelation?.name ?? "—",
+				semester: e.user.currentSemester ?? 0,
+				facultyName: e.faculty ?
+					`Dr. ${e.faculty.firstName} ${e.faculty.lastName}`
+				:	"—",
+			}));
+		await exportCaseManagementReviewToPdf(exportData, role, label);
+	}, [categoryFiltered, categoryFilter, competencyLabel, exportStatusFilter, role]);
 
 	const handleExportExcel = useCallback(async () => {
 		const { exportCaseManagementReviewToExcel } =
 			await import("@/lib/export/export-excel");
 		const label =
 			categoryFilter !== "ALL" ? categoryLabel(categoryFilter) : "All";
-		exportCaseManagementReviewToExcel(buildExportData(), role, label);
-	}, [buildExportData, role, categoryFilter]);
+		const exportData = categoryFiltered
+			.filter((e) => {
+				const s = e.status as EntryStatus;
+				if (exportStatusFilter === "ALL") return true;
+				return s === exportStatusFilter;
+			})
+			.map((e) => ({
+				slNo: e.slNo,
+				categoryLabel: categoryLabel(e.category),
+				caseSubCategory: e.caseSubCategory,
+				date: e.date,
+				patientName: e.patientName,
+				patientAge: e.patientAge,
+				patientSex: e.patientSex,
+				uhid: e.uhid,
+				completeDiagnosis: e.completeDiagnosis,
+				competencyLevel: competencyLabel(e.competencyLevel),
+				totalCaseTally: e.totalCaseTally,
+				status: e.status,
+				studentName: `${e.user.firstName} ${e.user.lastName}`.trim(),
+				batch: e.user.batchRelation?.name ?? "—",
+				semester: e.user.currentSemester ?? 0,
+				facultyName: e.faculty ?
+					`Dr. ${e.faculty.firstName} ${e.faculty.lastName}`
+				:	"—",
+			}));
+		exportCaseManagementReviewToExcel(exportData, role, label);
+	}, [categoryFiltered, categoryFilter, competencyLabel, exportStatusFilter, role]);
 
 	// ======================== RENDER ========================
 
@@ -835,6 +910,16 @@ export function CaseManagementReviewClient({
 												>
 													<Eye className="h-3.5 w-3.5" />
 												</Button>
+												<RevisionThreadButton
+													entityType="CaseManagementLog"
+													entityId={entry.id}
+													title={`History — ${entry.caseSubCategory}`}
+													description={`Submission and review history for ${entry.user.firstName} ${entry.user.lastName}`}
+													variant="ghost"
+													size="sm"
+													className="h-7 w-7"
+													label=""
+												/>
 												{entry.status === "SUBMITTED" && (
 													<>
 														<Button
@@ -1022,6 +1107,14 @@ export function CaseManagementReviewClient({
 										label="Tally"
 										value={String(detailEntry.totalCaseTally)}
 									/>
+									<DetailRow
+										label="Faculty"
+										value={
+											detailEntry.faculty ?
+												`Dr. ${detailEntry.faculty.firstName} ${detailEntry.faculty.lastName}`
+											:	"—"
+										}
+									/>
 								</DetailSection>
 
 								{detailEntry.facultyRemark && (
@@ -1043,6 +1136,31 @@ export function CaseManagementReviewClient({
 										/>
 									</div>
 								</DetailSection>
+
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signer Information" icon={Activity}>
+										<div className="space-y-3">
+											{detailEntry.signatures.map((sig) => (
+												<div
+													key={sig.id}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-medium text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div className="text-green-800 mt-1 text-xs">
+															{sig.remark}
+														</div>
+													)}
+													<div className="text-green-700 mt-1 text-xs">
+														{format(new Date(sig.signedAt), "MMM d, yyyy · h:mm a")}
+													</div>
+												</div>
+											))}
+										</div>
+									</DetailSection>
+								)}
 
 								{detailEntry.status === "SUBMITTED" && (
 									<div className="flex gap-3 pt-4 border-t">

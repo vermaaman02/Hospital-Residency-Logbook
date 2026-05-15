@@ -824,90 +824,101 @@ function ReadRow({
 	const isClickable = canEdit && !isPending;
 
 	return (
-		<TableRow
-			className={cn(
-				"transition-colors",
-				entry.status === "SIGNED" && "bg-green-50/50",
-				entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
-				isClickable && "cursor-pointer hover:bg-blue-50/40",
-			)}
-			onClick={isClickable ? onClick : undefined}
-		>
-			<TableCell className="text-center font-medium">{entry.slNo}.</TableCell>
-			<TableCell className="text-center text-sm">
-				{entry.date ? format(new Date(entry.date), "dd/MM/yyyy") : "—"}
-			</TableCell>
-			<TableCell className="text-sm max-w-48">
-				{entry.journalArticle ?
-					<span
-						dangerouslySetInnerHTML={{
-							__html: renderMarkdown(entry.journalArticle),
-						}}
-					/>
-				:	"—"}
-			</TableCell>
-			<TableCell className="text-sm max-w-40">
-				{entry.typeOfStudy ?
-					<span
-						dangerouslySetInnerHTML={{
-							__html: renderMarkdown(entry.typeOfStudy),
-						}}
-					/>
-				:	"—"}
-			</TableCell>
-			<TableCell className="text-sm max-w-36">
-				{entry.facultyRemark ?
-					<span
-						dangerouslySetInnerHTML={{
-							__html: renderMarkdown(entry.facultyRemark),
-						}}
-					/>
-				:	"—"}
-			</TableCell>
-			<TableCell className="text-center text-sm">
-				{getFacultyName(entry.facultyId)}
-			</TableCell>
-			<TableCell className="text-center">
-				<StatusBadge status={entry.status as EntryStatus} size="sm" />
-				{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
-					<div className="mt-1 text-[10px] text-muted-foreground text-left">
-						<span className="font-medium">Reason:</span>{" "}
+		<>
+			<TableRow
+				className={cn(
+					"transition-colors",
+					entry.status === "SIGNED" && "bg-green-50/50",
+					entry.status === "NEEDS_REVISION" && "bg-orange-50/50",
+					isClickable && "cursor-pointer hover:bg-blue-50/40",
+				)}
+				onClick={isClickable ? onClick : undefined}
+			>
+				<TableCell className="text-center font-medium">{entry.slNo}.</TableCell>
+				<TableCell className="text-center text-sm">
+					{entry.date ? format(new Date(entry.date), "dd/MM/yyyy") : "—"}
+				</TableCell>
+				<TableCell className="text-sm max-w-48">
+					{entry.journalArticle ?
+						<span
+							dangerouslySetInnerHTML={{
+								__html: renderMarkdown(entry.journalArticle),
+							}}
+						/>
+					:	"—"}
+				</TableCell>
+				<TableCell className="text-sm max-w-40">
+					{entry.typeOfStudy ?
+						<span
+							dangerouslySetInnerHTML={{
+								__html: renderMarkdown(entry.typeOfStudy),
+							}}
+						/>
+					:	"—"}
+				</TableCell>
+				<TableCell className="text-sm max-w-36">
+					{entry.facultyRemark ?
 						<span
 							dangerouslySetInnerHTML={{
 								__html: renderMarkdown(entry.facultyRemark),
 							}}
 						/>
+					:	"—"}
+				</TableCell>
+				<TableCell className="text-center text-sm">
+					{getFacultyName(entry.facultyId)}
+				</TableCell>
+				<TableCell className="text-center">
+					<StatusBadge status={entry.status as EntryStatus} size="sm" />
+				</TableCell>
+				<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+					<div className="flex items-center justify-center gap-0.5">
+						{canEdit && onSubmit && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-hospital-primary hover:text-hospital-primary"
+								title="Submit for review"
+								onClick={onSubmit}
+								disabled={isPending}
+							>
+								<Send className="h-3.5 w-3.5" />
+							</Button>
+						)}
+						{entry.status === "DRAFT" && onDelete && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-destructive hover:text-destructive"
+								title="Delete"
+								onClick={onDelete}
+								disabled={isPending}
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+							</Button>
+						)}
 					</div>
-				)}
-			</TableCell>
-			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-				<div className="flex items-center justify-center gap-0.5">
-					{canEdit && onSubmit && (
-						<Button
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-hospital-primary hover:text-hospital-primary"
-							title="Submit for review"
-							onClick={onSubmit}
-							disabled={isPending}
-						>
-							<Send className="h-3.5 w-3.5" />
-						</Button>
-					)}
-					{entry.status === "DRAFT" && onDelete && (
-						<Button
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-destructive hover:text-destructive"
-							title="Delete"
-							onClick={onDelete}
-							disabled={isPending}
-						>
-							<Trash2 className="h-3.5 w-3.5" />
-						</Button>
-					)}
-				</div>
-			</TableCell>
-		</TableRow>
+				</TableCell>
+			</TableRow>
+
+			{/* Rejection Reason Row for Needs Revision */}
+			{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+				<TableRow className="bg-orange-100/50">
+					<TableCell colSpan={8} className="p-3">
+						<div className="flex items-start gap-2">
+							<div className="text-orange-700 font-medium text-sm shrink-0">
+								Rejection Reason:
+							</div>
+							<div
+								className="text-sm text-orange-800 prose prose-sm max-w-none"
+								dangerouslySetInnerHTML={{
+									__html: renderMarkdown(entry.facultyRemark),
+								}}
+							/>
+						</div>
+					</TableCell>
+				</TableRow>
+			)}
+		</>
 	);
 }

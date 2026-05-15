@@ -121,6 +121,17 @@ export interface CasePresentationSubmission {
 		batchRelation: { name: string } | null;
 		currentSemester: number | null;
 	};
+	signatures?: Array<{
+		id: string;
+		signedById: string;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+		remark: string | null;
+		signedAt: string;
+	}>;
 }
 
 interface CasePresentationReviewClientProps {
@@ -954,6 +965,34 @@ export function CasePresentationReviewClient({
 										)}
 									</div>
 								</DetailSection>
+
+								{/* Signer Information */}
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signed By" icon={CheckCircle2}>
+										{detailEntry.signatures.map((sig) => (
+											<div
+												key={sig.id}
+												className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+											>
+												<div className="font-medium text-green-800">
+													Dr. {sig.signedBy.firstName}{" "}
+													{sig.signedBy.lastName}
+												</div>
+												{sig.remark && (
+													<div
+														className="mt-1 text-green-700"
+														dangerouslySetInnerHTML={{
+															__html: renderMarkdown(sig.remark),
+														}}
+													/>
+												)}
+												<div className="mt-1 text-xs text-green-600">
+													{format(new Date(sig.signedAt), "dd MMM yyyy, HH:mm")}
+												</div>
+											</div>
+										))}
+									</DetailSection>
+								)}
 
 								{/* Action Buttons */}
 								{detailEntry.status === "SUBMITTED" && (
