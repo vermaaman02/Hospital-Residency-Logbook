@@ -279,13 +279,13 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	consent.forEach(i => items.push({
 		id: i.id, module: "Consent Logs", title: "Consent Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=consent`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/consent-bad-news`
 	}));
 
 	badNews.forEach(i => items.push({
 		id: i.id, module: "Bad News Logs", title: "Bad News Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=bad-news`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/consent-bad-news`
 	}));
 
 	courses.forEach(i => items.push({

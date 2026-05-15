@@ -571,28 +571,57 @@ export async function submitConsentLog(id: string) {
 	const autoReview = await isAutoReviewEnabled("consentLogs");
 
 	if (autoReview) {
-		await prisma.$transaction([
-			prisma.consentLog.update({
+		await prisma.$transaction(async (tx) => {
+			await tx.consentLog.update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			prisma.digitalSignature.create({
+			});
+			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
 					entityType: "ConsentLog",
 					entityId: id,
 					remark: "Auto-reviewed by system",
 				},
-			}),
-		]);
-	} else {
-		await prisma.consentLog.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+			});
+			await recordReview(tx, {
+				entityType: "ConsentLog",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed by system",
+			});
 		});
+	} else {
+		await prisma.$transaction(async (tx) => {
+			await tx.consentLog.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "ConsentLog",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: buildSnapshot(existing),
+				attachments: [],
+			});
+		});
+
+		// Send notification to student on submission
+		await sendNotificationToUser(user.id, {
+			title: "Consent & Bad News - Consent Submitted",
+			body: `Your consent log entry${existing.completeDiagnosis ? ` for "${existing.completeDiagnosis}"` : ""} has been submitted for review.`,
+			type: "entry_submitted",
+			entityType: "ConsentLog",
+			entityId: id,
+			href: "/dashboard/student/consent-bad-news",
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 	}
 
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -654,25 +683,45 @@ export async function signConsentLog(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.consentLog.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.consentLog.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "ConsentLog",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "ConsentLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark: remark || `[${user.firstName} ${user.lastName}] Signed`,
+		});
+	});
+
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Consent & Bad News - Consent Signed",
+		body: `Your consent log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+		type: "entry_signed",
+		entityType: "ConsentLog",
+		entityId: id,
+		href: "/dashboard/student/consent-bad-news",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -682,19 +731,40 @@ export async function rejectConsentLog(id: string, remark: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	const entry = await prisma.consentLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.consentLog.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.consentLog.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "ConsentLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Consent & Bad News - Consent Needs Revision",
+		body: `Your consent log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} needs revision: ${remark}`,
+		type: "entry_rejected",
+		entityType: "ConsentLog",
+		entityId: id,
+		href: "/dashboard/student/consent-bad-news",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -702,29 +772,49 @@ export async function bulkSignConsentLogs(ids: string[]) {
 	const { userId } = await requireRole(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
-	const entries = await prisma.consentLog.findMany({
-		where: { id: { in: ids }, status: "SUBMITTED" as never },
-	});
-	if (entries.length === 0) throw new Error("No valid entries to sign");
+  const entries = await prisma.consentLog.findMany({
+    where: { id: { in: ids }, status: "SUBMITTED" as never },
+  });
+  if (entries.length === 0) throw new Error("No valid entries to sign");
 
-	await prisma.$transaction([
-		prisma.consentLog.updateMany({
-			where: { id: { in: entries.map((e) => e.id) } },
-			data: { status: "SIGNED" },
-		}),
-		...entries.map((entry) =>
-			prisma.digitalSignature.create({
-				data: {
-					signedById: user.id,
-					entityType: "ConsentLog",
-					entityId: entry.id,
-				},
-			}),
-		),
-	]);
+  await prisma.$transaction(async (tx) => {
+    await tx.consentLog.updateMany({
+      where: { id: { in: entries.map((e) => e.id) } },
+      data: { status: "SIGNED" },
+    });
+    for (const entry of entries) {
+      await tx.digitalSignature.create({
+        data: {
+          signedById: user.id,
+          entityType: "ConsentLog",
+          entityId: entry.id,
+        },
+      });
+      await recordReview(tx, {
+        entityType: "ConsentLog",
+        entityId: entry.id,
+        ownerId: entry.userId,
+        reviewerId: user.id,
+        reviewerRole: "faculty",
+        decision: "SIGNED",
+        remark: "Bulk signed",
+      });
 
-	revalidateConsentBadNews();
-	return { success: true, signedCount: entries.length };
+      // Send notification to student for each entry
+      await sendNotificationToUser(entry.userId, {
+        title: "Consent & Bad News - Consent Signed",
+        body: `Your consent log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+        type: "entry_signed",
+        entityType: "ConsentLog",
+        entityId: entry.id,
+        href: "/dashboard/student/consent-bad-news",
+      }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+    }
+  });
+
+  revalidateConsentBadNews();
+  await emitRealtimeEvent("entry:updated");
+  return { success: true, signedCount: entries.length };
 }
 
 export async function getStudentConsentLogs(studentId: string) {
@@ -850,28 +940,57 @@ export async function submitBadNewsLog(id: string) {
 	const autoReview = await isAutoReviewEnabled("badNewsLogs");
 
 	if (autoReview) {
-		await prisma.$transaction([
-			prisma.badNewsLog.update({
+		await prisma.$transaction(async (tx) => {
+			await tx.badNewsLog.update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			prisma.digitalSignature.create({
+			});
+			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
 					entityType: "BadNewsLog",
 					entityId: id,
 					remark: "Auto-reviewed by system",
 				},
-			}),
-		]);
-	} else {
-		await prisma.badNewsLog.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+			});
+			await recordReview(tx, {
+				entityType: "BadNewsLog",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed by system",
+			});
 		});
+	} else {
+		await prisma.$transaction(async (tx) => {
+			await tx.badNewsLog.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "BadNewsLog",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: buildSnapshot(existing),
+				attachments: [],
+			});
+		});
+
+		// Send notification to student on submission
+		await sendNotificationToUser(user.id, {
+			title: "Consent & Bad News - Bad News Submitted",
+			body: `Your bad news log entry${existing.completeDiagnosis ? ` for "${existing.completeDiagnosis}"` : ""} has been submitted for review.`,
+			type: "entry_submitted",
+			entityType: "BadNewsLog",
+			entityId: id,
+			href: "/dashboard/student/consent-bad-news",
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 	}
 
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -933,25 +1052,45 @@ export async function signBadNewsLog(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.badNewsLog.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.badNewsLog.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "BadNewsLog",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "BadNewsLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "SIGNED",
+			remark: remark || `[${user.firstName} ${user.lastName}] Signed`,
+		});
+	});
+
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Consent & Bad News - Bad News Signed",
+		body: `Your bad news log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+		type: "entry_signed",
+		entityType: "BadNewsLog",
+		entityId: id,
+		href: "/dashboard/student/consent-bad-news",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -961,19 +1100,40 @@ export async function rejectBadNewsLog(id: string, remark: string) {
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
-
 	const entry = await prisma.badNewsLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.badNewsLog.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.badNewsLog.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "BadNewsLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: "faculty",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Consent & Bad News - Bad News Needs Revision",
+		body: `Your bad news log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} needs revision: ${remark}`,
+		type: "entry_rejected",
+		entityType: "BadNewsLog",
+		entityId: id,
+		href: "/dashboard/student/consent-bad-news",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -986,23 +1146,43 @@ export async function bulkSignBadNewsLogs(ids: string[]) {
 	});
 	if (entries.length === 0) throw new Error("No valid entries to sign");
 
-	await prisma.$transaction([
-		prisma.badNewsLog.updateMany({
+	await prisma.$transaction(async (tx) => {
+		await tx.badNewsLog.updateMany({
 			where: { id: { in: entries.map((e) => e.id) } },
 			data: { status: "SIGNED" },
-		}),
-		...entries.map((entry) =>
-			prisma.digitalSignature.create({
+		});
+		for (const entry of entries) {
+			await tx.digitalSignature.create({
 				data: {
 					signedById: user.id,
 					entityType: "BadNewsLog",
 					entityId: entry.id,
 				},
-			}),
-		),
-	]);
+			});
+			await recordReview(tx, {
+				entityType: "BadNewsLog",
+				entityId: entry.id,
+				ownerId: entry.userId,
+				reviewerId: user.id,
+				reviewerRole: "faculty",
+				decision: "SIGNED",
+				remark: "Bulk signed",
+			});
+
+			// Send notification to student for each entry
+			await sendNotificationToUser(entry.userId, {
+				title: "Consent & Bad News - Bad News Signed",
+				body: `Your bad news log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+				type: "entry_signed",
+				entityType: "BadNewsLog",
+				entityId: entry.id,
+				href: "/dashboard/student/consent-bad-news",
+			}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+		}
+	});
 
 	revalidateConsentBadNews();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 
