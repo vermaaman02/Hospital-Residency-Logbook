@@ -16,6 +16,8 @@ import {
 } from "./ClinicalSkillTable";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
 import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/lib/socket";
 
 interface ClinicalSkillsClientProps {
 	adultEntries: ClinicalSkillEntry[];
@@ -28,6 +30,13 @@ export function ClinicalSkillsClient({
 	pediatricEntries,
 	facultyList,
 }: ClinicalSkillsClientProps) {
+	const router = useRouter();
+
+	// Real-time refresh on clinical skills events - re-fetch data from server
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
+
 	// ---- Export ----
 
 	const buildStudentExport = useCallback(

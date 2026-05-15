@@ -94,6 +94,7 @@ export async function initializeClinicalSkills(type: "adult" | "pediatric") {
 	);
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { initialized: true };
 }
 
@@ -232,7 +233,7 @@ export async function submitClinicalSkill(
 	}
 
 	revalidateAll();
-	emitRealtimeEvent(autoReview ? "entry:signed" : "entry:created", { module: "clinical-skills", type, id });
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true };
 }
 
@@ -269,8 +270,10 @@ export async function getClinicalSkillsForReview(type: "adult" | "pediatric") {
 			{ userId: { in: studentIds }, status: { not: "DRAFT" as never } }
 		:	{ status: { not: "DRAFT" as never } };
 	const model = getModel(type);
+	const entityType =
+		type === "adult" ? "ClinicalSkillAdult" : "ClinicalSkillPediatric";
 
-	return (model as typeof prisma.clinicalSkillAdult).findMany({
+	const skills = await (model as typeof prisma.clinicalSkillAdult).findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -286,6 +289,31 @@ export async function getClinicalSkillsForReview(type: "adult" | "pediatric") {
 			},
 		},
 	});
+
+	// Fetch signatures separately
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType,
+			entityId: { in: skills.map((s) => s.id) },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Attach signatures to skills
+	const skillsWithSignatures = skills.map((s) => ({
+		...s,
+		signatures: signatures.filter((sig) => sig.entityId === s.id),
+	}));
+
+	return skillsWithSignatures;
 }
 
 /**
@@ -340,7 +368,7 @@ export async function signClinicalSkill(
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:signed", { module: "clinical-skills", type, id });
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true };
 }
 
@@ -386,7 +414,7 @@ export async function rejectClinicalSkill(
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:rejected", { module: "clinical-skills", type, id });
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true };
 }
 
@@ -436,7 +464,7 @@ export async function bulkSignClinicalSkills(
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:bulk-signed", { module: "clinical-skills", type, count: entries.length });
+	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true, signedCount: entries.length };
 }
 
