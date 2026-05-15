@@ -64,6 +64,7 @@ export async function addProcedureLogRow(procedureCategory: string) {
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return entry;
 }
 
@@ -82,6 +83,7 @@ export async function deleteProcedureLogEntry(id: string) {
 
 	await prisma.procedureLog.delete({ where: { id } });
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -220,6 +222,7 @@ export async function updateProcedureLogEntry(
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -272,6 +275,7 @@ export async function submitProcedureLogEntry(id: string) {
 	}
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -306,7 +310,7 @@ export async function getProcedureLogsForReview(procedureCategory?: string) {
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 	if (procedureCategory) where.procedureCategory = procedureCategory as never;
 
-	return prisma.procedureLog.findMany({
+	const entries = await prisma.procedureLog.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -322,6 +326,40 @@ export async function getProcedureLogsForReview(procedureCategory?: string) {
 			},
 		},
 	});
+
+	// Fetch digital signatures for all entries
+	const entryIds = entries.map((e) => e.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "ProcedureLog",
+			entityId: { in: entryIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+		orderBy: { signedAt: "desc" },
+	});
+
+	// Create a map of entityId to signatures
+	const signaturesMap = new Map<string, typeof signatures>();
+	for (const sig of signatures) {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)?.push(sig);
+	}
+
+	// Attach signatures to entries
+	return entries.map((entry) => ({
+		...entry,
+		signatures: signaturesMap.get(entry.id) || [],
+	}));
 }
 
 export async function signProcedureLogEntry(id: string, remark?: string) {
@@ -362,6 +400,7 @@ export async function signProcedureLogEntry(id: string, remark?: string) {
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -393,6 +432,7 @@ export async function rejectProcedureLogEntry(id: string, remark: string) {
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -423,6 +463,7 @@ export async function bulkSignProcedureLogEntries(ids: string[]) {
 	]);
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

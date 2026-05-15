@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Badge } from "@/components/ui/badge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Loader2,
 	Send,
@@ -73,6 +74,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/lib/socket";
 import {
 	MarkdownEditor,
 	renderMarkdown,
@@ -177,6 +179,11 @@ export function ProcedureLogTable({
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
 	const [currentPage, setCurrentPage] = useState(1);
+
+	// Real-time refresh on procedure log events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	const skillLevelOptions =
 		isCpr ? CPR_SKILL_LEVEL_OPTIONS : STANDARD_SKILL_LEVEL_OPTIONS;
@@ -440,16 +447,43 @@ export function ProcedureLogTable({
 												getFacultyName={getFacultyName}
 												skillLevelOptions={skillLevelOptions}
 											/>
-										:	<ReadRow
-												key={entry.id}
-												entry={entry}
-												onEdit={() => startEditing(entry)}
-												onSubmit={() => handleSubmit(entry.id)}
-												onDelete={() => handleDelete(entry.id)}
-												isPending={isPending}
-												getFacultyName={getFacultyName}
-												skillLabel={skillLabel}
-											/>,
+										:	<>
+												<ReadRow
+													key={entry.id}
+													entry={entry}
+													onEdit={() => startEditing(entry)}
+													onSubmit={() => handleSubmit(entry.id)}
+													onDelete={() => handleDelete(entry.id)}
+													isPending={isPending}
+													getFacultyName={getFacultyName}
+													skillLabel={skillLabel}
+												/>
+												{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+													<TableRow key={`${entry.id}-rejection`}>
+														<TableCell
+															colSpan={12}
+															className="px-4 py-2"
+														>
+															<div className="bg-orange-50/50 border border-orange-200/50 rounded-lg p-3 text-sm">
+																<div className="flex items-center gap-2 mb-1">
+																	<AlertTriangle className="h-4 w-4 text-orange-600" />
+																	<span className="font-medium text-orange-800">
+																		Revision Required
+																	</span>
+																</div>
+																<div
+																	className="prose prose-sm max-w-none text-orange-900"
+																	dangerouslySetInnerHTML={{
+																		__html: renderMarkdown(
+																			entry.facultyRemark,
+																		),
+																	}}
+																/>
+															</div>
+														</TableCell>
+													</TableRow>
+												)}
+											</>,
 									)}
 								</TableBody>
 							</Table>
@@ -969,6 +1003,18 @@ function ReadRow({
 						>
 							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
+					)}
+					{entry.status !== "DRAFT" && (
+						<RevisionThreadButton
+							entityType="ProcedureLog"
+							entityId={entry.id}
+							title={`History — Procedure #${entry.slNo}`}
+							description={`Submission and review history for this procedure log`}
+							variant="ghost"
+							size="sm"
+							className="h-7 w-7"
+							label=""
+						/>
 					)}
 				</div>
 			</TableCell>

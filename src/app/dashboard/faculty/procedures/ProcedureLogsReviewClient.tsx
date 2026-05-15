@@ -66,6 +66,7 @@ import {
 	renderMarkdown,
 } from "@/components/shared/MarkdownEditor";
 import { ExportDropdown } from "@/components/shared/ExportDropdown";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Search,
 	CheckCircle2,
@@ -91,6 +92,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { format } from "date-fns";
 import {
 	signProcedureLogEntry,
 	rejectProcedureLogEntry,
@@ -100,6 +102,7 @@ import { toggleAutoReview } from "@/actions/auto-review";
 import { PROCEDURE_CATEGORIES } from "@/lib/constants/procedure-categories";
 import { SKILL_LEVEL_LABELS } from "@/lib/constants/procedure-log-fields";
 import type { EntryStatus } from "@/types";
+import { useSocketEvent } from "@/lib/socket";
 
 // ======================== TYPES ========================
 
@@ -129,6 +132,16 @@ export interface ProcedureLogSubmission {
 		currentSemester: number | null;
 		batchRelation: { name: string } | null;
 	};
+	signatures?: Array<{
+		id: string;
+		remark: string | null;
+		signedAt: Date;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+	}>;
 }
 
 interface ProcedureLogsReviewClientProps {
@@ -154,6 +167,11 @@ export function ProcedureLogsReviewClient({
 }: ProcedureLogsReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on procedure log events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	const searchParams = useSearchParams();
 	const initialCategory = searchParams.get("tab") || "ALL";
@@ -878,6 +896,16 @@ export function ProcedureLogsReviewClient({
 														</Button>
 													</>
 												)}
+												<RevisionThreadButton
+													entityType="ProcedureLog"
+													entityId={entry.id}
+													title={`History — Procedure #${entry.slNo}`}
+													description={`Submission and review history for ${entry.user.firstName} ${entry.user.lastName}`}
+													variant="ghost"
+													size="sm"
+													className="h-7 w-7"
+													label=""
+												/>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -1069,6 +1097,31 @@ export function ProcedureLogsReviewClient({
 												__html: renderMarkdown(detailEntry.facultyRemark),
 											}}
 										/>
+									</DetailSection>
+								)}
+
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signer Information" icon={Activity}>
+										<div className="space-y-3">
+											{detailEntry.signatures.map((sig) => (
+												<div
+													key={sig.id}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-medium text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div className="text-green-800 mt-1 text-xs">
+															{sig.remark}
+														</div>
+													)}
+													<div className="text-green-700 mt-1 text-xs">
+														{format(new Date(sig.signedAt), "MMM d, yyyy · h:mm a")}
+													</div>
+												</div>
+											))}
+										</div>
 									</DetailSection>
 								)}
 
