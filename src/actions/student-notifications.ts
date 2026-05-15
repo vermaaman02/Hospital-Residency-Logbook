@@ -39,6 +39,7 @@ export async function getAppNotifications(): Promise<AppNotificationResult> {
 		else if (m.includes("attendance")) mappedType = "attendance";
 		else if (m.includes("case")) mappedType = "case-management";
 		else if (m.includes("procedure")) mappedType = "procedure-log";
+		else if (m.includes("diagnostic")) mappedType = "diagnostic-skill";
 
 		let message = "";
 		if (user.role === "STUDENT") {

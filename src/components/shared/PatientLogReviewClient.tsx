@@ -11,6 +11,8 @@
 "use client";
 
 import { useState, useTransition, useMemo, useCallback } from "react";
+import { useSocketEvent } from "@/lib/socket";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import type { AutoReviewCategory } from "@/actions/auto-review";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,6 +118,14 @@ export interface PatientLogSubmission {
 	imageUrls?: string[];
 	status: string;
 	createdAt: string;
+	signatures?: Array<{
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+		remark?: string | null;
+	}>;
 	user: {
 		id: string;
 		firstName: string;
@@ -169,6 +179,11 @@ export function PatientLogReviewClient({
 }: PatientLogReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on imaging log events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	const hasCategories = !!categoryOptions && categoryOptions.length > 0;
 
@@ -875,6 +890,12 @@ export function PatientLogReviewClient({
 												>
 													<Eye className="h-3.5 w-3.5" />
 												</Button>
+												{entry.status !== "DRAFT" && (
+													<RevisionThreadButton
+														entityId={entry.id}
+														entityType="ImagingLog"
+													/>
+												)}
 												{entry.status === "SUBMITTED" && (
 													<>
 														<Button
@@ -1103,6 +1124,29 @@ export function PatientLogReviewClient({
 										/>
 									</div>
 								</DetailSection>
+
+								{/* Signer Information */}
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<DetailSection title="Signed By" icon={CheckCircle2}>
+										<div className="space-y-3">
+											{detailEntry.signatures.map((sig, idx) => (
+												<div
+													key={idx}
+													className="bg-green-50/50 border border-green-200/50 rounded-lg p-3 text-sm"
+												>
+													<div className="font-semibold text-green-900">
+														Dr. {sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													{sig.remark && (
+														<div className="text-green-800 mt-1">
+															{sig.remark}
+														</div>
+													)}
+												</div>
+											))}
+										</div>
+									</DetailSection>
+								)}
 
 								{/* Uploaded Images */}
 								<DetailSection title="Uploaded Images" icon={ImageIcon}>

@@ -12,6 +12,8 @@
 "use client";
 
 import { useState, useTransition, useCallback, useMemo } from "react";
+import { useSocketEvent } from "@/lib/socket";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Card,
 	CardContent,
@@ -192,6 +194,12 @@ export function PatientLogTable({
 }: PatientLogTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on imaging log events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
+
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
@@ -465,17 +473,39 @@ export function PatientLogTable({
 												skillLevelOptions={skillLevelOptions}
 												allowImageUpload={allowImageUpload}
 											/>
-										:	<ReadRow
-												key={entry.id}
-												entry={entry}
-												onEdit={() => startEditing(entry)}
-												onSubmit={() => handleSubmit(entry.id)}
-												onDelete={() => handleDelete(entry.id)}
-												isPending={isPending}
-												getFacultyName={getFacultyName}
-												skillLabel={skillLabel}
-												allowImageUpload={allowImageUpload}
-											/>,
+										:	<>
+												<ReadRow
+													key={entry.id}
+													entry={entry}
+													onEdit={() => startEditing(entry)}
+													onSubmit={() => handleSubmit(entry.id)}
+													onDelete={() => handleDelete(entry.id)}
+													isPending={isPending}
+													getFacultyName={getFacultyName}
+													skillLabel={skillLabel}
+													allowImageUpload={allowImageUpload}
+												/>
+												{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+													<TableRow key={`${entry.id}-rejection`}>
+														<TableCell colSpan={allowImageUpload ? 14 : 13} className="bg-orange-50/50">
+															<div className="flex items-start gap-2 py-2 px-3">
+																<AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
+																<div className="flex-1">
+																	<p className="text-xs font-semibold text-orange-900 mb-1">
+																		Revision required
+																	</p>
+																	<div
+																		className="prose prose-sm max-w-none text-xs text-orange-800"
+																		dangerouslySetInnerHTML={{
+																			__html: renderMarkdown(entry.facultyRemark),
+																		}}
+																	/>
+																</div>
+															</div>
+														</TableCell>
+													</TableRow>
+												)}
+											</>,
 									)}
 								</TableBody>
 							</Table>
@@ -911,32 +941,16 @@ function ReadRow({
 				</TableCell>
 			)}
 			<TableCell className="text-center">
-				<div>
-					<StatusBadge status={entry.status as EntryStatus} size="sm" />
-					{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<div className="flex items-center gap-1 mt-1 text-[10px] text-red-600 cursor-help">
-										<AlertTriangle className="h-3 w-3 shrink-0" />
-										<span className="line-clamp-1">Revision needed</span>
-									</div>
-								</TooltipTrigger>
-								<TooltipContent side="top" className="max-w-sm">
-									<div
-										className="prose prose-sm max-w-none text-sm"
-										dangerouslySetInnerHTML={{
-											__html: renderMarkdown(entry.facultyRemark),
-										}}
-									/>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					)}
-				</div>
+				<StatusBadge status={entry.status as EntryStatus} size="sm" />
 			</TableCell>
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				<div className="flex items-center justify-center gap-0.5">
+					{entry.status !== "DRAFT" && (
+						<RevisionThreadButton
+							entityId={entry.id}
+							entityType="ImagingLog"
+						/>
+					)}
 					{entry.status === "DRAFT" && entry.skillLevel && (
 						<Button
 							variant="ghost"
