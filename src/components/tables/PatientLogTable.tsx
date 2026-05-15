@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useState, useTransition, useCallback, useMemo } from "react";
+import React, { useState, useTransition, useCallback, useMemo } from "react";
 import { useSocketEvent } from "@/lib/socket";
 import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
@@ -137,6 +137,7 @@ interface PatientLogTableProps {
 	) => Promise<unknown>;
 	onSubmitEntry: (id: string) => Promise<unknown>;
 	allowImageUpload?: boolean;
+	entityType?: string;
 }
 
 interface InlineForm {
@@ -191,6 +192,7 @@ export function PatientLogTable({
 	onUpdateEntry,
 	onSubmitEntry,
 	allowImageUpload = false,
+	entityType = "ImagingLog",
 }: PatientLogTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -473,9 +475,8 @@ export function PatientLogTable({
 												skillLevelOptions={skillLevelOptions}
 												allowImageUpload={allowImageUpload}
 											/>
-										:	<>
+										:	<React.Fragment key={entry.id}>
 												<ReadRow
-													key={entry.id}
 													entry={entry}
 													onEdit={() => startEditing(entry)}
 													onSubmit={() => handleSubmit(entry.id)}
@@ -484,9 +485,10 @@ export function PatientLogTable({
 													getFacultyName={getFacultyName}
 													skillLabel={skillLabel}
 													allowImageUpload={allowImageUpload}
+													entityType={entityType}
 												/>
 												{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
-													<TableRow key={`${entry.id}-rejection`}>
+													<TableRow>
 														<TableCell colSpan={allowImageUpload ? 14 : 13} className="bg-orange-50/50">
 															<div className="flex items-start gap-2 py-2 px-3">
 																<AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
@@ -505,7 +507,7 @@ export function PatientLogTable({
 														</TableCell>
 													</TableRow>
 												)}
-											</>,
+											</React.Fragment>,
 									)}
 								</TableBody>
 							</Table>
@@ -844,6 +846,7 @@ function ReadRow({
 	getFacultyName,
 	skillLabel,
 	allowImageUpload,
+	entityType,
 }: {
 	entry: PatientLogEntry;
 	onEdit: () => void;
@@ -853,6 +856,7 @@ function ReadRow({
 	getFacultyName: (id: string | null) => string;
 	skillLabel: (val: string | null) => string;
 	allowImageUpload: boolean;
+	entityType: string;
 }) {
 	const isEditable = entry.status !== "SUBMITTED" && entry.status !== "SIGNED";
 
@@ -948,7 +952,7 @@ function ReadRow({
 					{entry.status !== "DRAFT" && (
 						<RevisionThreadButton
 							entityId={entry.id}
-							entityType="ImagingLog"
+							entityType={entityType}
 						/>
 					)}
 					{entry.status === "DRAFT" && entry.skillLevel && (

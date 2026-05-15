@@ -86,6 +86,7 @@ export default async function FacultyImagingPage() {
 				onSign={signImagingLogEntry}
 				onReject={rejectImagingLogEntry}
 				onBulkSign={bulkSignImagingLogEntries}
+				entityType="ImagingLog"
 			/>
 		</div>
 	);

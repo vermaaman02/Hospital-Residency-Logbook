@@ -86,6 +86,7 @@ export function ConsentBadNewsReviewTabs({
 					onSign={signConsentLog}
 					onReject={rejectConsentLog}
 					onBulkSign={bulkSignConsentLogs}
+					entityType="ConsentLog"
 				/>
 			</TabsContent>
 
@@ -101,6 +102,7 @@ export function ConsentBadNewsReviewTabs({
 					onSign={signBadNewsLog}
 					onReject={rejectBadNewsLog}
 					onBulkSign={bulkSignBadNewsLogs}
+					entityType="BadNewsLog"
 				/>
 			</TabsContent>
 		</Tabs>

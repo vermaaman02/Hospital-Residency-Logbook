@@ -70,6 +70,7 @@ export default async function FacultyTransportPage() {
 				onSign={signTransportLog}
 				onReject={rejectTransportLog}
 				onBulkSign={bulkSignTransportLogs}
+				entityType="TransportLog"
 			/>
 		</div>
 	);

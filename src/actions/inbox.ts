@@ -273,7 +273,7 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	transport.forEach(i => items.push({
 		id: i.id, module: "Transport Logs", title: "Transport Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=transport`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/transport`
 	}));
 
 	consent.forEach(i => items.push({

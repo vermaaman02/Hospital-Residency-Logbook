@@ -155,6 +155,7 @@ interface PatientLogReviewClientProps {
 	onSign: (id: string, remark?: string) => Promise<unknown>;
 	onReject: (id: string, remark: string) => Promise<unknown>;
 	onBulkSign: (ids: string[]) => Promise<unknown>;
+	entityType?: string;
 }
 
 type StatusFilter = "ALL" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION" | "DRAFT";
@@ -176,6 +177,7 @@ export function PatientLogReviewClient({
 	onSign,
 	onReject,
 	onBulkSign,
+	entityType = "ImagingLog",
 }: PatientLogReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
@@ -893,7 +895,7 @@ export function PatientLogReviewClient({
 												{entry.status !== "DRAFT" && (
 													<RevisionThreadButton
 														entityId={entry.id}
-														entityType="ImagingLog"
+														entityType={entityType}
 													/>
 												)}
 												{entry.status === "SUBMITTED" && (

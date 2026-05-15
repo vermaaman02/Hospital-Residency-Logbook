@@ -75,6 +75,7 @@ export default async function HodImagingPage() {
 				onSign={signImagingLogEntry}
 				onReject={rejectImagingLogEntry}
 				onBulkSign={bulkSignImagingLogEntries}
+				entityType="ImagingLog"
 			/>
 		</div>
 	);

@@ -59,43 +59,48 @@ export async function getEntryRevisions(
 	});
 	if (!me) throw new Error("User not found");
 
-	const revisions = await getRevisionsFor(entityType, entityId);
-	if (revisions.length === 0) return [];
+	try {
+		const revisions = await getRevisionsFor(entityType, entityId);
+		if (revisions.length === 0) return [];
 
-	const ownerId = revisions[0]?.ownerId;
+		const ownerId = revisions[0]?.ownerId;
 
-	if (role !== "hod" && me.id !== ownerId) {
-		// Faculty: only allow if owner is a student in one of their assigned batches.
-		if (role === "faculty") {
-			const owner = await prisma.user.findUnique({
-				where: { id: ownerId },
-				select: { batchId: true },
-			});
-			if (!owner?.batchId) throw new Error("Not authorised");
-			const fba = await prisma.facultyBatchAssignment.findFirst({
-				where: { facultyId: me.id, batchId: owner.batchId },
-				select: { id: true },
-			});
-			if (!fba) throw new Error("Not authorised");
-		} else {
-			// Student trying to view someone else's thread.
-			throw new Error("Not authorised");
+		if (role !== "hod" && me.id !== ownerId) {
+			// Faculty: only allow if owner is a student in one of their assigned batches.
+			if (role === "faculty") {
+				const owner = await prisma.user.findUnique({
+					where: { id: ownerId },
+					select: { batchId: true },
+				});
+				if (!owner?.batchId) throw new Error("Not authorised");
+				const fba = await prisma.facultyBatchAssignment.findFirst({
+					where: { facultyId: me.id, batchId: owner.batchId },
+					select: { id: true },
+				});
+				if (!fba) throw new Error("Not authorised");
+			} else {
+				// Student trying to view someone else's thread.
+				throw new Error("Not authorised");
+			}
 		}
-	}
 
-	return revisions.map((r) => ({
-		id: r.id,
-		version: r.version,
-		kind: r.kind as "SUBMISSION" | "REVIEW",
-		createdAt: r.createdAt.toISOString(),
-		snapshot: (r.snapshot as Record<string, unknown> | null) ?? null,
-		attachments: r.attachments ?? [],
-		submittedAt: r.submittedAt ? r.submittedAt.toISOString() : null,
-		reviewerId: r.reviewerId,
-		reviewerRole: r.reviewerRole,
-		reviewerName:
-			r.reviewer ? `${r.reviewer.firstName} ${r.reviewer.lastName}` : null,
-		decision: r.decision as RevisionThreadItem["decision"],
-		remark: r.remark,
-	}));
+		return revisions.map((r) => ({
+			id: r.id,
+			version: r.version,
+			kind: r.kind as "SUBMISSION" | "REVIEW",
+			createdAt: r.createdAt.toISOString(),
+			snapshot: (r.snapshot as Record<string, unknown> | null) ?? null,
+			attachments: r.attachments ?? [],
+			submittedAt: r.submittedAt ? r.submittedAt.toISOString() : null,
+			reviewerId: r.reviewerId,
+			reviewerRole: r.reviewerRole,
+			reviewerName:
+				r.reviewer ? `${r.reviewer.firstName} ${r.reviewer.lastName}` : null,
+			decision: r.decision as RevisionThreadItem["decision"],
+			remark: r.remark,
+		}));
+	} catch (error) {
+		console.error("[REVISION_FETCH_ERROR]", error);
+		throw error;
+	}
 }

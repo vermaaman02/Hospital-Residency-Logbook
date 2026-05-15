@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -74,6 +76,7 @@ export async function addTransportLogRow() {
 	});
 
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return entry;
 }
 
@@ -89,6 +92,7 @@ export async function deleteTransportLog(id: string) {
 
 	await prisma.transportLog.delete({ where: { id } });
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -147,7 +151,20 @@ export async function updateTransportLog(
 		},
 	});
 
+	// Record update revision for tracking changes
+	await prisma.entryRevision.create({
+		data: {
+			entityType: "TransportLog",
+			entityId: id,
+			ownerId: user.id,
+			version: await prisma.entryRevision.count({ where: { entityId: id } }) + 1,
+			kind: "SUBMISSION",
+			snapshot: buildSnapshot(entry) as any,
+		},
+	}).catch((e) => console.error("[REVISION_ERROR]", e));
+
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, data: entry };
 }
 
@@ -166,28 +183,55 @@ export async function submitTransportLog(id: string) {
 	const autoReview = await isAutoReviewEnabled("transportLogs");
 
 	if (autoReview) {
-		await prisma.$transaction([
-			prisma.transportLog.update({
+		await prisma.$transaction(async (tx) => {
+			await tx.transportLog.update({
 				where: { id },
 				data: { status: "SIGNED" },
-			}),
-			prisma.digitalSignature.create({
+			});
+			await tx.digitalSignature.create({
 				data: {
 					signedById: "auto-review",
 					entityType: "TransportLog",
 					entityId: id,
 					remark: "Auto-reviewed by system",
 				},
-			}),
-		]);
-	} else {
-		await prisma.transportLog.update({
-			where: { id },
-			data: { status: "SUBMITTED" },
+			});
+			await recordReview(tx, {
+				entityType: "TransportLog",
+				entityId: id,
+				ownerId: existing.userId,
+				reviewerId: "auto-review",
+				reviewerRole: "hod",
+				decision: "SIGNED",
+				remark: "Auto-reviewed by system",
+			});
 		});
+	} else {
+		await prisma.$transaction(async (tx) => {
+			await tx.transportLog.update({
+				where: { id },
+				data: { status: "SUBMITTED" },
+			});
+			await recordSubmission(tx, {
+				entityType: "TransportLog",
+				entityId: id,
+				ownerId: user.id,
+				snapshot: buildSnapshot(existing),
+			});
+		});
+
+		// Send notification to student on submission
+		await sendNotificationToUser(user.id, {
+			title: "Transport Log Submitted",
+			body: "Your transport log entry has been submitted for review.",
+			type: "entry_submitted",
+			entityType: "TransportLog",
+			entityId: id,
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 	}
 
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -221,7 +265,7 @@ export async function getTransportLogsForReview() {
 	};
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 
-	return prisma.transportLog.findMany({
+	const entries = await prisma.transportLog.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -237,6 +281,36 @@ export async function getTransportLogsForReview() {
 			},
 		},
 	});
+
+	// Fetch digital signatures for each entry
+	const entryIds = entries.map((e) => e.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityId: { in: entryIds },
+			entityType: "TransportLog",
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Attach signatures to entries
+	const signaturesMap = new Map<string, typeof signatures>();
+	signatures.forEach((sig) => {
+		const existing = signaturesMap.get(sig.entityId) || [];
+		signaturesMap.set(sig.entityId, [...existing, sig]);
+	});
+
+	return entries.map((entry) => ({
+		...entry,
+		signatures: signaturesMap.get(entry.id) || [],
+	}));
 }
 
 export async function signTransportLog(id: string, remark?: string) {
@@ -249,25 +323,44 @@ export async function signTransportLog(id: string, remark?: string) {
 		throw new Error("Entry must be submitted before signing");
 	}
 
-	await prisma.$transaction([
-		prisma.transportLog.update({
+	await prisma.$transaction(async (tx) => {
+		await tx.transportLog.update({
 			where: { id },
 			data: {
 				status: "SIGNED",
 				facultyRemark: remark || entry.facultyRemark,
 			},
-		}),
-		prisma.digitalSignature.create({
+		});
+		await tx.digitalSignature.create({
 			data: {
 				signedById: user.id,
 				entityType: "TransportLog",
 				entityId: id,
 				remark,
 			},
-		}),
-	]);
+		});
+		await recordReview(tx, {
+			entityType: "TransportLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: user.role as "faculty" | "hod",
+			decision: "SIGNED",
+			remark: remark || undefined,
+		});
+	});
+
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Transport Log Signed",
+		body: "Your transport log entry has been signed.",
+		type: "entry_signed",
+		entityType: "TransportLog",
+		entityId: id,
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -281,15 +374,36 @@ export async function rejectTransportLog(id: string, remark: string) {
 	const entry = await prisma.transportLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
 
-	await prisma.transportLog.update({
-		where: { id },
-		data: {
-			status: "NEEDS_REVISION",
-			facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
-		},
+	await prisma.$transaction(async (tx) => {
+		await tx.transportLog.update({
+			where: { id },
+			data: {
+				status: "NEEDS_REVISION",
+				facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
+			},
+		});
+		await recordReview(tx, {
+			entityType: "TransportLog",
+			entityId: id,
+			ownerId: entry.userId,
+			reviewerId: user.id,
+			reviewerRole: user.role as "faculty" | "hod",
+			decision: "NEEDS_REVISION",
+			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
+		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Transport Log Needs Revision",
+		body: `Your transport log entry needs revision: ${remark}`,
+		type: "entry_rejected",
+		entityType: "TransportLog",
+		entityId: id,
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -318,7 +432,19 @@ export async function bulkSignTransportLogs(ids: string[]) {
 		),
 	]);
 
+	// Send notification to student for each entry
+	for (const entry of entries) {
+		await sendNotificationToUser(entry.userId, {
+			title: "Transport Log Signed",
+			body: "Your transport log entry has been signed.",
+			type: "entry_signed",
+			entityType: "TransportLog",
+			entityId: entry.id,
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+	}
+
 	revalidateTransport();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

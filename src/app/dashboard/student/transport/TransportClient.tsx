@@ -152,6 +152,7 @@ export function TransportClient({
 				onDeleteEntry={deleteTransportLog}
 				onUpdateEntry={updateTransportLog}
 				onSubmitEntry={submitTransportLog}
+				entityType="TransportLog"
 			/>
 		</div>
 	);
