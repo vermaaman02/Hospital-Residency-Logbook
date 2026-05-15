@@ -66,6 +66,7 @@ export async function initializeCaseManagement(category: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management", category });
 	return { initialized: true };
 }
 
@@ -95,6 +96,7 @@ export async function addCaseManagementRow(category: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management", category });
 	return entry;
 }
 
@@ -113,6 +115,7 @@ export async function deleteCaseManagementEntry(id: string) {
 
 	await prisma.caseManagementLog.delete({ where: { id } });
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
@@ -252,6 +255,7 @@ export async function updateCaseManagementEntry(
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true, data: entry };
 }
 
@@ -319,6 +323,7 @@ export async function submitCaseManagementEntry(id: string) {
 	}
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
@@ -353,7 +358,7 @@ export async function getCaseManagementForReview(category?: string) {
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 	if (category) where.category = category as never;
 
-	return prisma.caseManagementLog.findMany({
+	const entries = await prisma.caseManagementLog.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -369,6 +374,56 @@ export async function getCaseManagementForReview(category?: string) {
 			},
 		},
 	});
+
+	// Fetch digital signatures for all entries
+	const entryIds = entries.map((e) => e.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "CaseManagementLog",
+			entityId: { in: entryIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+		orderBy: { signedAt: "desc" },
+	});
+
+	// Create a map of entityId to signatures
+	const signaturesMap = new Map<string, typeof signatures>();
+	for (const sig of signatures) {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)?.push(sig);
+	}
+
+	// Fetch faculty information for all entries
+	const facultyIds = entries
+		.map((e) => e.facultyId)
+		.filter((id): id is string => id !== null);
+	const facultyMap = new Map<string, { id: string; firstName: string; lastName: string }>();
+	if (facultyIds.length > 0) {
+		const facultyList = await prisma.user.findMany({
+			where: { id: { in: facultyIds } },
+			select: { id: true, firstName: true, lastName: true },
+		});
+		for (const faculty of facultyList) {
+			facultyMap.set(faculty.id, faculty);
+		}
+	}
+
+	// Attach signatures and faculty to entries
+	return entries.map((entry) => ({
+		...entry,
+		signatures: signaturesMap.get(entry.id) || [],
+		faculty: entry.facultyId ? facultyMap.get(entry.facultyId) || null : null,
+	}));
 }
 
 export async function signCaseManagementEntry(id: string, remark?: string) {
@@ -409,6 +464,7 @@ export async function signCaseManagementEntry(id: string, remark?: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
@@ -441,6 +497,7 @@ export async function rejectCaseManagementEntry(id: string, remark: string) {
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
@@ -471,6 +528,7 @@ export async function bulkSignCaseManagementEntries(ids: string[]) {
 	]);
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true, signedCount: entries.length };
 }
 
@@ -485,8 +543,29 @@ export async function getStudentCaseManagement(
 	const where: Record<string, unknown> = { userId: studentId };
 	if (category) where.category = category as never;
 
-	return prisma.caseManagementLog.findMany({
+	const entries = await prisma.caseManagementLog.findMany({
 		where,
 		orderBy: [{ category: "asc" }, { slNo: "asc" }],
 	});
+
+	// Fetch faculty information for all entries
+	const facultyIds = entries
+		.map((e) => e.facultyId)
+		.filter((id): id is string => id !== null);
+	const facultyMap = new Map<string, { id: string; firstName: string; lastName: string }>();
+	if (facultyIds.length > 0) {
+		const facultyList = await prisma.user.findMany({
+			where: { id: { in: facultyIds } },
+			select: { id: true, firstName: true, lastName: true },
+		});
+		for (const faculty of facultyList) {
+			facultyMap.set(faculty.id, faculty);
+		}
+	}
+
+	// Attach faculty to entries
+	return entries.map((entry) => ({
+		...entry,
+		faculty: entry.facultyId ? facultyMap.get(entry.facultyId) || null : null,
+	}));
 }

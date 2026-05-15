@@ -56,6 +56,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import { Badge } from "@/components/ui/badge";
 import {
 	Loader2,
@@ -73,6 +74,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/lib/socket";
 import {
 	MarkdownEditor,
 	renderMarkdown,
@@ -167,6 +169,11 @@ export function CaseManagementTable({
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<InlineForm>(emptyForm);
 	const [facultyPickerOpen, setFacultyPickerOpen] = useState(false);
+
+	// Real-time refresh on case management events - re-fetch data from server
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 	const [currentPage, setCurrentPage] = useState(1);
 
 	const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
@@ -808,7 +815,8 @@ function ReadRow({
 	const isEditable = entry.status !== "SUBMITTED" && entry.status !== "SIGNED";
 
 	return (
-		<TableRow
+		<>
+			<TableRow
 			className={cn(
 				"transition-colors",
 				isEditable && "cursor-pointer hover:bg-muted/30",
@@ -928,6 +936,16 @@ function ReadRow({
 			{/* Actions */}
 			<TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
 				<div className="flex items-center justify-center gap-0.5">
+					<RevisionThreadButton
+						entityType="CaseManagementLog"
+						entityId={entry.id}
+						title={`History — ${entry.caseSubCategory}`}
+						description={`Submission and review history for ${entry.caseSubCategory}`}
+						variant="ghost"
+						size="sm"
+						className="h-7 w-7"
+						label=""
+					/>
 					{entry.status === "DRAFT" && (
 						<Button
 							variant="ghost"
@@ -957,5 +975,25 @@ function ReadRow({
 				</div>
 			</TableCell>
 		</TableRow>
+
+		{/* Rejection Reason Row for Needs Revision */}
+		{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+			<TableRow className="bg-orange-100/50">
+				<TableCell colSpan={11} className="p-3">
+					<div className="flex items-start gap-2">
+						<div className="text-orange-700 font-medium text-sm shrink-0">
+							Rejection Reason:
+						</div>
+						<div
+							className="text-sm text-orange-800 prose prose-sm max-w-none"
+							dangerouslySetInnerHTML={{
+								__html: renderMarkdown(entry.facultyRemark || ""),
+							}}
+						/>
+					</div>
+				</TableCell>
+			</TableRow>
+		)}
+		</>
 	);
 }

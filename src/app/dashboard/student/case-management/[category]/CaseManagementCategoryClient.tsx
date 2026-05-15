@@ -40,6 +40,11 @@ export function CaseManagementCategoryClient({
 	const handleExportPdf = useCallback(async () => {
 		const { exportCaseManagementToPdf } =
 			await import("@/lib/export/export-pdf");
+		const getFacultyName = (facultyId: string | null) => {
+			if (!facultyId) return "—";
+			const f = facultyList.find((fl) => fl.id === facultyId);
+			return f ? `Dr. ${f.firstName} ${f.lastName}` : "—";
+		};
 		const data = entries.map((e) => ({
 			slNo: e.slNo,
 			caseSubCategory: e.caseSubCategory,
@@ -52,13 +57,19 @@ export function CaseManagementCategoryClient({
 			competencyLevel: competencyLabel(e.competencyLevel),
 			totalCaseTally: e.totalCaseTally,
 			status: e.status,
+			facultyName: getFacultyName(e.facultyId),
 		}));
 		await exportCaseManagementToPdf(data, "Student", categoryLabel);
-	}, [entries, categoryLabel, competencyLabel]);
+	}, [entries, categoryLabel, competencyLabel, facultyList]);
 
 	const handleExportExcel = useCallback(async () => {
 		const { exportCaseManagementToExcel } =
 			await import("@/lib/export/export-excel");
+		const getFacultyName = (facultyId: string | null) => {
+			if (!facultyId) return "—";
+			const f = facultyList.find((fl) => fl.id === facultyId);
+			return f ? `Dr. ${f.firstName} ${f.lastName}` : "—";
+		};
 		const data = entries.map((e) => ({
 			slNo: e.slNo,
 			caseSubCategory: e.caseSubCategory,
@@ -71,9 +82,10 @@ export function CaseManagementCategoryClient({
 			competencyLevel: competencyLabel(e.competencyLevel),
 			totalCaseTally: e.totalCaseTally,
 			status: e.status,
+			facultyName: getFacultyName(e.facultyId),
 		}));
 		exportCaseManagementToExcel(data, "Student", categoryLabel);
-	}, [entries, categoryLabel, competencyLabel]);
+	}, [entries, categoryLabel, competencyLabel, facultyList]);
 
 	return (
 		<div className="space-y-4">
