@@ -315,7 +315,7 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	qi.forEach(i => items.push({
 		id: i.id, module: "Quality Improvement", title: "Quality Improvement",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `/dashboard/${role}/quality-improvement`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/quality-improvement`
 	}));
 
 	logbook.forEach(i => items.push({

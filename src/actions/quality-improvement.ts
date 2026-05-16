@@ -241,13 +241,13 @@ export async function getQualityImprovementsForReview() {
 		whereClause = { userId: { in: studentIds } };
 	}
 
-	const disasterDrills = await prisma.qualityImprovement.findMany({
+	const qualityImprovements = await prisma.qualityImprovement.findMany({
 		where: whereClause,
 		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
 		select: { id: true },
 	});
 
-	const qualityImprovementIds = disasterDrills.map((d) => d.id);
+	const qualityImprovementIds = qualityImprovements.map((d) => d.id);
 	const signatures = await prisma.digitalSignature.findMany({
 		where: {
 			entityType: "QualityImprovement",
@@ -265,7 +265,7 @@ export async function getQualityImprovementsForReview() {
 	});
 
 	// Map signatures to quality improvements
-	const signaturesMap = new Map<string, typeof signatures>();
+	const signaturesMap = new Map<string, Array<typeof signatures[number]>>();
 	signatures.forEach((sig) => {
 		if (!signaturesMap.has(sig.entityId)) {
 			signaturesMap.set(sig.entityId, []);

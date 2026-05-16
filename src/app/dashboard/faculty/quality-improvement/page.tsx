@@ -26,6 +26,10 @@ async function FacultyQualityImprovementContent() {
 		...s,
 		date: s.date ? s.date.toISOString() : null,
 		createdAt: s.createdAt.toISOString(),
+		signatures: s.signatures?.map((sig) => ({
+			...sig,
+			signedAt: sig.signedAt.toISOString(),
+		})),
 	}));
 
 	return (

@@ -113,7 +113,7 @@ export interface QualityImprovementSubmission {
 		entityId: string;
 		entityType: string;
 		signedById: string;
-		signedAt: Date;
+		signedAt: string;
 		remark: string | null;
 		signedBy: {
 			id: string;
