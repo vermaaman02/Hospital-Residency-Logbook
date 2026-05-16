@@ -9,12 +9,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { UserProfile } from "@clerk/nextjs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-// Removed unused import useEffect
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useUser } from "@clerk/nextjs";
+import { updateProfile, syncProfileImage } from "@/actions/profile";
+import { toast } from "sonner";
 import {
 	useNotifications,
 	DemoNotificationButton,
@@ -32,6 +36,10 @@ import {
 	Users,
 	Settings,
 	ChevronRight,
+	Loader2,
+	Pencil,
+	Camera,
+	X,
 } from "lucide-react";
 
 interface ProfileData {
@@ -108,6 +116,121 @@ function OverviewTab({
 	const notif = useNotifications();
 	const isStudent = profileData.role === "Student";
 	const isFaculty = profileData.role === "Faculty";
+	const { user } = useUser();
+
+	// Name update state
+	const [isEditingName, setIsEditingName] = useState(false);
+	const [isUpdatingName, setIsUpdatingName] = useState(false);
+	const [firstName, setFirstName] = useState(user?.firstName ?? "");
+	const [lastName, setLastName] = useState(user?.lastName ?? "");
+
+	// Profile picture upload state
+	const [isUploadingImage, setIsUploadingImage] = useState(false);
+	const [previewImage, setPreviewImage] = useState<string | null>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const handleNameUpdate = async () => {
+		if (!firstName.trim() || !lastName.trim()) {
+			toast.error("First name and last name are required");
+			return;
+		}
+
+		setIsUpdatingName(true);
+		try {
+			// Update Clerk user data
+			await user?.update({
+				firstName: firstName.trim(),
+				lastName: lastName.trim(),
+			});
+
+			// Update local DB
+			const result = await updateProfile({
+				firstName: firstName.trim(),
+				lastName: lastName.trim(),
+			});
+
+			if (result.success) {
+				toast.success("Profile updated successfully");
+				setIsEditingName(false);
+			} else {
+				toast.error(result.message);
+				// Revert to original values on error
+				setFirstName(user?.firstName ?? "");
+				setLastName(user?.lastName ?? "");
+			}
+		} catch (error) {
+			toast.error("Failed to update profile");
+			console.error(error);
+		} finally {
+			setIsUpdatingName(false);
+		}
+	};
+
+	const cancelNameEdit = () => {
+		setFirstName(user?.firstName ?? "");
+		setLastName(user?.lastName ?? "");
+		setIsEditingName(false);
+	};
+
+	const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		// Validate file type
+		if (!file.type.startsWith("image/")) {
+			toast.error("Please select an image file");
+			return;
+		}
+
+		// Validate file size (max 5MB)
+		if (file.size > 5 * 1024 * 1024) {
+			toast.error("Image size must be less than 5MB");
+			return;
+		}
+
+		// Create preview
+		const reader = new FileReader();
+		reader.onloadend = () => {
+			setPreviewImage(reader.result as string);
+		};
+		reader.readAsDataURL(file);
+	};
+
+	const handleImageUpload = async () => {
+		if (!previewImage) return;
+
+		setIsUploadingImage(true);
+		try {
+			// Upload to Clerk using setProfileImage
+			// Convert data URL to File
+			const response = await fetch(previewImage);
+			const blob = await response.blob();
+			const file = new File([blob], "profile-image.jpg", { type: "image/jpeg" });
+
+			await user?.setProfileImage({ file });
+
+			// Sync image URL to local DB
+			const result = await syncProfileImage(user?.imageUrl ?? "");
+			if (result.success) {
+				toast.success("Profile picture updated successfully");
+				setPreviewImage(null);
+			} else {
+				toast.error(result.message);
+			}
+		} catch (error) {
+			toast.error("Failed to upload profile picture");
+			console.error(error);
+		} finally {
+			setIsUploadingImage(false);
+		}
+	};
+
+	const cancelImageUpload = () => {
+		setPreviewImage(null);
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+	};
 
 	return (
 		<div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -116,66 +239,209 @@ function OverviewTab({
 				{/* Role & Status Card */}
 				<Card className="border-0 shadow-sm">
 					<CardHeader className="pb-3">
-						<CardTitle className="flex items-center gap-2 text-base">
-							<Shield className="h-4 w-4 text-hospital-primary" />
-							Account Information
-						</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-							<InfoField label="Role">
-								<Badge
-									variant="outline"
-									className="text-xs font-medium capitalize"
+						<div className="flex items-center justify-between">
+							<CardTitle className="flex items-center gap-2 text-base">
+								<Shield className="h-4 w-4 text-hospital-primary" />
+								Account Information
+							</CardTitle>
+							{!isEditingName && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => setIsEditingName(true)}
+									className="h-8 text-xs"
 								>
-									{profileData.role}
-								</Badge>
-							</InfoField>
-							<InfoField label="Status">
-								<Badge
-									variant={
-										profileData.status === "ACTIVE" ? "default" : "destructive"
-									}
-									className={
-										profileData.status === "ACTIVE" ?
-											"bg-emerald-600 text-white text-xs"
-										:	"text-xs"
-									}
-								>
-									{profileData.status}
-								</Badge>
-							</InfoField>
-							<InfoField label="Joined">
-								<span className="font-medium text-sm">
-									{new Date(profileData.joinedAt).toLocaleDateString("en-IN", {
-										year: "numeric",
-										month: "short",
-										day: "numeric",
-									})}
-								</span>
-							</InfoField>
-							{profileData.department && (
-								<InfoField label="Department">
-									<span className="font-medium text-sm">
-										{profileData.department}
-									</span>
-								</InfoField>
-							)}
-							{isStudent && profileData.batch && (
-								<InfoField label="Batch">
-									<Badge variant="secondary" className="text-xs">
-										{profileData.batch}
-									</Badge>
-								</InfoField>
-							)}
-							{isStudent && profileData.currentSemester && (
-								<InfoField label="Semester">
-									<Badge variant="secondary" className="text-xs">
-										Semester {profileData.currentSemester}
-									</Badge>
-								</InfoField>
+									<Pencil className="h-3 w-3 mr-1" />
+									Edit Name
+								</Button>
 							)}
 						</div>
+					</CardHeader>
+					<CardContent>
+						{isEditingName ? (
+							<div className="space-y-4">
+								<div className="space-y-2">
+									<Label htmlFor="firstName">First Name</Label>
+									<Input
+										id="firstName"
+										value={firstName}
+										onChange={(e) => setFirstName(e.target.value)}
+										disabled={isUpdatingName}
+										placeholder="Enter first name"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="lastName">Last Name</Label>
+									<Input
+										id="lastName"
+										value={lastName}
+										onChange={(e) => setLastName(e.target.value)}
+										disabled={isUpdatingName}
+										placeholder="Enter last name"
+									/>
+								</div>
+								<div className="flex gap-2">
+									<Button
+										onClick={handleNameUpdate}
+										disabled={isUpdatingName}
+										size="sm"
+									>
+										{isUpdatingName ? (
+											<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+										) : null}
+										Save Changes
+									</Button>
+									<Button
+										variant="outline"
+										onClick={cancelNameEdit}
+										disabled={isUpdatingName}
+										size="sm"
+									>
+										Cancel
+									</Button>
+								</div>
+							</div>
+						) : (
+							<div className="space-y-4">
+								{/* Profile Picture Section */}
+								<div className="flex items-center gap-4 pb-4 border-b">
+									<div className="relative">
+										<div className="h-16 w-16 rounded-full overflow-hidden bg-muted">
+											{user?.imageUrl ? (
+												<img
+													src={user.imageUrl}
+													alt="Profile"
+													className="h-full w-full object-cover"
+												/>
+											) : (
+												<div className="h-full w-full flex items-center justify-center">
+													<User className="h-8 w-8 text-muted-foreground" />
+												</div>
+											)}
+										</div>
+										{previewImage && (
+											<div className="absolute inset-0 rounded-full overflow-hidden">
+												<img
+													src={previewImage}
+													alt="Preview"
+													className="h-full w-full object-cover"
+												/>
+											</div>
+										)}
+									</div>
+									<div className="flex-1">
+										{previewImage ? (
+											<div className="space-y-2">
+												<p className="text-sm font-medium">New profile picture</p>
+												<div className="flex gap-2">
+													<Button
+														onClick={handleImageUpload}
+														disabled={isUploadingImage}
+														size="sm"
+													>
+														{isUploadingImage ? (
+															<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+														) : null}
+														Upload
+													</Button>
+													<Button
+														variant="outline"
+														onClick={cancelImageUpload}
+														disabled={isUploadingImage}
+														size="sm"
+													>
+														<X className="h-4 w-4 mr-1" />
+														Cancel
+													</Button>
+												</div>
+											</div>
+										) : (
+											<div className="space-y-2">
+												<p className="text-sm font-medium">Profile picture</p>
+												<div className="flex gap-2">
+													<Button
+														variant="outline"
+														size="sm"
+														onClick={() => fileInputRef.current?.click()}
+													>
+														<Camera className="h-4 w-4 mr-1" />
+														Change Photo
+													</Button>
+												</div>
+											</div>
+										)}
+									</div>
+									<input
+										ref={fileInputRef}
+										type="file"
+										accept="image/*"
+										onChange={handleImageSelect}
+										className="hidden"
+									/>
+								</div>
+
+								{/* Name and other fields */}
+								<div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+									<InfoField label="Name">
+										<span className="font-medium text-sm">
+											{user?.firstName} {user?.lastName}
+										</span>
+									</InfoField>
+									<InfoField label="Role">
+										<Badge
+											variant="outline"
+											className="text-xs font-medium capitalize"
+										>
+											{profileData.role}
+										</Badge>
+									</InfoField>
+									<InfoField label="Status">
+										<Badge
+											variant={
+												profileData.status === "ACTIVE" ? "default" : "destructive"
+											}
+											className={
+												profileData.status === "ACTIVE" ?
+													"bg-emerald-600 text-white text-xs"
+												:	"text-xs"
+											}
+										>
+											{profileData.status}
+										</Badge>
+									</InfoField>
+									<InfoField label="Joined">
+										<span className="font-medium text-sm">
+											{new Date(profileData.joinedAt).toLocaleDateString("en-IN", {
+												year: "numeric",
+												month: "short",
+												day: "numeric",
+											})}
+										</span>
+									</InfoField>
+									{profileData.department && (
+										<InfoField label="Department">
+											<span className="font-medium text-sm">
+												{profileData.department}
+											</span>
+										</InfoField>
+									)}
+									{isStudent && profileData.batch && (
+										<InfoField label="Batch">
+											<Badge variant="secondary" className="text-xs">
+												{profileData.batch}
+											</Badge>
+										</InfoField>
+									)}
+									{isStudent && profileData.currentSemester && (
+										<InfoField label="Semester">
+											<Badge variant="secondary" className="text-xs">
+												Semester {profileData.currentSemester}
+											</Badge>
+										</InfoField>
+									)}
+								</div>
+							</div>
+						)}
 					</CardContent>
 				</Card>
 
