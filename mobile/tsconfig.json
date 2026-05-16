@@ -1,0 +1,51 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@logbook/shared": [
+        "../packages/shared/src/index.ts"
+      ],
+      "@logbook/shared/validators": [
+        "../packages/shared/src/validators/index.ts"
+      ],
+      "@logbook/shared/constants": [
+        "../packages/shared/src/constants/index.ts"
+      ],
+      "@logbook/shared/types": [
+        "../packages/shared/src/types/index.ts"
+      ],
+      "@logbook/shared/constants/case-categories": [
+        "../packages/shared/src/constants/case-categories.ts"
+      ],
+      "@logbook/shared/constants/clinical-skills": [
+        "../packages/shared/src/constants/clinical-skills.ts"
+      ],
+      "@logbook/shared/constants/diagnostic-types": [
+        "../packages/shared/src/constants/diagnostic-types.ts"
+      ],
+      "@logbook/shared/constants/imaging-categories": [
+        "../packages/shared/src/constants/imaging-categories.ts"
+      ],
+      "@logbook/shared/constants/entry-status": [
+        "../packages/shared/src/constants/entry-status.ts"
+      ],
+      "@logbook/shared/constants/procedure-categories": [
+        "../packages/shared/src/constants/procedure-categories.ts"
+      ],
+      "@logbook/shared/constants/rotation-postings": [
+        "../packages/shared/src/constants/rotation-postings.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.d.ts",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
+}
