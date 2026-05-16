@@ -138,3 +138,46 @@ export async function getAuthenticatedUser() {
 	}
 	return user;
 }
+
+/**
+ * Hybrid auth for /api/v1/* REST routes.
+ * Accepts both:
+ *   - Clerk cookie session (web app, SSR)
+ *   - Authorization: Bearer <clerk-jwt> (mobile app)
+ *
+ * Uses auth({ acceptsToken: 'any' }) from @clerk/nextjs/server v6.
+ * Returns the authenticated Clerk userId.
+ * Throws "Unauthorized" if neither method succeeds.
+ */
+export async function requireAuthHybrid(): Promise<string> {
+	// acceptsToken: 'session_token' covers both cookie sessions and Bearer JWTs
+	const authObj = await auth({ acceptsToken: "session_token" });
+	const userId = (authObj as { userId?: string | null }).userId;
+	if (!userId) {
+		throw new Error("Unauthorized");
+	}
+	return userId;
+}
+
+/**
+ * Hybrid role-enforcement for /api/v1/* REST routes.
+ * Same as requireRole but also accepts Bearer tokens for mobile.
+ */
+export async function requireRoleHybrid(
+	allowedRoles: AllowedRole[],
+): Promise<{ userId: string; role: AllowedRole }> {
+	const authObj = await auth({ acceptsToken: "session_token" });
+	const userId = (authObj as { userId?: string | null }).userId;
+	if (!userId) {
+		throw new Error("Unauthorized");
+	}
+
+	const metadata = (authObj as { sessionClaims?: { metadata?: { role?: string } } }).sessionClaims?.metadata;
+	const role = metadata?.role;
+
+	if (!role || !allowedRoles.includes(role as AllowedRole)) {
+		throw new Error("Forbidden");
+	}
+
+	return { userId, role: role as AllowedRole };
+}

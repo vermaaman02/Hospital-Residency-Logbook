@@ -20,29 +20,9 @@ export async function GET() {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 
-		const students = await prisma.user.findMany({
-			where: { role: "STUDENT" as never },
-			select: {
-				id: true,
-				firstName: true,
-				lastName: true,
-				batch: true,
-				currentSemester: true,
-			},
-			orderBy: [{ batch: "desc" }, { firstName: "asc" }],
-		});
-
-		const faculty = await prisma.user.findMany({
-			where: { role: "FACULTY" as never },
-			select: {
-				id: true,
-				firstName: true,
-				lastName: true,
-			},
-		});
-
-		// Get counts
 		const [
+			students,
+			faculty,
 			totalCases,
 			totalProcedures,
 			totalDiagnostics,
@@ -50,50 +30,73 @@ export async function GET() {
 			totalEvaluations,
 			signedCases,
 			signedProcedures,
+			casesByStudent,
+			proceduresByStudent,
+			signedEvalsByStudent,
+			facultyAssignmentCounts,
 		] = await Promise.all([
+			prisma.user.findMany({
+				where: { role: "STUDENT" as never },
+				select: { id: true, firstName: true, lastName: true, batch: true, currentSemester: true },
+				orderBy: [{ batch: "desc" }, { firstName: "asc" }],
+			}),
+			prisma.user.findMany({
+				where: { role: "FACULTY" as never },
+				select: { id: true, firstName: true, lastName: true },
+			}),
 			prisma.caseManagementLog.count(),
 			prisma.procedureLog.count(),
 			prisma.diagnosticSkill.count(),
 			prisma.imagingLog.count(),
 			prisma.residentEvaluation.count(),
-			prisma.caseManagementLog.count({
-				where: { status: "SIGNED" as never },
-			}),
+			prisma.caseManagementLog.count({ where: { status: "SIGNED" as never } }),
 			prisma.procedureLog.count({ where: { status: "SIGNED" as never } }),
+			// Aggregate counts per student — single query each
+			prisma.caseManagementLog.groupBy({
+				by: ["userId"],
+				_count: { id: true },
+			}),
+			prisma.procedureLog.groupBy({
+				by: ["userId"],
+				_count: { id: true },
+			}),
+			prisma.residentEvaluation.groupBy({
+				by: ["userId"],
+				where: { status: "SIGNED" as never },
+				_count: { id: true },
+			}),
+			// Faculty workload — single query
+			prisma.facultyStudentAssignment.groupBy({
+				by: ["facultyId"],
+				_count: { id: true },
+			}),
 		]);
 
-		// Per-student summary
-		const studentStats = await Promise.all(
-			students.map(async (student) => {
-				const [cases, procedures, evals] = await Promise.all([
-					prisma.caseManagementLog.count({ where: { userId: student.id } }),
-					prisma.procedureLog.count({ where: { userId: student.id } }),
-					prisma.residentEvaluation.count({
-						where: { userId: student.id, status: "SIGNED" as never },
-					}),
-				]);
-				return {
-					...student,
-					totalCases: cases,
-					totalProcedures: procedures,
-					signedEvaluations: evals,
-					totalLogs: cases + procedures,
-				};
-			}),
-		);
+		// Build lookup maps for O(1) access
+		const casesMap = new Map(casesByStudent.map((r) => [r.userId, r._count.id]));
+		const proceduresMap = new Map(proceduresByStudent.map((r) => [r.userId, r._count.id]));
+		const evalsMap = new Map(signedEvalsByStudent.map((r) => [r.userId, r._count.id]));
+		const assignmentsMap = new Map(facultyAssignmentCounts.map((r) => [r.facultyId, r._count.id]));
 
-		// Faculty workload
-		const facultyWorkload = await Promise.all(
-			faculty.map(async (f) => {
-				const assignmentCount = await prisma.facultyStudentAssignment.count({
-					where: { facultyId: f.id },
-				});
-				return {
-					...f,
-					assignedStudents: assignmentCount,
-				};
-			}),
-		);
+		// Per-student summary — no extra DB queries
+		const studentStats = students.map((student) => {
+			const cases = casesMap.get(student.id) ?? 0;
+			const procedures = proceduresMap.get(student.id) ?? 0;
+			const evals = evalsMap.get(student.id) ?? 0;
+			return {
+				...student,
+				totalCases: cases,
+				totalProcedures: procedures,
+				signedEvaluations: evals,
+				totalLogs: cases + procedures,
+			};
+		});
+
+		// Faculty workload — no extra DB queries
+		const facultyWorkload = faculty.map((f) => ({
+			...f,
+			assignedStudents: assignmentsMap.get(f.id) ?? 0,
+		}));
 
 		return NextResponse.json({
 			totalStudents: students.length,
