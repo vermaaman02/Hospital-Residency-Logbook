@@ -17,6 +17,14 @@ const isPublicApiRoute = createRouteMatcher([
 	"/api/webhooks(.*)",
 ]);
 
+/**
+ * /api/v1/* routes are authenticated via Bearer token or cookie.
+ * Clerk's authenticateRequest() inside each handler does the check,
+ * so the middleware must NOT call auth.protect() on them (which would
+ * reject Bearer-only requests before the handler runs).
+ */
+const isV1ApiRoute = createRouteMatcher(["/api/v1(.*)"]);
+
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api(.*)"]);
 
 const isHodRoute = createRouteMatcher(["/dashboard/hod(.*)"]);
@@ -30,7 +38,34 @@ function getDashboardForRole(role: string | undefined): string {
 	return "/dashboard/student";
 }
 
+/**
+ * Add CORS headers required by the mobile app (Expo).
+ * Permissive for the /api/v1/* namespace only.
+ */
+function withMobileCors(response: ReturnType<typeof NextResponse.next>) {
+	response.headers.set("Access-Control-Allow-Origin", "*");
+	response.headers.set(
+		"Access-Control-Allow-Methods",
+		"GET,POST,PUT,PATCH,DELETE,OPTIONS",
+	);
+	response.headers.set(
+		"Access-Control-Allow-Headers",
+		"Content-Type, Authorization",
+	);
+	return response;
+}
+
 export default clerkMiddleware(async (auth, req) => {
+	// Handle CORS preflight for mobile (/api/v1/*)
+	if (isV1ApiRoute(req) && req.method === "OPTIONS") {
+		return withMobileCors(new NextResponse(null, { status: 204 }));
+	}
+
+	// /api/v1/* — skip Clerk's protect(); each handler calls requireAuthHybrid()
+	if (isV1ApiRoute(req)) {
+		return withMobileCors(NextResponse.next());
+	}
+
 	// Allow public API routes through without auth (healthcheck, webhooks)
 	if (isPublicApiRoute(req)) {
 		return NextResponse.next();
