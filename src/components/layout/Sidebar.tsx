@@ -827,16 +827,6 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 						/>
 					}
 					<div className="flex items-center gap-1">
-						{/* Close button visible on mobile only */}
-						{onLinkClick && (
-							<button
-								onClick={onLinkClick}
-								className="lg:hidden rounded-md p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-								aria-label="Close menu"
-							>
-								<X className="h-5 w-5" />
-							</button>
-						)}
 						{/* Collapse toggle visible on desktop only */}
 						<button
 							onClick={() => setIsCollapsed(!isCollapsed)}
