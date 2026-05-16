@@ -58,6 +58,7 @@ export default async function HodTransportPage() {
 				onSign={signTransportLog}
 				onReject={rejectTransportLog}
 				onBulkSign={bulkSignTransportLogs}
+				entityType="TransportLog"
 			/>
 		</div>
 	);

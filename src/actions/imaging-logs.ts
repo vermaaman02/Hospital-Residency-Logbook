@@ -16,7 +16,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
-import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ export async function addImagingLogRow(imagingCategory: string) {
   });
 
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return entry;
 }
 
@@ -71,6 +73,7 @@ export async function deleteImagingLogEntry(id: string) {
 
   await prisma.imagingLog.delete({ where: { id } });
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -207,7 +210,21 @@ export async function updateImagingLogEntry(
     },
   });
 
+  // Record update revision for tracking changes
+  await prisma.entryRevision.create({
+    data: {
+      entityType: "ImagingLog",
+      entityId: id,
+      ownerId: user.id,
+      version: await prisma.entryRevision.count({ where: { entityId: id } }) + 1,
+      kind: "SUBMISSION",
+      snapshot: buildSnapshot(entry) as any,
+      attachments: entry.imageUrls,
+    },
+  }).catch((e) => console.error("[REVISION_ERROR]", e));
+
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true, data: entry };
 }
 
@@ -261,12 +278,23 @@ export async function submitImagingLogEntry(id: string) {
         entityType: "ImagingLog",
         entityId: id,
         ownerId: user.id,
-        snapshot: { status: "SUBMITTED" },
+        snapshot: buildSnapshot(existing),
+        attachments: existing.imageUrls,
       });
     });
+
+    // Send notification to student on submission
+    await sendNotificationToUser(user.id, {
+      title: "Imaging Log Submitted",
+      body: `Your imaging log entry${existing.completeDiagnosis ? ` for "${existing.completeDiagnosis}"` : ""} has been submitted for review.`,
+      type: "entry_submitted",
+      entityType: "ImagingLog",
+      entityId: id,
+    }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
   }
 
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -301,7 +329,7 @@ export async function getImagingLogsForReview(imagingCategory?: string) {
   if (studentIds.length > 0) where.userId = { in: studentIds };
   if (imagingCategory) where.imagingCategory = imagingCategory as never;
 
-  return prisma.imagingLog.findMany({
+  const entries = await prisma.imagingLog.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: {
@@ -317,6 +345,36 @@ export async function getImagingLogsForReview(imagingCategory?: string) {
       },
     },
   });
+
+  // Fetch digital signatures for each entry
+  const entryIds = entries.map((e) => e.id);
+  const signatures = await prisma.digitalSignature.findMany({
+    where: {
+      entityId: { in: entryIds },
+      entityType: "ImagingLog",
+    },
+    include: {
+      signedBy: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  // Attach signatures to entries
+  const signaturesMap = new Map<string, typeof signatures>();
+  signatures.forEach((sig) => {
+    const existing = signaturesMap.get(sig.entityId) || [];
+    signaturesMap.set(sig.entityId, [...existing, sig]);
+  });
+
+  return entries.map((entry) => ({
+    ...entry,
+    signatures: signaturesMap.get(entry.id) || [],
+  }));
 }
 
 export async function signImagingLogEntry(id: string, remark?: string) {
@@ -356,7 +414,17 @@ export async function signImagingLogEntry(id: string, remark?: string) {
     });
   });
 
+  // Send notification to student
+  await sendNotificationToUser(entry.userId, {
+    title: "Imaging Log Signed",
+    body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+    type: "entry_signed",
+    entityType: "ImagingLog",
+    entityId: id,
+  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -388,7 +456,17 @@ export async function rejectImagingLogEntry(id: string, remark: string) {
     });
   });
 
+  // Send notification to student
+  await sendNotificationToUser(entry.userId, {
+    title: "Imaging Log Needs Revision",
+    body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} needs revision: ${remark}`,
+    type: "entry_rejected",
+    entityType: "ImagingLog",
+    entityId: id,
+  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -424,10 +502,20 @@ export async function bulkSignImagingLogEntries(ids: string[]) {
         decision: "SIGNED",
         remark: "Bulk signed",
       });
+
+      // Send notification to student for each entry
+      await sendNotificationToUser(entry.userId, {
+        title: "Imaging Log Signed",
+        body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
+        type: "entry_signed",
+        entityType: "ImagingLog",
+        entityId: entry.id,
+      }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
     }
   });
 
   revalidateAll();
+  await emitRealtimeEvent("entry:updated");
   return { success: true, signedCount: entries.length };
 }
 

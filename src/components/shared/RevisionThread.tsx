@@ -117,8 +117,26 @@ export function RevisionThread({
 				if (!cancelled) {
 					setItems(res);
 
-					// Extract all facultyId values from revisions for rotation postings and case management
-					if (entityType === "RotationPosting" || entityType === "CaseManagementLog") {
+					// Extract facultyId for entities that have it
+					if (
+						entityType === "CasePresentation" ||
+						entityType === "Seminar" ||
+						entityType === "Thesis" ||
+						entityType === "ClinicalSkillAdult" ||
+						entityType === "ClinicalSkillPediatric" ||
+						entityType === "CaseManagement" ||
+						entityType === "ProcedureLog" ||
+						entityType === "DiagnosticSkill" ||
+						entityType === "ImagingLog" ||
+						entityType === "TransportLog" ||
+						entityType === "ConsentLog" ||
+						entityType === "BadNewsLog" ||
+						entityType === "ConferenceParticipation" ||
+						entityType === "ResearchActivity" ||
+						entityType === "DisasterDrill" ||
+						entityType === "QualityImprovement" ||
+						entityType === "LogbookFacultyReview"
+					) {
 						const facultyIds = new Set<string>();
 						for (const item of res) {
 							if (

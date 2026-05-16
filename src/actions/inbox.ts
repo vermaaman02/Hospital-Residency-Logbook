@@ -64,6 +64,7 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 		clinicalPed,
 		caseMgmt,
 		procedures,
+		diagnosticSkills,
 		imaging,
 		transport,
 		consent,
@@ -127,6 +128,12 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 			include: { user: { select: { firstName: true, lastName: true } } },
 		}),
 		prisma.procedureLog.findMany({
+			where: { ...studentFilter, status: statusFilter },
+			orderBy: { updatedAt: "desc" },
+			take: 20,
+			include: { user: { select: { firstName: true, lastName: true } } },
+		}),
+		prisma.diagnosticSkill.findMany({
 			where: { ...studentFilter, status: statusFilter },
 			orderBy: { updatedAt: "desc" },
 			take: 20,
@@ -246,63 +253,69 @@ export async function getUnifiedInbox(): Promise<InboxItem[]> {
 	}));
 
 	procedures.forEach(i => items.push({
-		id: i.id, module: "Procedure Logs", title: i.procedureDescription || "Procedure Log",
+		id: i.id, module: "Procedure Logs", title: "Procedure Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
 		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures`
 	}));
 
-	imaging.forEach(i => items.push({
-		id: i.id, module: "Imaging Logs", title: i.procedureDescription || "Imaging Log",
+	diagnosticSkills.forEach(i => items.push({
+		id: i.id, module: "Diagnostic Skills", title: i.skillName || "Diagnostic Skill",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=imaging`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/diagnostics`
+	}));
+
+	imaging.forEach(i => items.push({
+		id: i.id, module: "Imaging Logs", title: "Imaging Log",
+		studentName: `${i.user.firstName} ${i.user.lastName}`,
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/imaging`
 	}));
 
 	transport.forEach(i => items.push({
-		id: i.id, module: "Transport Logs", title: i.procedureDescription || "Transport Log",
+		id: i.id, module: "Transport Logs", title: "Transport Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=transport`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/transport`
 	}));
 
 	consent.forEach(i => items.push({
-		id: i.id, module: "Consent Logs", title: i.procedureDescription || "Consent Log",
+		id: i.id, module: "Consent Logs", title: "Consent Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=consent`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/consent-bad-news`
 	}));
 
 	badNews.forEach(i => items.push({
-		id: i.id, module: "Bad News Logs", title: i.procedureDescription || "Bad News Log",
+		id: i.id, module: "Bad News Logs", title: "Bad News Log",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/procedures?tab=bad-news`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/consent-bad-news`
 	}));
 
 	courses.forEach(i => items.push({
 		id: i.id, module: "Courses Attended", title: i.courseName || "Course",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/courses`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/life-support-courses`
 	}));
 
 	conferences.forEach(i => items.push({
-		id: i.id, module: "Conferences", title: i.conferenceName || "Conference",
+		id: i.id, module: "Conferences", title: "Conference Participation",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
 		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences`
 	}));
 
 	research.forEach(i => items.push({
-		id: i.id, module: "Research Activities", title: i.activity || "Activity",
+		id: i.id, module: "Research Activities", title: "Research & Outreach",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=research`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/research-activities`
 	}));
 
 	disaster.forEach(i => items.push({
-		id: i.id, module: "Disaster Drills", title: i.description || "Disaster Drill",
+		id: i.id, module: "Disaster Drills", title: "Disaster Drills",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=disaster-drills`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/disaster-drills`
 	}));
 
 	qi.forEach(i => items.push({
-		id: i.id, module: "Quality Improvement", title: i.description || "QI Project",
+		id: i.id, module: "Quality Improvement", title: "Quality Improvement",
 		studentName: `${i.user.firstName} ${i.user.lastName}`,
-		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/conferences?tab=qi`
+		status: i.status, remark: (i as any).facultyRemark || null, updatedAt: i.updatedAt.toISOString(), href: `${basePath}/quality-improvement`
 	}));
 
 	logbook.forEach(i => items.push({

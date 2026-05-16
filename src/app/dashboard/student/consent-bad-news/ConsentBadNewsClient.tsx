@@ -168,6 +168,7 @@ export function ConsentBadNewsClient({
 					onDeleteEntry={deleteConsentLog}
 					onUpdateEntry={updateConsentLog}
 					onSubmitEntry={submitConsentLog}
+					entityType="ConsentLog"
 				/>
 			</div>
 
@@ -211,6 +212,7 @@ export function ConsentBadNewsClient({
 					onDeleteEntry={deleteBadNewsLog}
 					onUpdateEntry={updateBadNewsLog}
 					onSubmitEntry={submitBadNewsLog}
+					entityType="BadNewsLog"
 				/>
 			</div>
 		</div>

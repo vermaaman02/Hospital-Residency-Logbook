@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/logbook-reviews");
@@ -165,6 +167,9 @@ export async function submitLogbookReviewEntry(id: string) {
 			where: { id },
 			data: { status: newStatus },
 		});
+		const updatedEntry = await tx.logbookFacultyReview.findUnique({ where: { id } });
+		if (!updatedEntry) throw new Error("Entry not found");
+		const entrySnapshot = await buildSnapshot(updatedEntry);
 		if (autoReview) {
 			await recordReview(tx, {
 				entityType: "LogbookFacultyReview",
@@ -175,17 +180,34 @@ export async function submitLogbookReviewEntry(id: string) {
 				decision: "SIGNED",
 				remark: "Auto-reviewed",
 			});
+			await sendNotificationToUser(entry.userId, {
+				title: "Logbook",
+				body: `Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} has been auto-reviewed and signed.`,
+				type: "entry_signed",
+				entityType: "LogbookFacultyReview",
+				entityId: id,
+				href: "/dashboard/student/logbook-reviews",
+			});
 		} else {
 			await recordSubmission(tx, {
 				entityType: "LogbookFacultyReview",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: entrySnapshot,
+			});
+			await sendNotificationToUser(user.id, {
+				title: "Logbook",
+				body: `Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} has been submitted for review.`,
+				type: "entry_submitted",
+				entityType: "LogbookFacultyReview",
+				entityId: id,
+				href: "/dashboard/student/logbook-reviews",
 			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, autoSigned: newStatus === "SIGNED" };
 }
 
@@ -216,7 +238,39 @@ export async function getLogbookReviewsForReview() {
 		whereClause = { userId: { in: studentIds } };
 	}
 
-	return prisma.logbookFacultyReview.findMany({
+	const logbookReviews = await prisma.logbookFacultyReview.findMany({
+		where: whereClause,
+		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+		select: { id: true },
+	});
+
+	const logbookReviewIds = logbookReviews.map((d) => d.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "LogbookFacultyReview",
+			entityId: { in: logbookReviewIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Map signatures to logbook reviews
+	const signaturesMap = new Map<string, Array<typeof signatures[number]>>();
+	signatures.forEach((sig) => {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)!.push(sig);
+	});
+
+	const logbookReviewsWithUser = await prisma.logbookFacultyReview.findMany({
 		where: whereClause,
 		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
 		include: {
@@ -232,6 +286,11 @@ export async function getLogbookReviewsForReview() {
 			},
 		},
 	});
+
+	return logbookReviewsWithUser.map((lr) => ({
+		...lr,
+		signatures: signaturesMap.get(lr.id) || [],
+	}));
 }
 
 export async function signLogbookReviewEntry(id: string, remark?: string) {
@@ -261,6 +320,7 @@ export async function signLogbookReviewEntry(id: string, remark?: string) {
 				entityType: "LogbookFacultyReview",
 				signedById: user.id,
 				signedAt: new Date(),
+				remark: remark || null,
 			},
 		});
 		await recordReview(tx, {
@@ -270,11 +330,20 @@ export async function signLogbookReviewEntry(id: string, remark?: string) {
 			reviewerId: user.id,
 			reviewerRole: "faculty",
 			decision: "SIGNED",
-			remark: remark ?? null,
+			remark,
+		});
+		await sendNotificationToUser(entry.userId, {
+			title: "Logbook",
+			body: `Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+			type: "entry_signed",
+			entityType: "LogbookFacultyReview",
+			entityId: id,
+			href: "/dashboard/student/logbook-reviews",
 		});
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -307,9 +376,18 @@ export async function rejectLogbookReviewEntry(id: string, remark: string) {
 			decision: "NEEDS_REVISION",
 			remark: `[${user.firstName} ${user.lastName}] ${remark}`,
 		});
+		await sendNotificationToUser(entry.userId, {
+			title: "Logbook",
+			body: `Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+			type: "entry_needs_revision",
+			entityType: "LogbookFacultyReview",
+			entityId: id,
+			href: "/dashboard/student/logbook-reviews",
+		});
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -336,6 +414,7 @@ export async function bulkSignLogbookReviewEntries(ids: string[]) {
 					entityType: "LogbookFacultyReview",
 					signedById: user.id,
 					signedAt: new Date(),
+					remark: "Bulk signed",
 				},
 			});
 			await recordReview(tx, {
@@ -347,10 +426,19 @@ export async function bulkSignLogbookReviewEntries(ids: string[]) {
 				decision: "SIGNED",
 				remark: "Bulk signed",
 			});
+			await sendNotificationToUser(e.userId, {
+				title: "Logbook",
+				body: `Your logbook review entry${e.description ? ` for "${e.description}"` : ""} has been bulk signed.`,
+				type: "entry_signed",
+				entityType: "LogbookFacultyReview",
+				entityId: e.id,
+				href: "/dashboard/student/logbook-reviews",
+			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 

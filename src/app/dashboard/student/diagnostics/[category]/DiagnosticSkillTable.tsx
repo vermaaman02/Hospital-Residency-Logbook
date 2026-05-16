@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo } from "react";
 import {
 	Table,
 	TableBody,
@@ -40,6 +40,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import {
 	Plus,
 	Pencil,
@@ -53,6 +54,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useSocketEvent } from "@/lib/socket";
 import { CloudinaryUpload, ImageGallery } from "@/components/shared/CloudinaryUpload";
 import {
 	createDiagnosticSkillEntry,
@@ -98,6 +100,11 @@ export function DiagnosticSkillTable({
 }: DiagnosticSkillTableProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on diagnostic skill events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Edit state — inline editing of existing entries
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -347,7 +354,7 @@ export function DiagnosticSkillTable({
 									</TableRow>
 								)}
 								{entries.map((entry) =>
-									editingId === entry.id ?
+									editingId === entry.id ? (
 										<EditRow
 											key={entry.id}
 											entry={entry}
@@ -358,15 +365,40 @@ export function DiagnosticSkillTable({
 											isPending={isPending}
 											categoryEnum={categoryEnum}
 										/>
-									:	<ReadRow
-											key={entry.id}
-											entry={entry}
-											onEdit={() => startEdit(entry)}
-											onSubmit={() => handleSubmit(entry.id)}
-											onDelete={() => setDeleteId(entry.id)}
-											isPending={isPending}
-											categoryEnum={categoryEnum}
-										/>,
+									) : (
+										<React.Fragment key={entry.id}>
+											<ReadRow
+												entry={entry}
+												onEdit={() => startEdit(entry)}
+												onSubmit={() => handleSubmit(entry.id)}
+												onDelete={() => setDeleteId(entry.id)}
+												isPending={isPending}
+												categoryEnum={categoryEnum}
+											/>
+											{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
+												<TableRow key={`${entry.id}-rejection`}>
+													<TableCell
+														colSpan={
+															(categoryEnum === "ECG_ANALYSIS" || categoryEnum === "ABG_ANALYSIS") ? 8 : 7
+														}
+														className="px-4 py-2"
+													>
+														<div className="bg-orange-50/50 border border-orange-200/50 rounded-lg p-3 text-sm">
+															<div className="flex items-center gap-2 mb-1">
+																<AlertTriangle className="h-4 w-4 text-orange-600" />
+																<span className="font-medium text-orange-800">
+																	Revision Required
+																</span>
+															</div>
+															<div className="text-orange-900 text-sm">
+																{entry.facultyRemark}
+															</div>
+														</div>
+													</TableCell>
+												</TableRow>
+											)}
+										</React.Fragment>
+									),
 								)}
 
 								{/* Inline Add Row — at the bottom of the table */}
@@ -825,6 +857,18 @@ function ReadRow({
 						>
 							<Trash2 className="h-3.5 w-3.5 text-red-500" />
 						</Button>
+					)}
+					{entry.status !== "DRAFT" && (
+						<RevisionThreadButton
+							entityType="DiagnosticSkill"
+							entityId={entry.id}
+							title={`History — ${entry.skillName}`}
+							description={`Submission and review history for this diagnostic skill`}
+							variant="ghost"
+							size="sm"
+							className="h-7 w-7"
+							label=""
+						/>
 					)}
 				</div>
 			</TableCell>

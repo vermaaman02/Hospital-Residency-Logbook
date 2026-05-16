@@ -15,7 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
-import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -223,12 +224,24 @@ export async function submitCourseEntry(id: string) {
 				entityType: "CourseAttended",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: buildSnapshot(existing),
+				attachments: [],
 			});
 		});
+
+		// Send notification to student on submission
+		await sendNotificationToUser(user.id, {
+			title: "Life-Support Courses - Course Submitted",
+			body: `Your course entry${existing.courseName ? ` for "${existing.courseName}"` : ""} has been submitted for review.`,
+			type: "entry_submitted",
+			entityType: "CourseAttended",
+			entityId: id,
+			href: "/dashboard/student/life-support-courses",
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 	}
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -262,7 +275,7 @@ export async function getCoursesForReview() {
 	};
 	if (studentIds.length > 0) where.userId = { in: studentIds };
 
-	return prisma.courseAttended.findMany({
+	const courses = await prisma.courseAttended.findMany({
 		where,
 		orderBy: { createdAt: "desc" },
 		include: {
@@ -278,6 +291,38 @@ export async function getCoursesForReview() {
 			},
 		},
 	});
+
+	// Fetch signatures separately
+	const courseIds = courses.map((c) => c.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "CourseAttended",
+			entityId: { in: courseIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Map signatures to courses
+	const signaturesMap = new Map<string, typeof signatures>();
+	signatures.forEach((sig) => {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)!.push(sig);
+	});
+
+	return courses.map((course) => ({
+		...course,
+		signatures: signaturesMap.get(course.id) || [],
+	}));
 }
 
 export async function signCourseEntry(id: string, remark?: string) {
@@ -317,7 +362,18 @@ export async function signCourseEntry(id: string, remark?: string) {
 		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Life-Support Courses - Course Signed",
+		body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
+		type: "entry_signed",
+		entityType: "CourseAttended",
+		entityId: id,
+		href: "/dashboard/student/life-support-courses",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -349,7 +405,18 @@ export async function rejectCourseEntry(id: string, remark: string) {
 		});
 	});
 
+	// Send notification to student
+	await sendNotificationToUser(entry.userId, {
+		title: "Life-Support Courses - Course Needs Revision",
+		body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} needs revision: ${remark}`,
+		type: "entry_rejected",
+		entityType: "CourseAttended",
+		entityId: id,
+		href: "/dashboard/student/life-support-courses",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -385,10 +452,21 @@ export async function bulkSignCourseEntries(ids: string[]) {
 				decision: "SIGNED",
 				remark: "Bulk signed",
 			});
+
+			// Send notification to student for each entry
+			await sendNotificationToUser(entry.userId, {
+				title: "Life-Support Courses - Course Signed",
+				body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
+				type: "entry_signed",
+				entityType: "CourseAttended",
+				entityId: entry.id,
+				href: "/dashboard/student/life-support-courses",
+			}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 		}
 	});
 
 	revalidateAll();
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

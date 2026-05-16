@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/quality-improvement");
@@ -164,6 +166,13 @@ export async function submitQualityImprovementEntry(id: string) {
 			data: { status: newStatus },
 		});
 		if (autoReview) {
+			await recordSubmission(tx, {
+				entityType: "QualityImprovement",
+				entityId: id,
+				ownerId: entry.userId,
+				snapshot: buildSnapshot(entry),
+				attachments: [],
+			});
 			await recordReview(tx, {
 				entityType: "QualityImprovement",
 				entityId: id,
@@ -173,17 +182,35 @@ export async function submitQualityImprovementEntry(id: string) {
 				decision: "SIGNED",
 				remark: "Auto-reviewed",
 			});
+			await sendNotificationToUser(entry.userId, {
+				title: "Quality Improvement",
+				body: `Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} has been auto-reviewed and signed.`,
+				type: "entry_signed",
+				entityType: "QualityImprovement",
+				entityId: id,
+				href: "/dashboard/student/quality-improvement",
+			});
 		} else {
 			await recordSubmission(tx, {
 				entityType: "QualityImprovement",
 				entityId: id,
 				ownerId: user.id,
-				snapshot: { status: "SUBMITTED" },
+				snapshot: buildSnapshot(entry),
+				attachments: [],
+			});
+			await sendNotificationToUser(user.id, {
+				title: "Quality Improvement",
+				body: `Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} has been submitted for review.`,
+				type: "entry_submitted",
+				entityType: "QualityImprovement",
+				entityId: id,
+				href: "/dashboard/student/quality-improvement",
 			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, autoSigned: newStatus === "SIGNED" };
 }
 
@@ -214,7 +241,39 @@ export async function getQualityImprovementsForReview() {
 		whereClause = { userId: { in: studentIds } };
 	}
 
-	return prisma.qualityImprovement.findMany({
+	const qualityImprovements = await prisma.qualityImprovement.findMany({
+		where: whereClause,
+		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+		select: { id: true },
+	});
+
+	const qualityImprovementIds = qualityImprovements.map((d) => d.id);
+	const signatures = await prisma.digitalSignature.findMany({
+		where: {
+			entityType: "QualityImprovement",
+			entityId: { in: qualityImprovementIds },
+		},
+		include: {
+			signedBy: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+				},
+			},
+		},
+	});
+
+	// Map signatures to quality improvements
+	const signaturesMap = new Map<string, Array<typeof signatures[number]>>();
+	signatures.forEach((sig) => {
+		if (!signaturesMap.has(sig.entityId)) {
+			signaturesMap.set(sig.entityId, []);
+		}
+		signaturesMap.get(sig.entityId)!.push(sig);
+	});
+
+	const qualityImprovementsWithUser = await prisma.qualityImprovement.findMany({
 		where: whereClause,
 		orderBy: [{ status: "asc" }, { createdAt: "desc" }],
 		include: {
@@ -230,6 +289,11 @@ export async function getQualityImprovementsForReview() {
 			},
 		},
 	});
+
+	return qualityImprovementsWithUser.map((qi) => ({
+		...qi,
+		signatures: signaturesMap.get(qi.id) || [],
+	}));
 }
 
 export async function signQualityImprovementEntry(id: string, remark?: string) {
@@ -253,12 +317,13 @@ export async function signQualityImprovementEntry(id: string, remark?: string) {
 				...(remark ? { facultyRemark: remark } : {}),
 			},
 		});
-		await tx.digitalSignature.create({
+			await tx.digitalSignature.create({
 			data: {
 				entityId: id,
 				entityType: "QualityImprovement",
 				signedById: user.id,
 				signedAt: new Date(),
+				...(remark ? { remark } : {}),
 			},
 		});
 		await recordReview(tx, {
@@ -272,7 +337,17 @@ export async function signQualityImprovementEntry(id: string, remark?: string) {
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Quality Improvement",
+		body: `Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+		type: "entry_signed",
+		entityType: "QualityImprovement",
+		entityId: id,
+		href: "/dashboard/student/quality-improvement",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -309,7 +384,17 @@ export async function rejectQualityImprovementEntry(
 		});
 	});
 
+	await sendNotificationToUser(entry.userId, {
+		title: "Quality Improvement",
+		body: `Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+		type: "entry_needs_revision",
+		entityType: "QualityImprovement",
+		entityId: id,
+		href: "/dashboard/student/quality-improvement",
+	});
+
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -336,6 +421,7 @@ export async function bulkSignQualityImprovementEntries(ids: string[]) {
 					entityType: "QualityImprovement",
 					signedById: user.id,
 					signedAt: new Date(),
+					remark: "Bulk signed",
 				},
 			});
 			await recordReview(tx, {
@@ -347,10 +433,19 @@ export async function bulkSignQualityImprovementEntries(ids: string[]) {
 				decision: "SIGNED",
 				remark: "Bulk signed",
 			});
+			await sendNotificationToUser(e.userId, {
+				title: "Quality Improvement",
+				body: `Your quality improvement entry${e.description ? ` for "${e.description}"` : ""} has been bulk signed.`,
+				type: "entry_signed",
+				entityType: "QualityImprovement",
+				entityId: e.id,
+				href: "/dashboard/student/quality-improvement",
+			});
 		}
 	});
 
 	revalidateAll();
+	emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 

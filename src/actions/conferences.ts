@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { buildSnapshot } from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -200,6 +202,13 @@ export async function submitConferenceEntry(id: string) {
         where: { id },
         data: { status: "SIGNED" },
       });
+      await recordSubmission(tx, {
+        entityType: "ConferenceParticipation",
+        entityId: id,
+        ownerId: existing.userId,
+        snapshot: buildSnapshot(existing),
+        attachments: [],
+      });
       await tx.digitalSignature.create({
         data: {
           signedById: "auto-review",
@@ -218,6 +227,14 @@ export async function submitConferenceEntry(id: string) {
         remark: "Auto-reviewed by system",
       });
     });
+    await sendNotificationToUser(user.id, {
+      title: "Conference Participation",
+      body: `Your conference entry${existing.conferenceName ? ` for "${existing.conferenceName}"` : ""} has been auto-reviewed and signed.`,
+      type: "entry_signed",
+      entityType: "ConferenceParticipation",
+      entityId: id,
+      href: "/dashboard/student/conferences",
+    });
   } else {
     await prisma.$transaction(async (tx) => {
       await tx.conferenceParticipation.update({
@@ -228,12 +245,22 @@ export async function submitConferenceEntry(id: string) {
         entityType: "ConferenceParticipation",
         entityId: id,
         ownerId: user.id,
-        snapshot: { status: "SUBMITTED" },
+        snapshot: buildSnapshot(existing),
+        attachments: [],
       });
+    });
+    await sendNotificationToUser(user.id, {
+      title: "Conference Participation",
+      body: `Your conference entry${existing.conferenceName ? ` for "${existing.conferenceName}"` : ""} has been submitted for review.`,
+      type: "entry_submitted",
+      entityType: "ConferenceParticipation",
+      entityId: id,
+      href: "/dashboard/student/conferences",
     });
   }
 
   revalidateAll();
+  emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -267,7 +294,7 @@ export async function getConferencesForReview() {
   };
   if (studentIds.length > 0) where.userId = { in: studentIds };
 
-  return prisma.conferenceParticipation.findMany({
+  const conferences = await prisma.conferenceParticipation.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: {
@@ -283,6 +310,38 @@ export async function getConferencesForReview() {
       },
     },
   });
+
+  // Fetch signatures separately
+  const conferenceIds = conferences.map((c) => c.id);
+  const signatures = await prisma.digitalSignature.findMany({
+    where: {
+      entityType: "ConferenceParticipation",
+      entityId: { in: conferenceIds },
+    },
+    include: {
+      signedBy: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  // Map signatures to conferences
+  const signaturesMap = new Map<string, typeof signatures>();
+  signatures.forEach((sig) => {
+    if (!signaturesMap.has(sig.entityId)) {
+      signaturesMap.set(sig.entityId, []);
+    }
+    signaturesMap.get(sig.entityId)!.push(sig);
+  });
+
+  return conferences.map((conference) => ({
+    ...conference,
+    signatures: signaturesMap.get(conference.id) || [],
+  }));
 }
 
 export async function signConferenceEntry(id: string, remark?: string) {
@@ -324,7 +383,17 @@ export async function signConferenceEntry(id: string, remark?: string) {
     });
   });
 
+  await sendNotificationToUser(entry.userId, {
+    title: "Conference Participation",
+    body: `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} has been signed off.`,
+    type: "entry_signed",
+    entityType: "ConferenceParticipation",
+    entityId: id,
+    href: "/dashboard/student/conferences",
+  });
+
   revalidateAll();
+  emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -358,7 +427,17 @@ export async function rejectConferenceEntry(id: string, remark: string) {
     });
   });
 
+  await sendNotificationToUser(entry.userId, {
+    title: "Conference Participation",
+    body: `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} needs revision: ${remark}`,
+    type: "entry_needs_revision",
+    entityType: "ConferenceParticipation",
+    entityId: id,
+    href: "/dashboard/student/conferences",
+  });
+
   revalidateAll();
+  emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
@@ -394,10 +473,19 @@ export async function bulkSignConferenceEntries(ids: string[]) {
         decision: "SIGNED",
         remark: "Bulk signed",
       });
+      await sendNotificationToUser(entry.userId, {
+        title: "Conference Participation",
+        body: `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} has been bulk signed.`,
+        type: "entry_signed",
+        entityType: "ConferenceParticipation",
+        entityId: entry.id,
+        href: "/dashboard/student/conferences",
+      });
     }
   });
 
   revalidateAll();
+  emitRealtimeEvent("entry:updated");
   return { success: true, signedCount: entries.length };
 }
 

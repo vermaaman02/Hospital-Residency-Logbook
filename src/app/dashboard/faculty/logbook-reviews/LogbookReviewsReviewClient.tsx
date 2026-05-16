@@ -11,6 +11,8 @@
 "use client";
 
 import { useState, useTransition, useMemo, useCallback } from "react";
+import { useSocketEvent } from "@/hooks/useSocketEvent";
+import { RevisionThreadButton } from "@/components/shared/RevisionThreadButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,6 +111,19 @@ export interface LogbookReviewSubmission {
 	facultyId: string | null;
 	status: string;
 	createdAt: string;
+	signatures?: Array<{
+		id: string;
+		entityId: string;
+		entityType: string;
+		signedById: string;
+		signedAt: string;
+		remark: string | null;
+		signedBy: {
+			id: string;
+			firstName: string;
+			lastName: string;
+		};
+	}>;
 	user: {
 		id: string;
 		firstName: string;
@@ -138,6 +153,11 @@ export function LogbookReviewsReviewClient({
 }: LogbookReviewsReviewClientProps) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
+
+	// Real-time refresh on logbook review events
+	useSocketEvent("entry:updated", () => {
+		router.refresh();
+	});
 
 	// Search & filter
 	const [searchQuery, setSearchQuery] = useState("");
@@ -883,6 +903,47 @@ export function LogbookReviewsReviewClient({
 										/>
 									</div>
 								)}
+
+								{detailEntry.signatures && detailEntry.signatures.length > 0 && (
+									<div className="space-y-1">
+										<div className="flex items-center gap-2">
+											<CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+											<span className="text-xs font-medium text-muted-foreground">
+												Signed By
+											</span>
+										</div>
+										<div className="pl-6 space-y-2">
+											{detailEntry.signatures.map((sig) => (
+												<div
+													key={sig.id}
+													className="text-sm bg-muted/50 rounded p-2"
+												>
+													<div className="font-medium">
+														{sig.signedBy.firstName} {sig.signedBy.lastName}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														{format(new Date(sig.signedAt), "dd MMM yyyy, hh:mm a")}
+													</div>
+													{sig.remark && (
+														<div
+															className="text-xs mt-1 prose prose-xs max-w-none"
+															dangerouslySetInnerHTML={{
+																__html: renderMarkdown(sig.remark),
+															}}
+														/>
+													)}
+												</div>
+											))}
+										</div>
+									</div>
+								)}
+
+								<div className="pt-4 border-t">
+									<RevisionThreadButton
+										entityType="LogbookFacultyReview"
+										entityId={detailEntry.id}
+									/>
+								</div>
 
 								<div className="flex items-center gap-2 pt-2">
 									<StatusBadge status={detailEntry.status as EntryStatus} />

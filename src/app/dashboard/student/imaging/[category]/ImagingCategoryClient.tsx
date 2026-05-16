@@ -156,6 +156,7 @@ export function ImagingCategoryClient({
 				onUpdateEntry={updateImagingLogEntry}
 				onSubmitEntry={submitImagingLogEntry}
 				allowImageUpload={true}
+				entityType="ImagingLog"
 			/>
 		</div>
 	);
