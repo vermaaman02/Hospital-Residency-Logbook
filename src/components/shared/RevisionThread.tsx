@@ -117,7 +117,7 @@ export function RevisionThread({
 				if (!cancelled) {
 					setItems(res);
 
-					// Extract all facultyId values from revisions for	// Extract facultyId for entities that have it
+					// Extract facultyId for entities that have it
 					if (
 						entityType === "CasePresentation" ||
 						entityType === "Seminar" ||
@@ -134,7 +134,8 @@ export function RevisionThread({
 						entityType === "ConferenceParticipation" ||
 						entityType === "ResearchActivity" ||
 						entityType === "DisasterDrill" ||
-						entityType === "QualityImprovement"
+						entityType === "QualityImprovement" ||
+						entityType === "LogbookFacultyReview"
 					) {
 						const facultyIds = new Set<string>();
 						for (const item of res) {
