@@ -1,0 +1,22 @@
+diff --git a/node_modules/@expo/metro-config/build/serializer/fork/js.js b/node_modules/@expo/metro-config/build/serializer/fork/js.js
+index 77268e3..389ba36 100644
+--- a/node_modules/@expo/metro-config/build/serializer/fork/js.js
++++ b/node_modules/@expo/metro-config/build/serializer/fork/js.js
+@@ -69,7 +69,7 @@ function getModuleParams(module, options) {
+                         searchParams.set('modulesOnly', 'true');
+                         searchParams.set('runModule', 'false');
+                     }
+-                    const bundlePath = path_1.default.relative(options.serverRoot, dependency.absolutePath);
++                    const bundlePath = path_1.default.relative(options.serverRoot, modulePath);
+                     paths[id] =
+                         '/' +
+                             path_1.default.join(path_1.default.dirname(bundlePath), 
+@@ -82,7 +82,7 @@ function getModuleParams(module, options) {
+             else if (options.splitChunks && options.computedAsyncModulePaths != null) {
+                 hasPaths = true;
+                 // A template string that we'll match and replace later when we know the content hash for a given path.
+-                paths[id] = options.computedAsyncModulePaths[dependency.absolutePath];
++                paths[id] = options.computedAsyncModulePaths[modulePath];
+             }
+         }
+         return id;

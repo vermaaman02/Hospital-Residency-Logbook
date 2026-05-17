@@ -2,6 +2,9 @@
 	"name": "aiims-patna-logbook",
 	"version": "0.1.0",
 	"private": true,
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"dev": "node server.mjs",
 		"dev:next": "next dev",
@@ -60,6 +63,7 @@
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
+		"ajv": "^8.17.1",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^20",
 		"@types/react": "^19",

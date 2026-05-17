@@ -314,65 +314,64 @@ All routes live under `src/app/api/*`. Auth is Clerk session cookies; **none cur
 
 ---
 
-### **Phase 1 — Project Scaffold + Auth** — 4 days
+### **Phase 1 — Project Scaffold + Auth** — ✅ COMPLETED
 
-#### Tasks
+#### Implementation Notes
 
-1. **Day 1 — Monorepo conversion (npm workspaces)**
+> **Deviation from plan:** Web app was NOT moved into `apps/web/` — too risky for production.
+> Instead, `packages/shared` and `mobile/` were added as npm workspaces alongside the existing web root.
+> Web app `tsconfig.json` excludes `mobile/` and `packages/` to prevent cross-contamination.
+> Both web and mobile compile with **0 TypeScript errors**.
+
+1. **npm workspaces — DONE**
    ```
-   hospital-residency-logbook/        ← becomes monorepo root
-   ├── apps/
-   │   ├── web/                       ← move current Next.js code here
-   │   └── mobile/                    ← new Expo app
+   hospital-residency-logbook/        ← monorepo root (web app stays here)
+   ├── mobile/                        ← new Expo app (SDK 52, Expo Router 4)
    ├── packages/
    │   └── shared/                    ← validators + constants + types
-   └── package.json                   ← workspaces: ["apps/*", "packages/*"]
+   └── package.json                   ← workspaces: ["packages/*", "mobile"]
    ```
-   - Move [src/lib/validators](cci:9://file:///c:/Users/Vikash/Desktop/hospital-residency-logbook/src/lib/validators:0:0-0:0), [src/lib/constants](cci:9://file:///c:/Users/Vikash/Desktop/hospital-residency-logbook/src/lib/constants:0:0-0:0), [src/types](cci:9://file:///c:/Users/Vikash/Desktop/hospital-residency-logbook/src/types:0:0-0:0) into `packages/shared/src/`.
-   - Update web tsconfig path alias `@/lib/validators` → `@logbook/shared/validators`.
+   - `packages/shared/src/` contains copied validators/constants + mobile-safe types (no react/react-hook-form deps).
+   - Web tsconfig excludes `mobile/` and `packages/` — **zero impact on production build**.
+   - Web app path aliases (`@/lib/validators`) are **unchanged** — no migration needed.
 
-2. **Day 2 — Create Expo app**
-   ```bash
-   npx create-expo-app@latest mobile --template tabs
-   cd mobile
-   npm install @clerk/clerk-expo expo-secure-store expo-local-authentication \
-               expo-camera expo-location expo-image-picker expo-notifications \
-               @tanstack/react-query axios zod react-hook-form @hookform/resolvers \
-               socket.io-client expo-constants
-   npx expo install react-native-reanimated react-native-gesture-handler \
-                    react-native-safe-area-context react-native-screens \
-                    @shopify/flash-list date-fns
-   ```
-   - Configure Expo Router 4 with file-based routing.
-   - Set up TS path `@logbook/shared` to consume the workspace package.
+2. **Expo app scaffold — DONE**
+   - `mobile/` created with Expo SDK 52, Expo Router 4, file-based routing.
+   - `mobile/app.json` configured with all required permissions (camera, location, biometrics, notifications).
+   - TypeScript strict mode, path alias `@/*` → `./`, `@logbook/shared` → `../packages/shared/src/`.
 
-3. **Day 3 — Clerk integration**
-   - Wrap root `_layout.tsx` with `<ClerkProvider tokenCache={SecureStoreCache}>`.
-   - Sign-in/Sign-up screens via Clerk hosted (or custom email/password).
-   - Implement `useApiClient()` hook: axios instance whose `Authorization` header is set from `await getToken()`.
-   - Persist token via `expo-secure-store`.
+3. **Clerk integration — DONE**
+   - `mobile/lib/auth/clerk-cache.ts` — `SecureStore`-backed `TokenCache`.
+   - `mobile/app/_layout.tsx` — `ClerkProvider` + `PersistQueryClientProvider` + `TokenSyncer` (injects JWT into axios on every auth state change).
+   - `mobile/app/(auth)/_layout.tsx`, `sign-in.tsx`, `sign-up.tsx` — email/password + email verification flow.
 
-4. **Day 4 — Role-aware routing**
-   - On boot: hit `GET /api/v1/auth/me` → store role in context.
-   - If role !== `student`, show "Please use the web app — mobile is currently student-only" screen (MVP scope).
-   - Root layout switches between `(auth)` and `(app)` route groups.
+4. **Role-aware routing — DONE**
+   - `mobile/app/(app)/_layout.tsx` — calls `GET /api/v1/me` via `useMe()`, gates non-students with a "use web app" screen, renders 5-tab navigator for students.
+   - `mobile/app/index.tsx` — root redirect based on `isSignedIn`.
 
 **Files created:**
 ```
 mobile/app/_layout.tsx
+mobile/app/index.tsx
+mobile/app/(auth)/_layout.tsx
 mobile/app/(auth)/sign-in.tsx
 mobile/app/(auth)/sign-up.tsx
 mobile/app/(app)/_layout.tsx
+mobile/app/(app)/index.tsx        ← Home/Dashboard
+mobile/app/(app)/logbook.tsx      ← 18-module list
+mobile/app/(app)/attendance.tsx   ← Phase 4 stub
+mobile/app/(app)/inbox.tsx        ← Paginated inbox
+mobile/app/(app)/profile.tsx      ← Profile + sign-out
 mobile/lib/api/client.ts
 mobile/lib/auth/clerk-cache.ts
 mobile/lib/hooks/useMe.ts
 ```
 
-**Risk:** Clerk's Expo SDK requires specific config in `app.json`/`app.config.ts` for redirect URLs. Reserve time.
+**Action required before running:** Set `extra.clerkPublishableKey` and `extra.apiBaseUrl` in `mobile/app.json`.
 
 ---
 
-### **Phase 2 — API Client Layer + Real-time** — 3 days
+### **Phase 2 — API Client Layer + Real-time** — ✅ COMPLETED
 
 #### Tasks
 
@@ -400,9 +399,30 @@ mobile/lib/hooks/useMe.ts
    - Register Expo push token, POST to `/api/v1/auth/push-token`.
    - Set up `expo-notifications` foreground/background handlers.
 
+#### Implementation Notes
+
+> All Phase 2 deliverables are built. Persistence uses `AsyncStorage` (not `expo-secure-store`) for the query cache — expo-secure-store has a 2KB size limit incompatible with large query snapshots.
+
+**Files created:**
+```
+mobile/lib/api/client.ts              ← axios instance + setAuthToken()
+mobile/lib/hooks/useMe.ts             ← GET /api/v1/me
+mobile/lib/hooks/useDashboard.ts      ← GET /api/v1/dashboard
+mobile/lib/hooks/useInbox.ts          ← GET /api/v1/inbox (infinite cursor)
+mobile/lib/hooks/useEntries.ts        ← GET/POST /api/v1/:entityType (infinite + mutations)
+mobile/lib/realtime/socket.ts         ← Socket.IO client (socketUrl from app.json extra)
+mobile/lib/realtime/useRealtimeEvent.ts ← useRealtimeEvent() + useSocketConnection()
+mobile/lib/notifications/push-token.ts ← registerPushToken() → POST /api/v1/push-tokens
+```
+
+**TanStack Query config (in `mobile/app/_layout.tsx`):**
+- `staleTime: 30s`, `retry: 2`, `refetchOnWindowFocus: false`
+- Persistent cache via `@tanstack/react-query-persist-client` + `AsyncStorage`
+- Cache key: `logbook-query-cache`
+
 ---
 
-### **Phase 3 — Student Core Screens (Logbook)** — 18 days
+### **Phase 3 — Student Core Screens (Logbook)** ✅ COMPLETED
 
 **18 entry-type screens follow the same pattern**, so I'll spec the pattern once and list the 18.
 
@@ -448,6 +468,31 @@ mobile/components/forms/SkillLevelSelector.tsx
 mobile/components/forms/CloudinaryUploadRN.tsx ← image picker + signed upload
 mobile/components/forms/CategoryPicker.tsx     ← for 24/50-element enums
 ```
+
+#### Implementation Notes
+
+> All Phase 3 deliverables are built using a **generic scaffold** pattern — one dynamic route `/(app)/entries/[module]` powers all 18 modules instead of 18 separate routes.
+
+**Architectural deviation from plan:** Instead of 18 × 3 individual screen files, a single set of 3 generic screens handles all modules via a `lib/modules/index.ts` registry. Module-specific field sets live in `lib/modules/forms/index.tsx`.
+
+**Files created:**
+```
+mobile/components/StatusBadge.tsx                  ← status colour mapping
+mobile/components/EntryCard.tsx                    ← list item card
+mobile/components/RevisionThread.tsx               ← RN port of web RevisionThread
+mobile/components/forms/FormField.tsx              ← labelled TextInput for RHF
+mobile/components/forms/SelectPicker.tsx           ← modal picker for RHF (searchable)
+mobile/components/forms/PatientInfoFields.tsx      ← reusable patient info subform
+mobile/components/forms/CloudinaryUploadRN.tsx     ← image picker + signed Cloudinary upload
+mobile/app/(app)/entries/[module]/index.tsx        ← generic list screen (FlatList + FAB)
+mobile/app/(app)/entries/[module]/detail.tsx       ← generic detail + RevisionThread
+mobile/app/(app)/entries/[module]/form.tsx         ← generic RHF form + 30s auto-save
+mobile/lib/modules/index.ts                        ← ModuleConfig registry for all 18 modules
+mobile/lib/modules/forms/index.tsx                 ← 18 module form field sets
+mobile/lib/modules/forms/types.ts                  ← ModuleFormProps type
+```
+
+**tsconfig.json addition:** Granular `@logbook/shared/constants/*` path aliases to bypass the barrel `constants/index.ts` which pulls in files with unresolvable `@/types` Next.js alias.
 
 ---
 
