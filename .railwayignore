@@ -30,6 +30,9 @@ __tests__/
 # Seed files (run manually via railway:seed)
 prisma/seed.ts
 
+# Mobile app (Expo / React Native — not needed for web deployment)
+mobile/
+
 # Local development
 *.local
 .DS_Store
