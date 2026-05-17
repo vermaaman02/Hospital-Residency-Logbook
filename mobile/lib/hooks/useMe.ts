@@ -16,8 +16,13 @@ export type MeUser = {
 	batch: string | null;
 	currentSemester: number | null;
 	department: string | null;
-	imageUrl: string | null;
+	profileImage: string | null;
 	status: string;
+	batchId: string | null;
+	departmentId: string | null;
+	createdAt: string | null;
+	batchRelation: { id: string; name: string; isActive: boolean } | null;
+	departmentRelation: { id: string; name: string; code: string } | null;
 };
 
 async function fetchMe(): Promise<MeUser> {

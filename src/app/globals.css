@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@source not "../../mobile";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ============== AIIMS PATNA HOSPITAL THEME ============== */

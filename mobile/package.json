@@ -22,6 +22,7 @@
     "expo": "~53.0.0",
     "expo-constants": "~17.1.8",
     "expo-font": "~13.3.2",
+    "expo-image-picker": "~16.1.4",
     "expo-linear-gradient": "~14.1.5",
     "expo-linking": "~7.1.0",
     "expo-router": "~5.1.11",
@@ -39,6 +40,7 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "15.11.2",
+    "react-native-webview": "13.13.5",
     "socket.io-client": "^4.8.1",
     "zod": "^3.24.1"
   },

@@ -193,6 +193,12 @@ function AuthenticatedShell() {
 					),
 				}}
 			/>
+			<Tabs.Screen
+				name="account-settings"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }
