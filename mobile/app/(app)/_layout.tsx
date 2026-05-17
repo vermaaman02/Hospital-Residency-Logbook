@@ -100,7 +100,7 @@ function AuthenticatedShell() {
 	}
 
 	// ─── Non-student gate ─────────────────────────────────
-	if (me && me.role !== "student") {
+	if (me && me.role.toLowerCase() !== "student") {
 		return (
 			<View style={styles.center}>
 				<View style={styles.gateCard}>

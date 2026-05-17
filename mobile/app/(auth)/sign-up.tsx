@@ -23,7 +23,9 @@ import {
 	KeyboardAvoidingView,
 	Platform,
 	ScrollView,
+	Image,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSignUp, useAuth } from "@clerk/expo";
 import { useRouter, Link, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -87,9 +89,13 @@ export default function SignUpScreen() {
 	) {
 		return (
 			<SafeAreaView style={styles.safe}>
-				<KeyboardAvoidingView
-					style={styles.container}
-					behavior={Platform.OS === "ios" ? "padding" : undefined}
+			<LinearGradient
+				colors={['#0F172A', '#1E293B', '#0F172A']}
+				style={StyleSheet.absoluteFillObject}
+			/>
+			<KeyboardAvoidingView
+				style={styles.container}
+				behavior={Platform.OS === "ios" ? "padding" : undefined}
 				>
 					<View style={styles.card}>
 						<View style={styles.iconCircle}>
@@ -149,6 +155,10 @@ export default function SignUpScreen() {
 	// ─── Main sign-up form ────────────────────────────────
 	return (
 		<SafeAreaView style={styles.safe}>
+			<LinearGradient
+				colors={['#0F172A', '#1E293B', '#0F172A']}
+				style={StyleSheet.absoluteFillObject}
+			/>
 			<KeyboardAvoidingView
 				style={{ flex: 1 }}
 				behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -159,13 +169,13 @@ export default function SignUpScreen() {
 				>
 					{/* Header */}
 					<View style={styles.header}>
-						<View style={styles.logoBadge}>
-							<Text style={styles.logoText}>🏥</Text>
+						<View style={styles.logoContainer}>
+							<Image 
+								source={require("../../assets/images/aiims-logo.png")} 
+								style={styles.logoImage} 
+								resizeMode="contain"
+							/>
 						</View>
-						<Text style={styles.heroTitle}>Create Account</Text>
-						<Text style={styles.heroSubtitle}>
-							Join the AIIMS Patna Logbook
-						</Text>
 					</View>
 
 					{/* Form card */}
@@ -272,27 +282,26 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		marginBottom: Spacing.xxxl,
 	},
-	logoBadge: {
-		width: 72,
-		height: 72,
+	logoContainer: {
+		width: '100%',
+		maxWidth: 280,
+		height: 100,
+		backgroundColor: "#FFFFFF",
 		borderRadius: Radius.xl,
-		backgroundColor: Colors.bgCard,
 		justifyContent: "center",
 		alignItems: "center",
-		marginBottom: Spacing.lg,
+		padding: Spacing.md,
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 10 },
+		shadowOpacity: 0.3,
+		shadowRadius: 20,
+		elevation: 10,
 		borderWidth: 1,
-		borderColor: Colors.border,
+		borderColor: "rgba(255, 255, 255, 0.1)",
 	},
-	logoText: { fontSize: 32 },
-	heroTitle: {
-		fontSize: Font.size.hero,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	heroSubtitle: {
-		fontSize: Font.size.md,
-		color: Colors.textSecondary,
-		marginTop: Spacing.xs,
+	logoImage: {
+		width: "100%",
+		height: "100%",
 	},
 	card: {
 		backgroundColor: Colors.bgCard,
