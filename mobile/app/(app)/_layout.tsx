@@ -1,157 +1,150 @@
 /**
- * Protected app shell — redirects to auth if not signed in.
+ * Protected app shell — handles auth gating, role gating, and tab navigation.
  *
- * After auth, fetches user from /api/v1/me to:
- *   1. Get the role (student/faculty/hod)
- *   2. Show role-appropriate tab navigation
- *   3. Non-students see a "use web app" message
- *
- * Side-effects (socket, push token) are deferred to later phases.
+ * Flow:
+ *   1. Wait for Clerk session.
+ *   2. If signed out → redirect to /(auth)/sign-in.
+ *   3. If signed in → fetch DB user via GET /api/v1/me.
+ *   4. If non-student → render a friendly "use web app" gate.
+ *   5. If student → render the 5-tab navigator.
  */
 
-import { useEffect } from "react";
-import {
-	View,
-	Text,
-	ActivityIndicator,
-	StyleSheet,
-	Pressable,
-} from "react-native";
-import { Tabs, Redirect } from "expo-router";
+import React from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { Redirect, Tabs } from "expo-router";
 import { useAuth } from "@clerk/expo";
-import { useMe } from "@/lib/hooks/useMe";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+	Home,
+	NotebookText,
+	CalendarCheck,
+	Inbox,
+	UserRound,
+	Stethoscope,
+	AlertTriangle,
+	LogOut,
+} from "lucide-react-native";
+
+import { useMe } from "@/lib/hooks/useMe";
 import { setAuthToken } from "@/lib/api/client";
-import { Colors, Font, Spacing, Radius } from "@/lib/theme";
+import {
+	Button,
+	Card,
+	Heading,
+	IconBubble,
+	Screen,
+	Text,
+	VStack,
+} from "@/components/ui";
+import { Colors, FontFamily, Layout, Spacing } from "@/lib/theme";
 
 export default function AppLayout() {
 	const { isSignedIn, isLoaded } = useAuth();
 
-	if (!isLoaded) {
-		return (
-			<View style={styles.center}>
-				<ActivityIndicator size="large" color={Colors.primary} />
-			</View>
-		);
-	}
-
-	if (!isSignedIn) {
-		return <Redirect href="/(auth)/sign-in" />;
-	}
+	if (!isLoaded) return <FullScreenSpinner />;
+	if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
 
 	return <AuthenticatedShell />;
 }
 
-/**
- * Inner shell — only mounts when user IS authenticated.
- * Fetches the DB user record via /api/v1/me and shows
- * role-appropriate content.
- */
 function AuthenticatedShell() {
 	const { signOut } = useAuth();
 	const qc = useQueryClient();
 	const { data: me, isLoading, isError, error, refetch } = useMe();
 
-	// ─── Loading state ────────────────────────────────────
-	if (isLoading) {
-		return (
-			<View style={styles.center}>
-				<ActivityIndicator size="large" color={Colors.primary} />
-				<Text style={styles.loadingText}>Loading your profile...</Text>
-			</View>
-		);
-	}
+	const handleSignOut = async () => {
+		setAuthToken(null);
+		qc.clear();
+		await signOut();
+	};
 
-	// ─── Error state ──────────────────────────────────────
+	if (isLoading) return <FullScreenSpinner label="Loading your profile…" />;
+
 	if (isError) {
 		return (
-			<View style={styles.center}>
-				<View style={styles.errorCard}>
-					<Text style={styles.errorEmoji}>⚠️</Text>
-					<Text style={styles.errorTitle}>Connection Error</Text>
-					<Text style={styles.errorMessage}>
-						{error?.message ?? "Could not reach the server"}
-					</Text>
-					<Pressable
-						style={({ pressed }) => [
-							styles.retryButton,
-							pressed && { opacity: 0.8 },
-						]}
-						onPress={() => refetch()}
-					>
-						<Text style={styles.retryText}>Try again</Text>
-					</Pressable>
-					<Pressable
-						style={({ pressed }) => [
-							styles.signOutBtn,
-							pressed && { opacity: 0.8 },
-						]}
-						onPress={async () => {
-							setAuthToken(null);
-							qc.clear();
-							await signOut();
-						}}
-					>
-						<Text style={styles.signOutText}>Sign out</Text>
-					</Pressable>
+			<Screen scroll>
+				<View style={styles.fill}>
+					<Card variant="featured-amber">
+						<VStack gap="3" align="center">
+							<IconBubble
+								icon={<AlertTriangle color={Colors.inverse} size={22} strokeWidth={2.5} />}
+								tone="warning"
+								size={56}
+							/>
+							<Heading level={3}>Connection error</Heading>
+							<Text variant="muted" style={styles.center}>
+								{error?.message ?? "Could not reach the server"}
+							</Text>
+							<Button label="Try again" onPress={() => refetch()} fullWidth />
+							<Button
+								label="Sign out"
+								variant="ghost"
+								leftIcon={<LogOut size={16} color={Colors.danger} strokeWidth={2.5} />}
+								onPress={handleSignOut}
+							/>
+						</VStack>
+					</Card>
 				</View>
-			</View>
+			</Screen>
 		);
 	}
 
-	// ─── Non-student gate ─────────────────────────────────
+	// Non-student → web-app gate
 	if (me && me.role.toLowerCase() !== "student") {
 		return (
-			<View style={styles.center}>
-				<View style={styles.gateCard}>
-					<Text style={styles.gateEmoji}>💻</Text>
-					<Text style={styles.gateTitle}>
-						Welcome, {me.firstName ?? "Doctor"}!
-					</Text>
-					<Text style={styles.gateMessage}>
-						The mobile app is currently available for{" "}
-						<Text style={{ fontWeight: "700" }}>students only</Text>.
-					</Text>
-					<Text style={styles.gateMessage}>
-						As a <Text style={styles.roleBadge}>{me.role}</Text>, please
-						use the web application for full access.
-					</Text>
-					<Pressable
-						style={({ pressed }) => [
-							styles.signOutBtn,
-							pressed && { opacity: 0.8 },
-						]}
-						onPress={async () => {
-							setAuthToken(null);
-							qc.clear();
-							await signOut();
-						}}
-					>
-						<Text style={styles.signOutText}>Sign out</Text>
-					</Pressable>
+			<Screen scroll pattern="dots">
+				<View style={styles.fill}>
+					<Card variant="featured-violet">
+						<VStack gap="3" align="center">
+							<IconBubble
+								icon={<Stethoscope color={Colors.inverse} size={26} strokeWidth={2.5} />}
+								tone="accent"
+								size={64}
+							/>
+							<Heading level={2} style={styles.center}>
+								Welcome, {me.firstName ?? "Doctor"}!
+							</Heading>
+							<Text variant="body" style={styles.center}>
+								The mobile app is available for{" "}
+								<Text variant="bodyStrong">students only</Text>.
+							</Text>
+							<Text variant="muted" style={styles.center}>
+								As a <Text variant="bodyStrong" color={Colors.accent}>{me.role}</Text>,
+								please use the web application for full access.
+							</Text>
+							<Button
+								label="Sign out"
+								variant="secondary"
+								leftIcon={<LogOut size={16} color={Colors.foreground} strokeWidth={2.5} />}
+								onPress={handleSignOut}
+								fullWidth
+							/>
+						</VStack>
+					</Card>
 				</View>
-			</View>
+			</Screen>
 		);
 	}
 
-	// ─── Student tab bar ──────────────────────────────────
+	// Student → tab navigator
 	return (
 		<Tabs
 			screenOptions={{
 				headerShown: false,
 				tabBarStyle: {
-					backgroundColor: Colors.tabBg,
-					borderTopColor: Colors.tabBorder,
-					borderTopWidth: 1,
-					height: 60,
-					paddingBottom: 8,
-					paddingTop: 4,
+					backgroundColor: Colors.surface,
+					borderTopColor: Colors.borderStrong,
+					borderTopWidth: 2,
+					height: Layout.tabBarHeight,
+					paddingBottom: 10,
+					paddingTop: 8,
 				},
-				tabBarActiveTintColor: Colors.tabActive,
-				tabBarInactiveTintColor: Colors.tabInactive,
+				tabBarActiveTintColor: Colors.accent,
+				tabBarInactiveTintColor: Colors.muted,
 				tabBarLabelStyle: {
+					fontFamily: FontFamily.bodyBold,
 					fontSize: 11,
-					fontWeight: "600",
+					letterSpacing: 0.4,
 				},
 			}}
 		>
@@ -159,147 +152,72 @@ function AuthenticatedShell() {
 				name="index"
 				options={{
 					title: "Home",
-					tabBarLabel: "Home",
-					tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+					tabBarIcon: ({ color, focused }) => (
+						<Home size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
+					),
 				}}
 			/>
 			<Tabs.Screen
 				name="logbook"
 				options={{
 					title: "Logbook",
-					tabBarLabel: "Logbook",
-					tabBarIcon: ({ color }) => <TabIcon emoji="📋" color={color} />,
+					tabBarIcon: ({ color, focused }) => (
+						<NotebookText size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
+					),
 				}}
 			/>
 			<Tabs.Screen
 				name="attendance"
 				options={{
 					title: "Attendance",
-					tabBarLabel: "Attendance",
-					tabBarIcon: ({ color }) => <TabIcon emoji="📅" color={color} />,
+					tabBarIcon: ({ color, focused }) => (
+						<CalendarCheck size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
+					),
 				}}
 			/>
 			<Tabs.Screen
 				name="inbox"
 				options={{
 					title: "Inbox",
-					tabBarLabel: "Inbox",
-					tabBarIcon: ({ color }) => <TabIcon emoji="📬" color={color} />,
+					tabBarIcon: ({ color, focused }) => (
+						<Inbox size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
+					),
 				}}
 			/>
 			<Tabs.Screen
 				name="profile"
 				options={{
 					title: "Profile",
-					tabBarLabel: "Profile",
-					tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} />,
+					tabBarIcon: ({ color, focused }) => (
+						<UserRound size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
+					),
 				}}
 			/>
 		</Tabs>
 	);
 }
 
-/**
- * Simple emoji-based tab icon (will replace with proper icons later).
- */
-function TabIcon({ emoji }: { emoji: string; color: string }) {
-	return <Text style={{ fontSize: 20 }}>{emoji}</Text>;
+function FullScreenSpinner({ label }: { label?: string }) {
+	return (
+		<View style={styles.fill}>
+			<ActivityIndicator size="large" color={Colors.accent} />
+			{label && (
+				<Text variant="muted" style={{ marginTop: Spacing["4"] }}>
+					{label}
+				</Text>
+			)}
+		</View>
+	);
 }
 
-/* ────────────────────────────────────────────────────── */
-/*  Styles                                                */
-/* ────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-	center: {
+	fill: {
 		flex: 1,
-		backgroundColor: Colors.bg,
+		backgroundColor: Colors.background,
 		justifyContent: "center",
 		alignItems: "center",
-		padding: Spacing.xl,
+		gap: Spacing["3"],
+		padding: Spacing["5"],
 	},
-	loadingText: {
-		color: Colors.textSecondary,
-		fontSize: Font.size.sm,
-		marginTop: Spacing.lg,
-	},
-
-	// Error card
-	errorCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xxxl,
-		alignItems: "center",
-		gap: Spacing.md,
-		borderWidth: 1,
-		borderColor: Colors.border,
-		width: "100%",
-		maxWidth: 340,
-	},
-	errorEmoji: { fontSize: 40 },
-	errorTitle: {
-		fontSize: Font.size.lg,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	errorMessage: {
-		fontSize: Font.size.sm,
-		color: Colors.textSecondary,
-		textAlign: "center",
-	},
-	retryButton: {
-		backgroundColor: Colors.primary,
-		borderRadius: Radius.sm,
-		paddingVertical: 12,
-		paddingHorizontal: 32,
-		marginTop: Spacing.sm,
-	},
-	retryText: {
-		color: "#fff",
-		fontWeight: Font.weight.semibold,
-		fontSize: Font.size.md,
-	},
-
-	// Gate card (non-student)
-	gateCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xxxl,
-		alignItems: "center",
-		gap: Spacing.md,
-		borderWidth: 1,
-		borderColor: Colors.border,
-		width: "100%",
-		maxWidth: 340,
-	},
-	gateEmoji: { fontSize: 48 },
-	gateTitle: {
-		fontSize: Font.size.xl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	gateMessage: {
-		fontSize: Font.size.sm,
-		color: Colors.textSecondary,
-		textAlign: "center",
-		lineHeight: 22,
-	},
-	roleBadge: {
-		color: Colors.accent,
-		fontWeight: Font.weight.bold,
-		textTransform: "capitalize",
-	},
-
-	// Sign out
-	signOutBtn: {
-		backgroundColor: Colors.errorBg,
-		borderRadius: Radius.sm,
-		paddingVertical: 12,
-		paddingHorizontal: 24,
-		marginTop: Spacing.md,
-	},
-	signOutText: {
-		color: "#fca5a5",
-		fontWeight: Font.weight.semibold,
-		fontSize: Font.size.md,
-	},
+	center: { textAlign: "center" },
 });

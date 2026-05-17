@@ -23,6 +23,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setAuthToken } from "@/lib/api/client";
+import { Colors, useThemeFonts } from "@/lib/theme";
 
 /* ────────────────────────────────────────────────────── */
 /*  TanStack Query client                                 */
@@ -85,15 +86,24 @@ function TokenSyncer({ children }: { children: React.ReactNode }) {
 /*  Root Layout                                           */
 /* ────────────────────────────────────────────────────── */
 export default function RootLayout() {
+	const fontsReady = useThemeFonts();
+	if (!fontsReady) return null; // Splash screen stays visible
+
 	return (
-		<GestureHandlerRootView style={{ flex: 1 }}>
+		<GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.background }}>
 			<ClerkProvider publishableKey={CLERK_KEY} tokenCache={tokenCache}>
 				<ClerkLoaded>
 					<QueryClientProvider client={queryClient}>
 						<SafeAreaProvider>
 							<TokenSyncer>
-								<StatusBar style="light" />
-								<Stack screenOptions={{ headerShown: false }} />
+								<StatusBar style="dark" />
+								<Stack
+									screenOptions={{
+										headerShown: false,
+										contentStyle: { backgroundColor: Colors.background },
+										animation: "fade",
+									}}
+								/>
 							</TokenSyncer>
 						</SafeAreaProvider>
 					</QueryClientProvider>

@@ -1,396 +1,246 @@
 /**
- * Sign-Up screen — OFFICIAL Clerk Expo v3+ (Core 3) custom flow.
+ * Sign-Up screen — Clerk Expo v3 (Core 3) custom flow.
  *
- * API shape:
- *   const { signUp, errors, fetchStatus } = useSignUp()
+ *   1. signUp.create({ emailAddress, password, firstName, lastName })
+ *   2. signUp.prepareEmailAddressVerification({ strategy: "email_code" })
+ *   3. signUp.attemptEmailAddressVerification({ code })
+ *   4. signUp.finalize({ navigate })
  *
- * Flow:
- *   1. signUp.password({ emailAddress, password })
- *   2. signUp.verifications.sendEmailCode()
- *   3. signUp.verifications.verifyEmailCode({ code })
- *   4. signUp.status === "complete" → signUp.finalize({ navigate })
- *
- * @see https://clerk.com/docs/custom-flows/email-password#sign-up-flow
+ * Note: this creates the Clerk identity only. The DB `User` row is
+ * provisioned later by an HOD/admin (see Mobile-app-roadmap §6).
  */
 
-import React from "react";
+import React, { useState } from "react";
 import {
-	View,
-	Text,
-	TextInput,
-	Pressable,
-	StyleSheet,
-	KeyboardAvoidingView,
-	Platform,
 	ScrollView,
-	Image,
+	StyleSheet,
+	View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { useSignUp, useAuth } from "@clerk/expo";
-import { useRouter, Link, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors, Spacing, Radius, Font } from "@/lib/theme";
+import { useRouter, Link, type Href } from "expo-router";
+import { useSignUp, useAuth } from "@clerk/expo";
+import { HeartPulse, ArrowRight, ShieldCheck } from "lucide-react-native";
+
+import {
+	Button,
+	Card,
+	Confetti,
+	Heading,
+	IconBubble,
+	Input,
+	Squiggle,
+	Text,
+	VStack,
+} from "@/components/ui";
+import { Colors, Spacing } from "@/lib/theme";
+import { DotGrid } from "@/components/ui/DotGrid";
 
 export default function SignUpScreen() {
-	const { signUp, errors, fetchStatus } = useSignUp();
+	const { signUp: rawSignUp, errors: rawErrors, fetchStatus } = useSignUp();
+	const signUp = rawSignUp as any;
+	const errors = rawErrors as any;
 	const { isSignedIn } = useAuth();
 	const router = useRouter();
 
-	const [emailAddress, setEmailAddress] = React.useState("");
-	const [password, setPassword] = React.useState("");
-	const [code, setCode] = React.useState("");
+	const [firstName, setFirstName] = useState("");
+	const [lastName, setLastName] = useState("");
+	const [emailAddress, setEmailAddress] = useState("");
+	const [password, setPassword] = useState("");
+	const [code, setCode] = useState("");
 
 	const isLoading = fetchStatus === "fetching";
 
-	// ─── Handle sign-up submit ────────────────────────────
-	const handleSubmit = async () => {
-		const { error } = await signUp.password({
+	const handleCreate = async () => {
+		const { error } = await signUp.create({
 			emailAddress: emailAddress.trim().toLowerCase(),
 			password,
+			firstName: firstName.trim(),
+			lastName: lastName.trim(),
 		});
-
 		if (error) {
 			console.error("Sign-up error:", JSON.stringify(error, null, 2));
 			return;
 		}
-
-		// No error — trigger email verification
-		await signUp.verifications.sendEmailCode();
+		await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
 	};
 
-	// ─── Handle email verification ────────────────────────
 	const handleVerify = async () => {
-		await signUp.verifications.verifyEmailCode({ code });
-
+		await signUp.attemptEmailAddressVerification({ code });
 		if (signUp.status === "complete") {
 			await signUp.finalize({
-				navigate: ({ session, decorateUrl }) => {
-					if (session?.currentTask) {
-						console.log("Session task:", session.currentTask);
-						return;
-					}
-					const url = decorateUrl("/");
-					router.replace(url as Href);
+				navigate: ({ session, decorateUrl }: { session: any; decorateUrl: (u: string) => string }) => {
+					if (session?.currentTask) return;
+					router.replace(decorateUrl("/") as Href);
 				},
 			});
-		} else {
-			console.error("Sign-up attempt not complete:", signUp.status);
 		}
 	};
 
-	// ─── Already signed in ────────────────────────────────
-	if (signUp.status === "complete" || isSignedIn) return null;
+	if (isSignedIn) return null;
 
-	// ─── Email verification step ──────────────────────────
-	if (
-		signUp.status === "missing_requirements" &&
-		signUp.unverifiedFields?.includes("email_address") &&
-		signUp.missingFields?.length === 0
-	) {
+	const needsVerify = signUp.status === "missing_requirements" &&
+		signUp.unverifiedFields?.includes("email_address");
+
+	if (needsVerify) {
 		return (
-			<SafeAreaView style={styles.safe}>
-			<LinearGradient
-				colors={['#0F172A', '#1E293B', '#0F172A']}
-				style={StyleSheet.absoluteFillObject}
-			/>
-			<KeyboardAvoidingView
-				style={styles.container}
-				behavior={Platform.OS === "ios" ? "padding" : undefined}
+			<SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+				<DotGrid />
+				<ScrollView
+					style={styles.flex}
+					contentContainerStyle={styles.scrollContent}
+					keyboardShouldPersistTaps="always"
+					showsVerticalScrollIndicator={false}
 				>
-					<View style={styles.card}>
-						<View style={styles.iconCircle}>
-							<Text style={styles.iconEmoji}>✉️</Text>
-						</View>
-						<Text style={styles.title}>Verify your email</Text>
-						<Text style={styles.subtitle}>
-							We sent a verification code to{"\n"}
-							<Text style={styles.emailHighlight}>{emailAddress}</Text>
+					<View style={styles.hero}>
+						<IconBubble icon={<ShieldCheck color={Colors.inverse} size={28} strokeWidth={2.5} />} tone="accent" size={64} />
+						<Heading level={1} style={styles.heroTitle}>Verify your email</Heading>
+						<Text variant="muted" style={styles.center}>
+							We sent a 6-digit code to{" "}
+							<Text variant="bodyStrong" color={Colors.foreground}>
+								{emailAddress}
+							</Text>
 						</Text>
-
-						<TextInput
-							style={styles.input}
-							value={code}
-							onChangeText={setCode}
-							placeholder="Enter verification code"
-							placeholderTextColor={Colors.textMuted}
-							keyboardType="number-pad"
-							autoFocus
-						/>
-
-						{errors?.fields?.code && (
-							<Text style={styles.errorText}>
-								{errors.fields.code.message}
-							</Text>
-						)}
-
-						<Pressable
-							style={({ pressed }) => [
-								styles.button,
-								(isLoading || !code) && styles.buttonDisabled,
-								pressed && styles.buttonPressed,
-							]}
-							onPress={handleVerify}
-							disabled={isLoading || !code}
-						>
-							<Text style={styles.buttonText}>
-								{isLoading ? "Verifying..." : "Verify email"}
-							</Text>
-						</Pressable>
-
-						<Pressable
-							style={({ pressed }) => [
-								styles.linkButton,
-								pressed && { opacity: 0.7 },
-							]}
-							onPress={() => signUp.verifications.sendEmailCode()}
-						>
-							<Text style={styles.linkText}>I need a new code</Text>
-						</Pressable>
 					</View>
-				</KeyboardAvoidingView>
+
+					<Card>
+						<VStack gap="4">
+							<Input
+								label="Verification code"
+								value={code}
+								onChangeText={setCode}
+								placeholder="123456"
+								keyboardType="number-pad"
+								autoFocus
+								error={errors?.fields?.code?.message}
+							/>
+							<Button
+								label={isLoading ? "Verifying…" : "Verify & continue"}
+								onPress={handleVerify}
+								loading={isLoading}
+								disabled={!code}
+								fullWidth
+							/>
+						</VStack>
+					</Card>
+				</ScrollView>
 			</SafeAreaView>
 		);
 	}
 
-	// ─── Main sign-up form ────────────────────────────────
 	return (
-		<SafeAreaView style={styles.safe}>
-			<LinearGradient
-				colors={['#0F172A', '#1E293B', '#0F172A']}
-				style={StyleSheet.absoluteFillObject}
-			/>
-			<KeyboardAvoidingView
-				style={{ flex: 1 }}
-				behavior={Platform.OS === "ios" ? "padding" : undefined}
+		<SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+			<DotGrid />
+			<ScrollView
+				style={styles.flex}
+				contentContainerStyle={styles.scrollContent}
+				keyboardShouldPersistTaps="always"
+				showsVerticalScrollIndicator={false}
 			>
-				<ScrollView
-					contentContainerStyle={styles.scrollContent}
-					keyboardShouldPersistTaps="handled"
-				>
-					{/* Header */}
-					<View style={styles.header}>
-						<View style={styles.logoContainer}>
-							<Image 
-								source={require("../../assets/images/aiims-logo.png")} 
-								style={styles.logoImage} 
-								resizeMode="contain"
-							/>
-						</View>
-					</View>
+				<Confetti count={8} seed={23} opacity={0.6} />
 
-					{/* Form card */}
-					<View style={styles.card}>
-						<Text style={styles.cardTitle}>Sign up</Text>
+				<View style={styles.hero}>
+					<IconBubble
+						icon={<HeartPulse color={Colors.inverse} size={28} strokeWidth={2.5} />}
+						tone="pink"
+						size={68}
+					/>
+					<Heading level={1} style={styles.heroTitle}>Create your account</Heading>
+					<Squiggle color={Colors.amber} width={80} height={10} waves={3} />
+					<Text variant="muted" style={styles.center}>
+						Join the AIIMS Patna resident logbook
+					</Text>
+				</View>
 
-						{/* Email */}
-						<View style={styles.fieldGroup}>
-							<Text style={styles.label}>Email address</Text>
-							<TextInput
-								style={styles.input}
-								value={emailAddress}
-								onChangeText={setEmailAddress}
-								placeholder="you@aiims.edu"
-								placeholderTextColor={Colors.textMuted}
-								autoCapitalize="none"
-								keyboardType="email-address"
-								autoComplete="email"
-								textContentType="emailAddress"
-								editable={!isLoading}
-							/>
-							{errors?.fields?.emailAddress && (
-								<Text style={styles.errorText}>
-									{errors.fields.emailAddress.message}
-								</Text>
-							)}
-						</View>
-
-						{/* Password */}
-						<View style={styles.fieldGroup}>
-							<Text style={styles.label}>Password</Text>
-							<TextInput
-								style={styles.input}
-								value={password}
-								onChangeText={setPassword}
-								placeholder="Min. 8 characters"
-								placeholderTextColor={Colors.textMuted}
-								secureTextEntry
-								autoComplete="new-password"
-								textContentType="newPassword"
-								editable={!isLoading}
-							/>
-							{errors?.fields?.password && (
-								<Text style={styles.errorText}>
-									{errors.fields.password.message}
-								</Text>
-							)}
+				<Card>
+					<VStack gap="4">
+						<View style={styles.row}>
+							<View style={styles.half}>
+								<Input
+									label="First name"
+									value={firstName}
+									onChangeText={setFirstName}
+									placeholder="Anika"
+									autoCapitalize="words"
+									error={errors?.fields?.firstName?.message}
+								/>
+							</View>
+							<View style={styles.half}>
+								<Input
+									label="Last name"
+									value={lastName}
+									onChangeText={setLastName}
+									placeholder="Sharma"
+									autoCapitalize="words"
+									error={errors?.fields?.lastName?.message}
+								/>
+							</View>
 						</View>
 
-						{/* Submit */}
-						<Pressable
-							style={({ pressed }) => [
-								styles.button,
-								(!emailAddress || !password || isLoading) &&
-									styles.buttonDisabled,
-								pressed && styles.buttonPressed,
-							]}
-							onPress={handleSubmit}
-							disabled={!emailAddress || !password || isLoading}
-						>
-							<Text style={styles.buttonText}>
-								{isLoading ? "Creating account..." : "Create account"}
-							</Text>
-						</Pressable>
+						<Input
+							label="Email"
+							value={emailAddress}
+							onChangeText={setEmailAddress}
+							placeholder="resident@aiims.edu"
+							keyboardType="email-address"
+							autoCapitalize="none"
+							autoComplete="email"
+							error={errors?.fields?.emailAddress?.message}
+						/>
+						<Input
+							label="Password"
+							value={password}
+							onChangeText={setPassword}
+							placeholder="At least 8 characters"
+							secureTextEntry
+							autoComplete="new-password"
+							error={errors?.fields?.password?.message ?? errors?.global?.[0]?.message}
+						/>
 
-						{/* Sign in link */}
-						<View style={styles.footer}>
-							<Text style={styles.footerText}>
-								Already have an account?{" "}
-							</Text>
-							<Link href="/(auth)/sign-in">
-								<Text style={styles.linkText}>Sign in</Text>
-							</Link>
-						</View>
-					</View>
+						<Button
+							label={isLoading ? "Creating…" : "Create account"}
+							onPress={handleCreate}
+							loading={isLoading}
+							disabled={!emailAddress || !password || !firstName}
+							fullWidth
+							rightIcon={<ArrowRight color={Colors.inverse} size={18} strokeWidth={2.5} />}
+						/>
+					</VStack>
+				</Card>
 
-					{/* Clerk bot protection */}
-					<View nativeID="clerk-captcha" />
-				</ScrollView>
-			</KeyboardAvoidingView>
+				<View style={styles.footer}>
+					<Text variant="muted">Already a resident? </Text>
+					<Link href="/(auth)/sign-in" asChild>
+						<Text variant="bodyStrong" color={Colors.accent}>Sign in</Text>
+					</Link>
+				</View>
+			</ScrollView>
 		</SafeAreaView>
 	);
 }
 
-/* ────────────────────────────────────────────────────── */
-/*  Styles                                                */
-/* ────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
+	flex: { flex: 1 },
 	safe: {
 		flex: 1,
-		backgroundColor: Colors.bg,
-	},
-	container: {
-		flex: 1,
-		justifyContent: "center",
-		padding: Spacing.xl,
+		backgroundColor: Colors.background,
 	},
 	scrollContent: {
-		flexGrow: 1,
-		justifyContent: "center",
-		padding: Spacing.xl,
+		paddingBottom: Spacing["8"],
 	},
-	header: {
+	hero: {
 		alignItems: "center",
-		marginBottom: Spacing.xxxl,
+		gap: Spacing["3"],
+		marginTop: Spacing["8"],
+		marginBottom: Spacing["6"],
 	},
-	logoContainer: {
-		width: '100%',
-		maxWidth: 280,
-		height: 100,
-		backgroundColor: "#FFFFFF",
-		borderRadius: Radius.xl,
-		justifyContent: "center",
-		alignItems: "center",
-		padding: Spacing.md,
-		shadowColor: "#000",
-		shadowOffset: { width: 0, height: 10 },
-		shadowOpacity: 0.3,
-		shadowRadius: 20,
-		elevation: 10,
-		borderWidth: 1,
-		borderColor: "rgba(255, 255, 255, 0.1)",
-	},
-	logoImage: {
-		width: "100%",
-		height: "100%",
-	},
-	card: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xxl,
-		gap: Spacing.lg,
-		borderWidth: 1,
-		borderColor: Colors.border,
-	},
-	cardTitle: {
-		fontSize: Font.size.xl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	subtitle: {
-		fontSize: Font.size.sm,
-		color: Colors.textSecondary,
-		textAlign: "center",
-		lineHeight: 20,
-	},
-	emailHighlight: {
-		color: Colors.primaryLight,
-		fontWeight: Font.weight.semibold,
-	},
-	fieldGroup: { gap: Spacing.sm },
-	label: {
-		fontSize: Font.size.sm,
-		fontWeight: Font.weight.semibold,
-		color: Colors.textSecondary,
-	},
-	input: {
-		backgroundColor: Colors.bgInput,
-		borderRadius: Radius.sm,
-		paddingHorizontal: Spacing.lg,
-		paddingVertical: 14,
-		color: Colors.textPrimary,
-		fontSize: Font.size.md,
-		borderWidth: 1,
-		borderColor: Colors.borderSubtle,
-	},
-	button: {
-		backgroundColor: Colors.primary,
-		borderRadius: Radius.sm,
-		paddingVertical: 15,
-		alignItems: "center",
-		marginTop: Spacing.sm,
-	},
-	buttonDisabled: { opacity: 0.5 },
-	buttonPressed: { opacity: 0.85 },
-	buttonText: {
-		color: "#fff",
-		fontWeight: Font.weight.semibold,
-		fontSize: Font.size.md,
-	},
-	errorText: {
-		color: Colors.error,
-		fontSize: Font.size.xs,
-		marginTop: 2,
-	},
+	heroTitle: { textAlign: "center" },
+	center: { textAlign: "center" },
+	row: { flexDirection: "row", gap: Spacing["3"] },
+	half: { flex: 1 },
 	footer: {
 		flexDirection: "row",
 		justifyContent: "center",
 		alignItems: "center",
-		marginTop: Spacing.sm,
-	},
-	footerText: { color: Colors.textSecondary, fontSize: Font.size.sm },
-	linkButton: {
-		alignItems: "center",
-		paddingVertical: Spacing.sm,
-	},
-	linkText: {
-		color: Colors.primaryLight,
-		fontWeight: Font.weight.semibold,
-		fontSize: Font.size.sm,
-	},
-	iconCircle: {
-		width: 56,
-		height: 56,
-		borderRadius: 28,
-		backgroundColor: Colors.bgSurface,
-		justifyContent: "center",
-		alignItems: "center",
-		alignSelf: "center",
-	},
-	iconEmoji: { fontSize: 24 },
-	title: {
-		fontSize: Font.size.xl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-		textAlign: "center",
+		marginTop: Spacing["6"],
 	},
 });

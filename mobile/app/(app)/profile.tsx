@@ -1,23 +1,33 @@
 /**
- * Profile screen — shows user info from Clerk + DB, and sign-out.
- * This is the primary auth test screen — if you see your name, email,
- * and role here, the entire auth flow is working correctly.
+ * Profile screen — Clerk identity + DB user record + sign-out.
+ *
+ * Acts as the canonical "auth flow works" diagnostic page: if name,
+ * email, role, and IDs render correctly, the entire auth + API
+ * pipeline is healthy.
  */
 
-import {
-	View,
-	Text,
-	StyleSheet,
-	Pressable,
-	Alert,
-	ScrollView,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React from "react";
+import { Alert, StyleSheet, View } from "react-native";
 import { useAuth, useUser } from "@clerk/expo";
 import { useQueryClient } from "@tanstack/react-query";
+import { LogOut } from "lucide-react-native";
+
 import { useMe } from "@/lib/hooks/useMe";
 import { setAuthToken } from "@/lib/api/client";
-import { Colors, Font, Spacing, Radius } from "@/lib/theme";
+import {
+	Badge,
+	Button,
+	Card,
+	Divider,
+	Heading,
+	IconBubble,
+	Screen,
+	SectionHeader,
+	Squiggle,
+	Text,
+	VStack,
+} from "@/components/ui";
+import { Colors, Spacing } from "@/lib/theme";
 
 export default function ProfileScreen() {
 	const { signOut } = useAuth();
@@ -25,7 +35,7 @@ export default function ProfileScreen() {
 	const qc = useQueryClient();
 	const { data: me } = useMe();
 
-	async function handleSignOut() {
+	const handleSignOut = () => {
 		Alert.alert("Sign out", "Are you sure you want to sign out?", [
 			{ text: "Cancel", style: "cancel" },
 			{
@@ -38,226 +48,126 @@ export default function ProfileScreen() {
 				},
 			},
 		]);
-	}
+	};
+
+	const fullName = [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "—";
 
 	return (
-		<SafeAreaView style={styles.safe}>
-			<ScrollView contentContainerStyle={styles.container}>
-				<Text style={styles.title}>Profile</Text>
+		<Screen scroll>
+			<SectionHeader title="Profile" squiggleColor={Colors.accent} />
 
-				{/* Avatar + Name */}
-				<View style={styles.avatarCard}>
-					<View style={styles.avatar}>
-						<Text style={styles.avatarText}>
-							{(me?.firstName?.[0] ?? "?").toUpperCase()}
-						</Text>
-					</View>
-					<Text style={styles.name}>
-						{[me?.firstName, me?.lastName].filter(Boolean).join(" ") ||
-							"—"}
-					</Text>
-					<Text style={styles.email}>{me?.email ?? "—"}</Text>
-				</View>
-
-				{/* Info card — from DB */}
-				<View style={styles.infoCard}>
-					<Text style={styles.sectionLabel}>Database Record</Text>
-					<InfoRow label="Role" value={me?.role ?? "—"} highlight />
-					<InfoRow label="Batch" value={me?.batch ?? "—"} />
-					<InfoRow
-						label="Semester"
-						value={me?.currentSemester?.toString() ?? "—"}
-					/>
-					<InfoRow label="Department" value={me?.department ?? "—"} />
-					<InfoRow label="Status" value={me?.status ?? "—"} />
-					<InfoRow
-						label="DB User ID"
-						value={me?.id?.slice(0, 16) + "..." || "—"}
-						mono
-					/>
-				</View>
-
-				{/* Info card — from Clerk */}
-				<View style={styles.infoCard}>
-					<Text style={styles.sectionLabel}>Clerk Session</Text>
-					<InfoRow
-						label="Clerk ID"
-						value={clerkUser?.id?.slice(0, 16) + "..." || "—"}
-						mono
-					/>
-					<InfoRow
-						label="Email"
-						value={
-							clerkUser?.primaryEmailAddress?.emailAddress ?? "—"
+			{/* HERO */}
+			<Card variant="featured-violet">
+				<VStack gap="3" align="center">
+					<IconBubble
+						tone="accent"
+						size={84}
+						icon={
+							<Text variant="h2" color={Colors.inverse}>
+								{(me?.firstName?.[0] ?? "?").toUpperCase()}
+							</Text>
 						}
 					/>
-					<InfoRow
-						label="Created"
-						value={
-							clerkUser?.createdAt
-								? new Date(clerkUser.createdAt).toLocaleDateString()
-								: "—"
-						}
-					/>
-				</View>
+					<Heading level={2}>{fullName}</Heading>
+					<Text variant="muted">{me?.email ?? "—"}</Text>
+					{me?.role && (
+						<Badge label={me.role.toUpperCase()} tone="accent" />
+					)}
+				</VStack>
+			</Card>
 
-				{/* Sign out */}
-				<Pressable
-					style={({ pressed }) => [
-						styles.signOutBtn,
-						pressed && { opacity: 0.8 },
-					]}
-					onPress={handleSignOut}
-				>
-					<Text style={styles.signOutText}>Sign out</Text>
-				</Pressable>
-			</ScrollView>
-		</SafeAreaView>
+			{/* DB RECORD */}
+			<View style={styles.section}>
+				<SectionHeader title="Database record" />
+				<Card>
+					<VStack gap="3">
+						<Row label="Batch" value={me?.batch ?? "—"} />
+						<Divider />
+						<Row label="Semester" value={me?.currentSemester?.toString() ?? "—"} />
+						<Divider />
+						<Row label="Department" value={me?.department ?? "—"} />
+						<Divider />
+						<Row label="Status" value={me?.status ?? "—"} />
+						<Divider />
+						<Row
+							label="User ID"
+							value={(me?.id ?? "—").slice(0, 18) + "…"}
+							mono
+						/>
+					</VStack>
+				</Card>
+			</View>
+
+			{/* CLERK */}
+			<View style={styles.section}>
+				<SectionHeader title="Clerk session" />
+				<Card>
+					<VStack gap="3">
+						<Row
+							label="Clerk ID"
+							value={(clerkUser?.id ?? "—").slice(0, 18) + "…"}
+							mono
+						/>
+						<Divider />
+						<Row
+							label="Email"
+							value={clerkUser?.primaryEmailAddress?.emailAddress ?? "—"}
+						/>
+						<Divider />
+						<Row
+							label="Created"
+							value={
+								clerkUser?.createdAt
+									? new Date(clerkUser.createdAt).toLocaleDateString()
+									: "—"
+							}
+						/>
+					</VStack>
+				</Card>
+			</View>
+
+			<Button
+				label="Sign out"
+				variant="danger"
+				leftIcon={<LogOut size={18} color={Colors.inverse} strokeWidth={2.5} />}
+				onPress={handleSignOut}
+				fullWidth
+				style={{ marginTop: Spacing["4"] }}
+			/>
+		</Screen>
 	);
 }
 
-function InfoRow({
+function Row({
 	label,
 	value,
-	highlight,
 	mono,
 }: {
 	label: string;
 	value: string;
-	highlight?: boolean;
 	mono?: boolean;
 }) {
 	return (
-		<View style={styles.infoRow}>
-			<Text style={styles.infoLabel}>{label}</Text>
-			{highlight ? (
-				<View style={styles.roleBadge}>
-					<Text style={styles.roleBadgeText}>
-						{value.toUpperCase()}
-					</Text>
-				</View>
-			) : (
-				<Text
-					style={[styles.infoValue, mono && styles.mono]}
-					numberOfLines={1}
-				>
-					{value}
-				</Text>
-			)}
+		<View style={styles.row}>
+			<Text variant="muted">{label}</Text>
+			<Text
+				variant={mono ? "mono" : "bodyStrong"}
+				numberOfLines={1}
+				style={styles.value}
+			>
+				{value}
+			</Text>
 		</View>
 	);
 }
 
-import { Platform } from "react-native";
-
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: Colors.bg },
-	container: { padding: Spacing.xl, gap: Spacing.lg },
-	title: {
-		fontSize: Font.size.xxl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-
-	// Avatar card
-	avatarCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xxl,
-		alignItems: "center",
-		gap: Spacing.sm,
-		borderWidth: 1,
-		borderColor: Colors.border,
-	},
-	avatar: {
-		width: 80,
-		height: 80,
-		borderRadius: 40,
-		backgroundColor: Colors.primary,
-		justifyContent: "center",
-		alignItems: "center",
-		marginBottom: Spacing.sm,
-	},
-	avatarText: {
-		fontSize: 32,
-		fontWeight: Font.weight.bold,
-		color: "#fff",
-	},
-	name: {
-		fontSize: Font.size.xl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	email: {
-		fontSize: Font.size.sm,
-		color: Colors.textMuted,
-	},
-
-	// Info card
-	infoCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xl,
-		gap: Spacing.xs,
-		borderWidth: 1,
-		borderColor: Colors.border,
-	},
-	sectionLabel: {
-		fontSize: Font.size.xs,
-		fontWeight: Font.weight.bold,
-		color: Colors.textMuted,
-		textTransform: "uppercase",
-		letterSpacing: 1,
-		marginBottom: Spacing.sm,
-	},
-	infoRow: {
+	section: { gap: Spacing["3"], marginTop: Spacing["4"] },
+	row: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingVertical: Spacing.md,
-		borderBottomWidth: 1,
-		borderBottomColor: Colors.bg,
+		gap: Spacing["3"],
 	},
-	infoLabel: {
-		fontSize: Font.size.sm,
-		color: Colors.textMuted,
-	},
-	infoValue: {
-		fontSize: Font.size.sm,
-		color: Colors.textPrimary,
-		fontWeight: Font.weight.medium,
-		flexShrink: 1,
-		textAlign: "right",
-		textTransform: "capitalize",
-	},
-	mono: {
-		fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-		textTransform: "none",
-	},
-	roleBadge: {
-		backgroundColor: Colors.accent + "20",
-		borderRadius: Radius.sm,
-		paddingHorizontal: Spacing.md,
-		paddingVertical: Spacing.xs,
-	},
-	roleBadgeText: {
-		color: Colors.accentGlow,
-		fontSize: Font.size.xs,
-		fontWeight: Font.weight.bold,
-		letterSpacing: 1,
-	},
-
-	// Sign out
-	signOutBtn: {
-		backgroundColor: Colors.errorBg,
-		borderRadius: Radius.md,
-		padding: Spacing.lg,
-		alignItems: "center",
-		marginTop: Spacing.sm,
-	},
-	signOutText: {
-		color: "#fca5a5",
-		fontWeight: Font.weight.semibold,
-		fontSize: Font.size.md,
-	},
+	value: { textAlign: "right", flexShrink: 1 },
 });

@@ -5,6 +5,218 @@
 
 ---
 
+## ⚡ MOBILE APP — READ FIRST (Expo Student MVP)
+
+> The repository contains BOTH the production web app (`/src`) AND the new
+> Expo React Native mobile app (`/mobile`). When working in `mobile/**`,
+> the rules in this section **override** any conflicting web-app rules below.
+
+### M0. Where things live
+
+```
+mobile/
+├── app/                          # Expo Router file-based routes
+│   ├── (auth)/                   # sign-in, sign-up, _layout
+│   ├── (app)/                    # tabs: index, logbook, attendance, inbox, profile
+│   ├── _layout.tsx               # root: ClerkProvider + Fonts + RQ + SafeArea
+│   └── index.tsx                 # auth-state redirect
+├── components/
+│   └── ui/                       # ✅ DESIGN SYSTEM — use these, never raw <View>+<Text>
+│       ├── Screen.tsx            # Safe-area + cream background + optional <DotGrid>
+│       ├── Card.tsx              # Sticker card w/ chunky border + hard shadow
+│       ├── Button.tsx            # Candy button (primary/secondary/tertiary/ghost/danger)
+│       ├── Input.tsx             # Bordered input w/ hard focus shadow
+│       ├── Badge.tsx, StatusBadge.tsx
+│       ├── Heading.tsx, Text.tsx # Typography (Outfit + Plus Jakarta Sans)
+│       ├── IconBubble.tsx        # Lucide icon inside colored circle
+│       ├── HardShadow.tsx        # Manual offset-shadow primitive
+│       ├── DotGrid.tsx, Squiggle.tsx, Confetti.tsx  # Decorative SVG
+│       ├── SectionHeader.tsx, Divider.tsx, Stack.tsx
+│       └── index.ts              # ✅ ONLY import from here
+└── lib/
+    ├── theme/                    # ✅ SINGLE SOURCE OF TRUTH
+    │   ├── tokens.ts             # Colors, Spacing, Radius, BorderWidth,
+    │   │                         # HardShadow, SoftShadow, FontFamily, FontSize,
+    │   │                         # LineHeight, LetterSpacing, Motion, ZIndex, Layout
+    │   ├── typography.ts         # Variant presets (h1/h2/body/label/mono/...)
+    │   ├── fonts.ts              # `useThemeFonts()` Google Fonts loader
+    │   ├── motion.ts             # `usePopIn`, `useWiggle`, `useReducedMotion`
+    │   └── index.ts              # Barrel — always import from "@/lib/theme"
+    ├── api/, auth/, hooks/, realtime/
+    └── ...
+└── Design.md                     # Canonical design-system spec (Playful Geometric)
+```
+
+### M1. THEME — Strict Enforcement Rules
+
+The mobile app uses the **"Playful Geometric"** design system defined in
+[`mobile/Design.md`](../mobile/Design.md). It is a medical-resident-friendly
+energetic palette built on these signatures:
+
+- **Warm cream background** (`#FFFDF5`) — never dark mode, never pure white.
+- **Vivid violet primary** (`#8B5CF6`) — the ONLY color for primary CTAs.
+- **Pink / amber / mint / sky** rotate as decorative accents (cards, icons,
+  confetti). Never use them for primary actions.
+- **Chunky 2px slate-800 borders** on cards, buttons, inputs.
+- **Hard "Pop" shadows** (solid offset, no blur) — implemented via the
+  `<HardShadow>` primitive or built into `<Card>` and `<Button>`.
+- **Outfit (700/800)** for headings, **Plus Jakarta Sans (400/500/700)** for body.
+- **Rounded-full pill buttons** that press-down on touch (translate + shadow shrink).
+
+**Absolute rules for every mobile change:**
+
+1. ❌ **NEVER** hard-code colors, spacing, radii, font sizes, font families,
+   shadows, or motion durations. Import everything from `@/lib/theme`.
+   ```tsx
+   // ❌ FORBIDDEN
+   <View style={{ backgroundColor: "#fff", padding: 16, borderRadius: 12 }}>
+     <Text style={{ fontSize: 14, color: "#1E293B" }}>Hi</Text>
+   </View>
+
+   // ✅ REQUIRED
+   <Card>
+     <Text variant="body">Hi</Text>
+   </Card>
+   ```
+2. ❌ **NEVER** import raw `Text` / `View` for UI surfaces when a primitive
+   exists. Use:
+   - `Screen` instead of `SafeAreaView` + bg color
+   - `Card` instead of styled `View` containers
+   - `Button` instead of `Pressable` for any CTA
+   - `Input` instead of raw `TextInput`
+   - `Text` / `Heading` instead of raw `<Text>`
+   - `VStack` / `HStack` / `Spacer` for layout flexing
+3. ❌ **NEVER** import from `@/lib/theme/tokens` or `@/components/ui/Card`
+   directly. Always use the barrels:
+   ```tsx
+   import { Colors, Spacing, Radius } from "@/lib/theme";
+   import { Screen, Card, Button, Heading, Text } from "@/components/ui";
+   ```
+4. ❌ **NEVER** add a new color, spacing step, radius, or font weight without
+   first adding it to `mobile/lib/theme/tokens.ts`. If `Design.md` doesn't
+   contain it, ask before extending.
+5. ✅ **ALWAYS** use the `EntryStatus` → `<StatusBadge>` mapping for any
+   render of a logbook entry's lifecycle state (DRAFT / SUBMITTED / SIGNED /
+   REJECTED / NEEDS_REVISION). Do not invent ad-hoc badge styles.
+6. ✅ **ALWAYS** wrap Lucide icons in `<IconBubble>` when used as a focal
+   visual element (per `Design.md` §Iconography — "icons never floating
+   alone"). Plain icons are fine inside `<Button>` slots and inline text.
+7. ✅ **ALWAYS** use `strokeWidth={2.5}` for Lucide icons — this matches the
+   "chunky" look. Round line caps / joins are Lucide defaults; keep them.
+8. ✅ **ALWAYS** respect `prefers-reduced-motion` (already wired in
+   `useReducedMotion`). Don't add bespoke animations that ignore it.
+9. ✅ **ALWAYS** keep the 48px minimum touch target (`Layout.touchTarget`).
+   `<Button>` and `<Input>` already enforce this — don't shrink them.
+
+### M2. Color Usage Rotation (Confetti Rule)
+
+`Design.md` says: *"Use secondary/tertiary/quaternary rotationally for
+decorative shapes, icons, or emphasized words to create a 'confetti'
+effect."* Concretely:
+
+- **Primary CTAs / focus states** → `Colors.accent` (violet) — always.
+- **Featured cards / hero highlights** → rotate `featured-pink` /
+  `featured-amber` / `featured-mint` / `featured-violet` on `<Card>`.
+- **Tab/screen accent stripes** (squiggle color) → rotate per screen
+  (Home=pink, Logbook=violet, Attendance=mint, Inbox=pink, Profile=violet).
+- **Status colors are semantic** — never repurpose `success` for anything
+  other than success states.
+
+### M3. Medical / Hospital Context
+
+While the visual system is playful, the **content tone must remain
+professional**. The app is used by busy emergency-medicine residents to
+document patient care for NMC compliance.
+
+- Iconography should reference medicine where it fits naturally:
+  `Stethoscope`, `HeartPulse`, `Syringe`, `Cross`, `Microscope`, `Activity`,
+  `Pill`, `ClipboardList`, `Camera` (Lucide). The Logbook tab already
+  pairs each module with a medical icon — preserve this pattern.
+- Avoid emojis in production UI. Use Lucide icons inside `<IconBubble>`
+  instead. (The previous codebase used emojis as a placeholder; replace
+  any you encounter.)
+- Never use color as the *only* signal for status (accessibility rule
+  from `Design.md` §Accessibility). Always pair color with a label or icon.
+
+### M4. Stitch MCP (Optional)
+
+The Stitch MCP server is registered in
+`%USERPROFILE%\.codeium\windsurf\mcp_config.json`. When designing brand
+new screens from an uploaded mockup or photo, use the Stitch tools to
+generate the layout, then convert the output to our primitives — **never
+ship Stitch-generated raw HTML/CSS**. Strip the output down to our
+`<Screen> / <Card> / <Button> / <Heading> / <Text>` vocabulary.
+
+After registering Stitch, restart Windsurf or refresh MCP servers from
+the IDE settings before invoking `mcp1_*` tools.
+
+### M5. Roadmap Awareness (Mobile-app-roadmap.md)
+
+The full delivery plan lives in
+[`Mobile-app-roadmap.md`](../Mobile-app-roadmap.md). When implementing any
+mobile feature, check the relevant phase first:
+
+| Phase | Theme | Where we are |
+|-------|-------|--------------|
+| **Phase 0** | Backend REST `/api/v1/*` layer | ✅ Auth refactor + extraction in progress |
+| **Phase 1** | Project scaffold + Clerk Expo auth | ✅ Complete — uses `@clerk/expo` v3 |
+| **Phase 2 (current)** | **Theme & Design System** | ✅ Tokens + primitives + screens migrated |
+| Phase 3 | 18 logbook entry modules (CRUD) | ⏳ Module screens replace `(app)/logbook.tsx` tiles |
+| Phase 4 | Attendance (camera + GPS + face match) | ⏳ Replace `(app)/attendance.tsx` |
+| Phase 5 | Unified inbox + revisions + notifications | ⏳ Replace `(app)/inbox.tsx` |
+| Phase 6 | Push notifications (Expo) + `MobilePushToken` table | ⏳ |
+| Phase 7 | Evaluations + radar chart (recharts → react-native-svg) | ⏳ |
+| Phase 8 | Offline / OTA / EAS Update | ⏳ |
+| Phase 9+ | Faculty + HOD mobile (out of MVP scope) | Web only for now |
+
+**Constraints carried from the roadmap:**
+
+- **Only students** see the tab navigator. Non-students (`faculty`, `hod`)
+  see the "use the web app" gate in `(app)/_layout.tsx`. Do not change
+  this until Phase 9+.
+- **JWT auth via Bearer header** (no cookies). `setAuthToken()` in
+  `lib/api/client.ts` is the bridge. Never duplicate this.
+- **REST endpoints live under `/api/v1/*`** on the web server. Mobile
+  must NOT call server-action endpoints or web-only routes.
+- **Shared validators / constants / types** come from `@logbook/shared`
+  (the `packages/shared` workspace). Do not duplicate them in `mobile/`.
+- **N+1 fixes & paginated inbox** are Phase-0 backend work — don't
+  paper over server-side perf bugs in mobile code.
+- **Face recognition** moves server-side (`face-api.js` does not run in
+  RN). Mobile uploads the image + descriptor; matching happens on the API.
+
+### M6. Required Dev Commands
+
+```powershell
+# From mobile/
+npx expo start --clear          # Always use --clear after dependency edits
+npx tsc --noEmit                # Type-check the entire mobile app
+npm install --legacy-peer-deps  # Required (Clerk + RN 0.79 peer mismatch)
+```
+
+When adding native modules:
+```powershell
+npx expo install <package> -- --legacy-peer-deps
+```
+
+### M7. New-File Checklist (Mobile)
+
+Before committing any new `.tsx` in `mobile/`:
+
+- [ ] No hex codes, no inline pixel values for spacing/radius — all from `@/lib/theme`.
+- [ ] Imports use barrels: `@/components/ui` and `@/lib/theme`.
+- [ ] Screen uses `<Screen>` not `SafeAreaView`.
+- [ ] Cards use `<Card>` not styled `<View>`.
+- [ ] Buttons use `<Button>` not `<Pressable>` for CTAs.
+- [ ] Inputs use `<Input>` not raw `<TextInput>`.
+- [ ] Status displays use `<StatusBadge>` (mapped to `EntryStatus`).
+- [ ] Icons are `lucide-react-native` with `strokeWidth={2.5}`.
+- [ ] Focal icons wrapped in `<IconBubble>`.
+- [ ] `npx tsc --noEmit` reports zero errors.
+- [ ] Touch targets ≥ 48px (already enforced by `Button` / `Input`).
+
+---
+
 ## Table of Contents
 
 1. [Project Context & Domain Knowledge](#1-project-context--domain-knowledge)

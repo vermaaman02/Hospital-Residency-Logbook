@@ -1,262 +1,244 @@
 /**
- * Home / Dashboard screen.
- * Shows welcome + role info + quick stats from /api/v1/dashboard.
- * This is the first screen after auth — proves the auth flow works.
+ * Home / Dashboard screen — first screen after auth.
+ *
+ *  - Hero card with greeting + role chip.
+ *  - Quick-access tiles (Logbook, Attendance, Inbox, Evaluations).
+ *  - Auth status card for sanity-checking the Clerk / API connection.
+ *
+ * Pull-to-refresh refetches `/api/v1/me`.
  */
 
+import React from "react";
 import {
-	View,
-	Text,
+	ActivityIndicator,
+	RefreshControl,
 	ScrollView,
 	StyleSheet,
-	RefreshControl,
-	ActivityIndicator,
+	View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Link } from "expo-router";
+import {
+	Activity,
+	CalendarCheck,
+	ClipboardList,
+	Inbox,
+	NotebookText,
+	WifiOff,
+} from "lucide-react-native";
+
 import { useMe } from "@/lib/hooks/useMe";
-import { Colors, Font, Spacing, Radius } from "@/lib/theme";
+import {
+	Badge,
+	Card,
+	Confetti,
+	Heading,
+	IconBubble,
+	Screen,
+	SectionHeader,
+	Squiggle,
+	Text,
+	VStack,
+} from "@/components/ui";
+import { Colors, Layout, Spacing } from "@/lib/theme";
 
 export default function HomeScreen() {
 	const { data: me, isLoading, refetch, isRefetching } = useMe();
 
 	return (
-		<SafeAreaView style={styles.safe}>
+		<Screen bleed pattern="dots">
 			<ScrollView
 				contentContainerStyle={styles.scroll}
 				refreshControl={
 					<RefreshControl
 						refreshing={isRefetching}
 						onRefresh={refetch}
-						tintColor={Colors.primary}
+						tintColor={Colors.accent}
+						colors={[Colors.accent]}
 					/>
 				}
 			>
-				{/* Welcome header */}
-				<View style={styles.welcomeCard}>
-					<View style={styles.avatarCircle}>
-						<Text style={styles.avatarText}>
-							{(me?.firstName?.[0] ?? "?").toUpperCase()}
-						</Text>
-					</View>
-					<View style={styles.welcomeInfo}>
-						<Text style={styles.greeting}>
-							Hello, {me?.firstName ?? "Resident"} 👋
-						</Text>
-						<Text style={styles.roleLine}>
-							{me?.role === "student"
-								? `Semester ${me?.currentSemester ?? "—"} • ${me?.batch ?? "—"}`
-								: me?.role ?? "—"}
-						</Text>
-					</View>
-				</View>
-
-				{/* Auth status card (for testing) */}
-				<View style={styles.statusCard}>
-					<View style={styles.statusHeader}>
-						<View style={styles.statusDot} />
-						<Text style={styles.statusTitle}>Auth Status</Text>
-					</View>
-					<View style={styles.statusRow}>
-						<Text style={styles.statusLabel}>Signed in as</Text>
-						<Text style={styles.statusValue}>
-							{me?.email ?? "loading..."}
-						</Text>
-					</View>
-					<View style={styles.statusRow}>
-						<Text style={styles.statusLabel}>Role</Text>
-						<View style={styles.roleBadge}>
-							<Text style={styles.roleBadgeText}>
-								{me?.role?.toUpperCase() ?? "—"}
+				{/* HERO */}
+				<View style={styles.hero}>
+					<Confetti count={10} seed={3} opacity={0.7} />
+					<View style={styles.greetingRow}>
+						<IconBubble
+							tone="amber"
+							size={56}
+							icon={
+								<Text variant="h3" color={Colors.foreground}>
+									{(me?.firstName?.[0] ?? "?").toUpperCase()}
+								</Text>
+							}
+						/>
+						<View style={styles.greetingText}>
+							<Heading level={3}>
+								Hi, {me?.firstName ?? "Resident"}
+							</Heading>
+							<Text variant="muted">
+								{me?.role === "student"
+									? `Semester ${me?.currentSemester ?? "—"} · ${me?.batch ?? "—"}`
+									: me?.role ?? "—"}
 							</Text>
 						</View>
 					</View>
-					<View style={styles.statusRow}>
-						<Text style={styles.statusLabel}>Department</Text>
-						<Text style={styles.statusValue}>
-							{me?.department ?? "—"}
-						</Text>
-					</View>
-					<View style={styles.statusRow}>
-						<Text style={styles.statusLabel}>User ID</Text>
-						<Text style={[styles.statusValue, styles.mono]}>
-							{me?.id?.slice(0, 12) ?? "—"}...
-						</Text>
+					<Squiggle color={Colors.pink} width={120} height={12} waves={4} />
+				</View>
+
+				{/* QUICK ACCESS */}
+				<View style={styles.section}>
+					<SectionHeader title="Quick access" subtitle="Jump into your day" />
+					<View style={styles.grid}>
+						<QuickTile
+							href="/(app)/logbook"
+							tone="accent"
+							label="Logbook"
+							icon={<NotebookText size={22} color={Colors.inverse} strokeWidth={2.5} />}
+						/>
+						<QuickTile
+							href="/(app)/attendance"
+							tone="mint"
+							label="Attendance"
+							icon={<CalendarCheck size={22} color={Colors.inverse} strokeWidth={2.5} />}
+						/>
+						<QuickTile
+							href="/(app)/inbox"
+							tone="pink"
+							label="Inbox"
+							icon={<Inbox size={22} color={Colors.inverse} strokeWidth={2.5} />}
+						/>
+						<QuickTile
+							href="/(app)/profile"
+							tone="sky"
+							label="Evaluations"
+							icon={<Activity size={22} color={Colors.inverse} strokeWidth={2.5} />}
+						/>
 					</View>
 				</View>
 
-				{/* Placeholder cards for future modules */}
-				<Text style={styles.sectionTitle}>Quick Access</Text>
-				<View style={styles.gridRow}>
-					<QuickCard emoji="📋" label="Logbook" count="—" />
-					<QuickCard emoji="📅" label="Attendance" count="—" />
-				</View>
-				<View style={styles.gridRow}>
-					<QuickCard emoji="📬" label="Inbox" count="—" />
-					<QuickCard emoji="📊" label="Evaluations" count="—" />
+				{/* AUTH STATUS */}
+				<View style={styles.section}>
+					<SectionHeader
+						title="Session"
+						subtitle="Status of your Clerk + DB connection"
+						squiggleColor={Colors.sky}
+					/>
+					<Card>
+						<VStack gap="3">
+							<Row label="Signed in as" value={me?.email ?? "loading…"} />
+							<Row
+								label="Role"
+								custom={
+									<Badge
+										label={(me?.role ?? "—").toUpperCase()}
+										tone="accent"
+									/>
+								}
+							/>
+							<Row label="Department" value={me?.department ?? "—"} />
+							<Row label="User ID" value={(me?.id ?? "—").slice(0, 12) + "…"} mono />
+						</VStack>
+					</Card>
 				</View>
 
 				{isLoading && (
 					<ActivityIndicator
-						color={Colors.primary}
-						style={{ marginTop: Spacing.xxl }}
+						color={Colors.accent}
+						style={{ marginTop: Spacing["6"] }}
 					/>
 				)}
 			</ScrollView>
-		</SafeAreaView>
+		</Screen>
 	);
 }
 
-function QuickCard({
-	emoji,
+/* ─────────────────────────────────────────────────────────────────── */
+
+function QuickTile({
+	href,
+	tone,
 	label,
-	count,
+	icon,
 }: {
-	emoji: string;
+	href: string;
+	tone: "accent" | "pink" | "amber" | "mint" | "sky";
 	label: string;
-	count: string;
+	icon: React.ReactNode;
+}) {
+	const cardVariant =
+		tone === "pink"
+			? "featured-pink"
+			: tone === "amber"
+				? "featured-amber"
+				: tone === "mint"
+					? "featured-mint"
+					: "featured-violet";
+
+	return (
+		<View style={styles.tile}>
+			<Link href={href as any} asChild>
+				<Card variant={cardVariant} onPress={() => {}}>
+					<VStack gap="3" align="flex-start">
+						<IconBubble tone={tone} icon={icon} size={44} />
+						<Heading level={4}>{label}</Heading>
+					</VStack>
+				</Card>
+			</Link>
+		</View>
+	);
+}
+
+function Row({
+	label,
+	value,
+	custom,
+	mono,
+}: {
+	label: string;
+	value?: string;
+	custom?: React.ReactNode;
+	mono?: boolean;
 }) {
 	return (
-		<View style={styles.quickCard}>
-			<Text style={styles.quickEmoji}>{emoji}</Text>
-			<Text style={styles.quickLabel}>{label}</Text>
-			<Text style={styles.quickCount}>{count}</Text>
+		<View style={styles.row}>
+			<Text variant="muted">{label}</Text>
+			{custom ?? (
+				<Text variant={mono ? "mono" : "bodyStrong"} numberOfLines={1}>
+					{value}
+				</Text>
+			)}
 		</View>
 	);
 }
 
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: Colors.bg },
-	scroll: { padding: Spacing.xl, gap: Spacing.lg },
-
-	// Welcome card
-	welcomeCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xl,
+	scroll: {
+		paddingHorizontal: Layout.screenPadding,
+		paddingBottom: Spacing["12"],
+		gap: Spacing["6"],
+	},
+	hero: {
+		marginTop: Spacing["4"],
+		gap: Spacing["3"],
+	},
+	greetingRow: {
 		flexDirection: "row",
 		alignItems: "center",
-		gap: Spacing.lg,
-		borderWidth: 1,
-		borderColor: Colors.border,
+		gap: Spacing["3"],
 	},
-	avatarCircle: {
-		width: 56,
-		height: 56,
-		borderRadius: 28,
-		backgroundColor: Colors.primary,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	avatarText: {
-		fontSize: 22,
-		fontWeight: Font.weight.bold,
-		color: "#fff",
-	},
-	welcomeInfo: { flex: 1, gap: Spacing.xs },
-	greeting: {
-		fontSize: Font.size.lg,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-	},
-	roleLine: {
-		fontSize: Font.size.sm,
-		color: Colors.textSecondary,
-	},
-
-	// Auth status card
-	statusCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xl,
-		gap: Spacing.md,
-		borderWidth: 1,
-		borderColor: Colors.border,
-	},
-	statusHeader: {
+	greetingText: { flex: 1, gap: Spacing["1"] },
+	section: { gap: Spacing["3"] },
+	grid: {
 		flexDirection: "row",
-		alignItems: "center",
-		gap: Spacing.sm,
-		marginBottom: Spacing.xs,
+		flexWrap: "wrap",
+		gap: Spacing["3"],
 	},
-	statusDot: {
-		width: 8,
-		height: 8,
-		borderRadius: 4,
-		backgroundColor: Colors.success,
+	tile: {
+		width: "47%",
 	},
-	statusTitle: {
-		fontSize: Font.size.md,
-		fontWeight: Font.weight.semibold,
-		color: Colors.textPrimary,
-	},
-	statusRow: {
+	row: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingVertical: Spacing.sm,
-		borderBottomWidth: 1,
-		borderBottomColor: Colors.bg,
-	},
-	statusLabel: {
-		fontSize: Font.size.sm,
-		color: Colors.textMuted,
-	},
-	statusValue: {
-		fontSize: Font.size.sm,
-		color: Colors.textPrimary,
-		fontWeight: Font.weight.medium,
-		flexShrink: 1,
-		textAlign: "right",
-	},
-	mono: {
-		fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-	},
-	roleBadge: {
-		backgroundColor: Colors.accent + "20",
-		borderRadius: Radius.sm,
-		paddingHorizontal: Spacing.md,
-		paddingVertical: Spacing.xs,
-	},
-	roleBadgeText: {
-		color: Colors.accentGlow,
-		fontSize: Font.size.xs,
-		fontWeight: Font.weight.bold,
-		letterSpacing: 1,
-	},
-
-	// Quick access
-	sectionTitle: {
-		fontSize: Font.size.lg,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
-		marginTop: Spacing.sm,
-	},
-	gridRow: {
-		flexDirection: "row",
-		gap: Spacing.md,
-	},
-	quickCard: {
-		flex: 1,
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.lg,
-		padding: Spacing.xl,
-		alignItems: "center",
-		gap: Spacing.sm,
-		borderWidth: 1,
-		borderColor: Colors.border,
-	},
-	quickEmoji: { fontSize: 28 },
-	quickLabel: {
-		fontSize: Font.size.sm,
-		fontWeight: Font.weight.semibold,
-		color: Colors.textPrimary,
-	},
-	quickCount: {
-		fontSize: Font.size.xl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textMuted,
+		gap: Spacing["3"],
 	},
 });
-
-// Platform import for monospace font
-import { Platform } from "react-native";

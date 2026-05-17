@@ -1,12 +1,13 @@
 /**
  * Root index — redirects based on auth state.
- * Signed in  → (app) tabs
- * Signed out → (auth) sign-in
+ *   Signed in  → (app) tabs
+ *   Signed out → (auth) sign-in
  */
 
+import React from "react";
+import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@clerk/expo";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { Colors } from "@/lib/theme";
 
 export default function Index() {
@@ -14,20 +15,18 @@ export default function Index() {
 
 	if (!isLoaded) {
 		return (
-			<View style={styles.center}>
-				<ActivityIndicator size="large" color={Colors.primary} />
+			<View
+				style={{
+					flex: 1,
+					backgroundColor: Colors.background,
+					justifyContent: "center",
+					alignItems: "center",
+				}}
+			>
+				<ActivityIndicator size="large" color={Colors.accent} />
 			</View>
 		);
 	}
 
 	return <Redirect href={isSignedIn ? "/(app)" : "/(auth)/sign-in"} />;
 }
-
-const styles = StyleSheet.create({
-	center: {
-		flex: 1,
-		backgroundColor: Colors.bg,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-});

@@ -1,92 +1,134 @@
 /**
- * Logbook tab — placeholder for Phase 3 (18 entry types).
- * Shows the list of available logbook modules.
+ * Logbook tab — entry-point for the 18 NMC logbook modules.
+ *
+ * For Phase 3 these are placeholders that route to module-specific
+ * screens. Each tile uses a rotating decorative palette to keep the
+ * "confetti" feel without being overwhelming.
  */
 
-import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors, Font, Spacing, Radius } from "@/lib/theme";
+import React from "react";
+import { FlatList, StyleSheet, View } from "react-native";
+import {
+	Activity,
+	BookOpen,
+	Briefcase,
+	Camera,
+	CheckSquare,
+	ClipboardList,
+	Cross,
+	FileSearch,
+	FlaskConical,
+	GraduationCap,
+	HeartHandshake,
+	Microscope,
+	Newspaper,
+	PieChart,
+	Presentation,
+	RefreshCw,
+	Siren,
+	Stethoscope,
+	Syringe,
+	TrendingUp,
+} from "lucide-react-native";
 
-const MODULES = [
-	{ key: "case-presentations", label: "Case Presentations", emoji: "📑" },
-	{ key: "seminars", label: "Seminar / EBM Discussions", emoji: "🎓" },
-	{ key: "journal-clubs", label: "Journal Clubs", emoji: "📰" },
-	{ key: "clinical-skills-adult", label: "Clinical Skills (Adult)", emoji: "🩺" },
-	{ key: "clinical-skills-pediatric", label: "Clinical Skills (Pediatric)", emoji: "👶" },
-	{ key: "case-management", label: "Case Management", emoji: "🗂️" },
-	{ key: "procedures", label: "Procedure Logs", emoji: "💉" },
-	{ key: "diagnostics", label: "Diagnostic Skills", emoji: "🔬" },
-	{ key: "imaging", label: "Imaging Logs", emoji: "📷" },
-	{ key: "transport", label: "Transport Logs", emoji: "🚑" },
-	{ key: "consent-bad-news", label: "Consent & Bad News", emoji: "📝" },
-	{ key: "life-support", label: "Life-Support Courses", emoji: "❤️" },
-	{ key: "conferences", label: "Conferences", emoji: "🏛️" },
-	{ key: "research", label: "Research Activities", emoji: "🔎" },
-	{ key: "disaster-drills", label: "Disaster Drills", emoji: "🚨" },
-	{ key: "quality-improvement", label: "Quality Improvement", emoji: "📈" },
-	{ key: "logbook-reviews", label: "Logbook Reviews", emoji: "✅" },
-	{ key: "rotation-postings", label: "Rotation Postings", emoji: "🔄" },
+import {
+	Card,
+	Heading,
+	IconBubble,
+	Screen,
+	SectionHeader,
+	Text,
+	VStack,
+} from "@/components/ui";
+import { Colors, Layout, Spacing } from "@/lib/theme";
+
+type Tone = "accent" | "pink" | "amber" | "mint" | "sky";
+
+type Module = {
+	key: string;
+	label: string;
+	icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+	tone: Tone;
+};
+
+const TONES: Tone[] = ["accent", "pink", "amber", "mint", "sky"];
+
+const MODULES: Module[] = [
+	{ key: "case-presentations", label: "Case Presentations", icon: Presentation, tone: TONES[0] },
+	{ key: "seminars", label: "Seminars & EBM", icon: GraduationCap, tone: TONES[1] },
+	{ key: "journal-clubs", label: "Journal Clubs", icon: Newspaper, tone: TONES[2] },
+	{ key: "clinical-skills-adult", label: "Clinical Skills (Adult)", icon: Stethoscope, tone: TONES[3] },
+	{ key: "clinical-skills-pediatric", label: "Clinical Skills (Pediatric)", icon: HeartHandshake, tone: TONES[4] },
+	{ key: "case-management", label: "Case Management", icon: ClipboardList, tone: TONES[0] },
+	{ key: "procedures", label: "Procedure Logs", icon: Syringe, tone: TONES[1] },
+	{ key: "diagnostics", label: "Diagnostic Skills", icon: Microscope, tone: TONES[2] },
+	{ key: "imaging", label: "Imaging Logs", icon: Camera, tone: TONES[3] },
+	{ key: "transport", label: "Transport Logs", icon: Activity, tone: TONES[4] },
+	{ key: "consent-bad-news", label: "Consent & Bad News", icon: FileSearch, tone: TONES[0] },
+	{ key: "life-support", label: "Life-Support Courses", icon: Cross, tone: TONES[1] },
+	{ key: "conferences", label: "Conferences", icon: BookOpen, tone: TONES[2] },
+	{ key: "research", label: "Research Activities", icon: FlaskConical, tone: TONES[3] },
+	{ key: "disaster-drills", label: "Disaster Drills", icon: Siren, tone: TONES[4] },
+	{ key: "quality-improvement", label: "Quality Improvement", icon: TrendingUp, tone: TONES[0] },
+	{ key: "logbook-reviews", label: "Logbook Reviews", icon: CheckSquare, tone: TONES[1] },
+	{ key: "rotation-postings", label: "Rotation Postings", icon: RefreshCw, tone: TONES[2] },
 ];
 
 export default function LogbookScreen() {
 	return (
-		<SafeAreaView style={styles.safe}>
-			<ScrollView contentContainerStyle={styles.scroll}>
-				<Text style={styles.title}>Logbook</Text>
-				<Text style={styles.subtitle}>
-					18 entry modules • Coming in Phase 3
-				</Text>
-
-				{MODULES.map((mod) => (
-					<Pressable
-						key={mod.key}
-						style={({ pressed }) => [
-							styles.moduleCard,
-							pressed && { opacity: 0.8 },
-						]}
-					>
-						<Text style={styles.moduleEmoji}>{mod.emoji}</Text>
-						<Text style={styles.moduleLabel}>{mod.label}</Text>
-						<Text style={styles.moduleArrow}>→</Text>
-					</Pressable>
-				))}
-			</ScrollView>
-		</SafeAreaView>
+		<Screen bleed>
+			<FlatList
+				ListHeaderComponent={
+					<View style={styles.header}>
+						<SectionHeader
+							title="Logbook"
+							subtitle="18 NMC-mandated entry types"
+							squiggleColor={Colors.accent}
+						/>
+					</View>
+				}
+				data={MODULES}
+				keyExtractor={(m) => m.key}
+				numColumns={1}
+				contentContainerStyle={styles.list}
+				ItemSeparatorComponent={() => <View style={{ height: Spacing["3"] }} />}
+				renderItem={({ item }) => {
+					const Icon = item.icon;
+					return (
+						<Card onPress={() => {}}>
+							<View style={styles.row}>
+								<IconBubble
+									tone={item.tone}
+									icon={<Icon size={20} color={Colors.inverse} strokeWidth={2.5} />}
+									size={44}
+								/>
+								<View style={styles.rowText}>
+									<Heading level={4}>{item.label}</Heading>
+									<Text variant="muted">Tap to open</Text>
+								</View>
+							</View>
+						</Card>
+					);
+				}}
+			/>
+		</Screen>
 	);
 }
 
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: Colors.bg },
-	scroll: { padding: Spacing.xl, gap: Spacing.md },
-	title: {
-		fontSize: Font.size.xxl,
-		fontWeight: Font.weight.bold,
-		color: Colors.textPrimary,
+	header: {
+		paddingHorizontal: Layout.screenPadding,
+		paddingTop: Spacing["4"],
+		paddingBottom: Spacing["2"],
 	},
-	subtitle: {
-		fontSize: Font.size.sm,
-		color: Colors.textMuted,
-		marginBottom: Spacing.sm,
+	list: {
+		paddingHorizontal: Layout.screenPadding,
+		paddingBottom: Spacing["12"],
 	},
-	moduleCard: {
-		backgroundColor: Colors.bgCard,
-		borderRadius: Radius.md,
-		padding: Spacing.lg,
+	row: {
 		flexDirection: "row",
 		alignItems: "center",
-		gap: Spacing.md,
-		borderWidth: 1,
-		borderColor: Colors.border,
+		gap: Spacing["4"],
 	},
-	moduleEmoji: { fontSize: 24, width: 32, textAlign: "center" },
-	moduleLabel: {
-		flex: 1,
-		fontSize: Font.size.md,
-		fontWeight: Font.weight.medium,
-		color: Colors.textPrimary,
-	},
-	moduleArrow: {
-		fontSize: Font.size.lg,
-		color: Colors.textMuted,
-	},
+	rowText: { flex: 1, gap: Spacing["1"] },
 });
