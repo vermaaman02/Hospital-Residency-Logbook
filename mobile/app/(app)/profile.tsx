@@ -1,20 +1,29 @@
 /**
- * Profile screen — shows user info and sign-out button.
- * PATCH /api/v1/me/profile for name updates (Phase 5).
+ * Profile screen — shows user info from Clerk + DB, and sign-out.
+ * This is the primary auth test screen — if you see your name, email,
+ * and role here, the entire auth flow is working correctly.
  */
 
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
+import {
+	View,
+	Text,
+	StyleSheet,
+	Pressable,
+	Alert,
+	ScrollView,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth, useUser } from "@clerk/expo";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMe } from "@/lib/hooks/useMe";
 import { setAuthToken } from "@/lib/api/client";
-import { disconnectSocket } from "@/lib/realtime/socket";
+import { Colors, Font, Spacing, Radius } from "@/lib/theme";
 
 export default function ProfileScreen() {
 	const { signOut } = useAuth();
+	const { user: clerkUser } = useUser();
 	const qc = useQueryClient();
-	const { data: me, isLoading } = useMe();
+	const { data: me } = useMe();
 
 	async function handleSignOut() {
 		Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -23,7 +32,6 @@ export default function ProfileScreen() {
 				text: "Sign out",
 				style: "destructive",
 				onPress: async () => {
-					disconnectSocket();
 					setAuthToken(null);
 					qc.clear();
 					await signOut();
@@ -32,99 +40,224 @@ export default function ProfileScreen() {
 		]);
 	}
 
-	if (isLoading) {
-		return (
-			<SafeAreaView style={styles.safe}>
-				<ActivityIndicator color="#3b82f6" style={{ marginTop: 60 }} />
-			</SafeAreaView>
-		);
-	}
-
 	return (
 		<SafeAreaView style={styles.safe}>
-			<View style={styles.container}>
+			<ScrollView contentContainerStyle={styles.container}>
 				<Text style={styles.title}>Profile</Text>
 
-				<View style={styles.card}>
+				{/* Avatar + Name */}
+				<View style={styles.avatarCard}>
 					<View style={styles.avatar}>
 						<Text style={styles.avatarText}>
 							{(me?.firstName?.[0] ?? "?").toUpperCase()}
 						</Text>
 					</View>
 					<Text style={styles.name}>
-						{[me?.firstName, me?.lastName].filter(Boolean).join(" ") || "—"}
+						{[me?.firstName, me?.lastName].filter(Boolean).join(" ") ||
+							"—"}
 					</Text>
 					<Text style={styles.email}>{me?.email ?? "—"}</Text>
 				</View>
 
+				{/* Info card — from DB */}
 				<View style={styles.infoCard}>
-					<InfoRow label="Role" value={me?.role ?? "—"} />
+					<Text style={styles.sectionLabel}>Database Record</Text>
+					<InfoRow label="Role" value={me?.role ?? "—"} highlight />
 					<InfoRow label="Batch" value={me?.batch ?? "—"} />
-					<InfoRow label="Semester" value={me?.currentSemester?.toString() ?? "—"} />
+					<InfoRow
+						label="Semester"
+						value={me?.currentSemester?.toString() ?? "—"}
+					/>
 					<InfoRow label="Department" value={me?.department ?? "—"} />
+					<InfoRow label="Status" value={me?.status ?? "—"} />
+					<InfoRow
+						label="DB User ID"
+						value={me?.id?.slice(0, 16) + "..." || "—"}
+						mono
+					/>
 				</View>
 
-				<TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+				{/* Info card — from Clerk */}
+				<View style={styles.infoCard}>
+					<Text style={styles.sectionLabel}>Clerk Session</Text>
+					<InfoRow
+						label="Clerk ID"
+						value={clerkUser?.id?.slice(0, 16) + "..." || "—"}
+						mono
+					/>
+					<InfoRow
+						label="Email"
+						value={
+							clerkUser?.primaryEmailAddress?.emailAddress ?? "—"
+						}
+					/>
+					<InfoRow
+						label="Created"
+						value={
+							clerkUser?.createdAt
+								? new Date(clerkUser.createdAt).toLocaleDateString()
+								: "—"
+						}
+					/>
+				</View>
+
+				{/* Sign out */}
+				<Pressable
+					style={({ pressed }) => [
+						styles.signOutBtn,
+						pressed && { opacity: 0.8 },
+					]}
+					onPress={handleSignOut}
+				>
 					<Text style={styles.signOutText}>Sign out</Text>
-				</TouchableOpacity>
-			</View>
+				</Pressable>
+			</ScrollView>
 		</SafeAreaView>
 	);
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+	label,
+	value,
+	highlight,
+	mono,
+}: {
+	label: string;
+	value: string;
+	highlight?: boolean;
+	mono?: boolean;
+}) {
 	return (
 		<View style={styles.infoRow}>
 			<Text style={styles.infoLabel}>{label}</Text>
-			<Text style={styles.infoValue}>{value}</Text>
+			{highlight ? (
+				<View style={styles.roleBadge}>
+					<Text style={styles.roleBadgeText}>
+						{value.toUpperCase()}
+					</Text>
+				</View>
+			) : (
+				<Text
+					style={[styles.infoValue, mono && styles.mono]}
+					numberOfLines={1}
+				>
+					{value}
+				</Text>
+			)}
 		</View>
 	);
 }
 
+import { Platform } from "react-native";
+
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: "#0f172a" },
-	container: { flex: 1, padding: 20, gap: 14 },
-	title: { fontSize: 22, fontWeight: "700", color: "#f1f5f9" },
-	card: {
-		backgroundColor: "#1e293b",
-		borderRadius: 14,
-		padding: 24,
+	safe: { flex: 1, backgroundColor: Colors.bg },
+	container: { padding: Spacing.xl, gap: Spacing.lg },
+	title: {
+		fontSize: Font.size.xxl,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
+	},
+
+	// Avatar card
+	avatarCard: {
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xxl,
 		alignItems: "center",
-		gap: 8,
+		gap: Spacing.sm,
+		borderWidth: 1,
+		borderColor: Colors.border,
 	},
 	avatar: {
-		width: 72,
-		height: 72,
-		borderRadius: 36,
-		backgroundColor: "#3b82f6",
+		width: 80,
+		height: 80,
+		borderRadius: 40,
+		backgroundColor: Colors.primary,
 		justifyContent: "center",
 		alignItems: "center",
-		marginBottom: 4,
+		marginBottom: Spacing.sm,
 	},
-	avatarText: { fontSize: 28, fontWeight: "700", color: "#fff" },
-	name: { fontSize: 18, fontWeight: "600", color: "#f1f5f9" },
-	email: { fontSize: 13, color: "#64748b" },
+	avatarText: {
+		fontSize: 32,
+		fontWeight: Font.weight.bold,
+		color: "#fff",
+	},
+	name: {
+		fontSize: Font.size.xl,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
+	},
+	email: {
+		fontSize: Font.size.sm,
+		color: Colors.textMuted,
+	},
+
+	// Info card
 	infoCard: {
-		backgroundColor: "#1e293b",
-		borderRadius: 14,
-		padding: 16,
-		gap: 4,
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xl,
+		gap: Spacing.xs,
+		borderWidth: 1,
+		borderColor: Colors.border,
+	},
+	sectionLabel: {
+		fontSize: Font.size.xs,
+		fontWeight: Font.weight.bold,
+		color: Colors.textMuted,
+		textTransform: "uppercase",
+		letterSpacing: 1,
+		marginBottom: Spacing.sm,
 	},
 	infoRow: {
 		flexDirection: "row",
 		justifyContent: "space-between",
-		paddingVertical: 10,
-		borderBottomWidth: 1,
-		borderBottomColor: "#0f172a",
-	},
-	infoLabel: { fontSize: 13, color: "#64748b" },
-	infoValue: { fontSize: 13, color: "#e2e8f0", fontWeight: "500", textTransform: "capitalize" },
-	signOutBtn: {
-		backgroundColor: "#7f1d1d",
-		borderRadius: 12,
-		padding: 16,
 		alignItems: "center",
-		marginTop: 8,
+		paddingVertical: Spacing.md,
+		borderBottomWidth: 1,
+		borderBottomColor: Colors.bg,
 	},
-	signOutText: { color: "#fca5a5", fontWeight: "600", fontSize: 15 },
+	infoLabel: {
+		fontSize: Font.size.sm,
+		color: Colors.textMuted,
+	},
+	infoValue: {
+		fontSize: Font.size.sm,
+		color: Colors.textPrimary,
+		fontWeight: Font.weight.medium,
+		flexShrink: 1,
+		textAlign: "right",
+		textTransform: "capitalize",
+	},
+	mono: {
+		fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+		textTransform: "none",
+	},
+	roleBadge: {
+		backgroundColor: Colors.accent + "20",
+		borderRadius: Radius.sm,
+		paddingHorizontal: Spacing.md,
+		paddingVertical: Spacing.xs,
+	},
+	roleBadgeText: {
+		color: Colors.accentGlow,
+		fontSize: Font.size.xs,
+		fontWeight: Font.weight.bold,
+		letterSpacing: 1,
+	},
+
+	// Sign out
+	signOutBtn: {
+		backgroundColor: Colors.errorBg,
+		borderRadius: Radius.md,
+		padding: Spacing.lg,
+		alignItems: "center",
+		marginTop: Spacing.sm,
+	},
+	signOutText: {
+		color: "#fca5a5",
+		fontWeight: Font.weight.semibold,
+		fontSize: Font.size.md,
+	},
 });

@@ -1,24 +1,31 @@
 /**
  * Auth route group layout.
- * Redirects to (app) if the user is already signed in.
+ * If user is already signed in → redirect to app.
+ * Otherwise render the auth stack (sign-in, sign-up).
  */
 
-import { useEffect } from "react";
-import { Stack } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
-import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/expo";
+import { Redirect, Stack } from "expo-router";
+import { Colors } from "@/lib/theme";
 
 export default function AuthLayout() {
 	const { isSignedIn, isLoaded } = useAuth();
-	const router = useRouter();
 
-	useEffect(() => {
-		if (isLoaded && isSignedIn) {
-			router.replace("/(app)");
-		}
-	}, [isLoaded, isSignedIn, router]);
+	// Wait for Clerk to load before deciding
+	if (!isLoaded) return null;
+
+	// Already signed in → skip auth
+	if (isSignedIn) {
+		return <Redirect href="/(app)" />;
+	}
 
 	return (
-		<Stack screenOptions={{ headerShown: false }} />
+		<Stack
+			screenOptions={{
+				headerShown: false,
+				contentStyle: { backgroundColor: Colors.bg },
+				animation: "slide_from_right",
+			}}
+		/>
 	);
 }

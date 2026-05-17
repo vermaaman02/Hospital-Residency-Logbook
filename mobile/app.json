@@ -11,63 +11,26 @@
 		"splash": {
 			"image": "./assets/images/splash-icon.png",
 			"resizeMode": "contain",
-			"backgroundColor": "#ffffff"
+			"backgroundColor": "#0a0e1a"
 		},
 		"ios": {
 			"supportsTablet": false,
-			"bundleIdentifier": "com.aiimspatna.logbook",
-			"infoPlist": {
-				"NSCameraUsageDescription": "Required to capture your face photo for attendance verification.",
-				"NSLocationWhenInUseUsageDescription": "Required to verify your location when marking attendance.",
-				"NSFaceIDUsageDescription": "Used for biometric sign-in."
-			}
+			"bundleIdentifier": "com.aiimspatna.logbook"
 		},
 		"android": {
 			"adaptiveIcon": {
 				"foregroundImage": "./assets/images/adaptive-icon.png",
-				"backgroundColor": "#ffffff"
+				"backgroundColor": "#0a0e1a"
 			},
-			"permissions": [
-				"android.permission.CAMERA",
-				"android.permission.ACCESS_FINE_LOCATION",
-				"android.permission.ACCESS_COARSE_LOCATION",
-				"android.permission.USE_BIOMETRIC",
-				"android.permission.RECEIVE_BOOT_COMPLETED",
-				"android.permission.VIBRATE"
-			],
 			"package": "com.aiimspatna.logbook"
 		},
 		"plugins": [
 			"expo-router",
 			"expo-secure-store",
-			[
-				"expo-notifications",
-				{
-					"icon": "./assets/images/notification-icon.png",
-					"color": "#0f172a",
-					"sounds": []
-				}
-			],
-			[
-				"expo-camera",
-				{
-					"cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for attendance."
-				}
-			],
-			[
-				"expo-location",
-				{
-					"locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location for attendance verification."
-				}
-			]
+			"@clerk/expo"
 		],
 		"experiments": {
 			"typedRoutes": true
-		},
-		"extra": {
-			"apiBaseUrl": "http://192.168.1.3:3000",
-			"socketUrl": "http://192.168.1.3:3000",
-			"clerkPublishableKey": "pk_test_am9pbnQtd2Vhc2VsLTU3LmNsZXJrLmFjY291bnRzLmRldiQ"
 		}
 	}
 }

@@ -1,23 +1,22 @@
 /**
- * Attendance screen — Phase 4 will build this out fully.
- * Stub shows current week summary and a placeholder CTA.
+ * Attendance tab — placeholder for Phase 4.
  */
 
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Colors, Font, Spacing, Radius } from "@/lib/theme";
 
 export default function AttendanceScreen() {
 	return (
 		<SafeAreaView style={styles.safe}>
 			<View style={styles.container}>
 				<Text style={styles.title}>Attendance</Text>
-				<Text style={styles.sub}>
-					Camera + GPS attendance marking coming in Phase 4.
-				</Text>
 				<View style={styles.card}>
-					<Text style={styles.cardTitle}>This feature is coming soon</Text>
-					<Text style={styles.cardBody}>
-						You can mark attendance on the web app in the meantime.
+					<Text style={styles.emoji}>📅</Text>
+					<Text style={styles.heading}>Coming Soon</Text>
+					<Text style={styles.desc}>
+						Camera + GPS attendance marking, calendar view, and analytics
+						will be available in Phase 4.
 					</Text>
 				</View>
 			</View>
@@ -26,17 +25,32 @@ export default function AttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: "#0f172a" },
-	container: { flex: 1, padding: 20, gap: 12 },
-	title: { fontSize: 22, fontWeight: "700", color: "#f1f5f9" },
-	sub: { fontSize: 13, color: "#64748b" },
-	card: {
-		backgroundColor: "#1e293b",
-		borderRadius: 14,
-		padding: 20,
-		marginTop: 12,
-		gap: 8,
+	safe: { flex: 1, backgroundColor: Colors.bg },
+	container: { flex: 1, padding: Spacing.xl, gap: Spacing.lg },
+	title: {
+		fontSize: Font.size.xxl,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
 	},
-	cardTitle: { fontSize: 16, fontWeight: "600", color: "#e2e8f0" },
-	cardBody: { fontSize: 13, color: "#94a3b8", lineHeight: 20 },
+	card: {
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xxxl,
+		alignItems: "center",
+		gap: Spacing.md,
+		borderWidth: 1,
+		borderColor: Colors.border,
+	},
+	emoji: { fontSize: 48 },
+	heading: {
+		fontSize: Font.size.lg,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
+	},
+	desc: {
+		fontSize: Font.size.sm,
+		color: Colors.textSecondary,
+		textAlign: "center",
+		lineHeight: 22,
+	},
 });

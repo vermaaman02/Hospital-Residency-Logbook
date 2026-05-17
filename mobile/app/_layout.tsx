@@ -1,82 +1,103 @@
 /**
  * Root layout — wraps the entire app with:
- *   - ClerkProvider (auth)
- *   - QueryClientProvider (data fetching)
- *   - Persistent query cache via AsyncStorage
+ *   1. GestureHandlerRootView (gesture support)
+ *   2. ClerkProvider           (auth with built-in SecureStore cache)
+ *   3. ClerkLoaded             (wait for Clerk to load)
+ *   4. QueryClientProvider     (TanStack Query for data layer)
+ *   5. SafeAreaProvider        (safe-area insets)
+ *   6. TokenSyncer             (bridges Clerk JWT → axios client)
  *
- * Expo Router handles navigation; this file sets up providers only.
+ * Uses @clerk/expo v3 (Core 3+):
+ *   - `@clerk/expo/token-cache` (built-in SecureStore integration)
+ *   - `@clerk/expo` plugin in app.json
+ *
+ * @see https://clerk.com/docs/quickstarts/expo
  */
 
 import { useEffect } from "react";
 import { Stack } from "expo-router";
-import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
-import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SplashScreen from "expo-splash-screen";
-import Constants from "expo-constants";
+import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { clerkTokenCache } from "@/lib/auth/clerk-cache";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setAuthToken } from "@/lib/api/client";
 
-SplashScreen.preventAutoHideAsync();
-
+/* ────────────────────────────────────────────────────── */
+/*  TanStack Query client                                 */
+/* ────────────────────────────────────────────────────── */
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
 			staleTime: 30_000,
-			retry: 2,
+			retry: 1,
 			refetchOnWindowFocus: false,
 		},
 	},
 });
 
-const asyncStoragePersister = createAsyncStoragePersister({
-	storage: AsyncStorage,
-	key: "logbook-query-cache",
-});
+/* ────────────────────────────────────────────────────── */
+/*  Clerk publishable key                                 */
+/* ────────────────────────────────────────────────────── */
+const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
-const extra = Constants.expoConfig?.extra as {
-	clerkPublishableKey?: string;
-} | undefined;
+if (!CLERK_KEY) {
+	console.error(
+		"[auth] Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env file!",
+	);
+}
 
-const CLERK_KEY =
-	extra?.clerkPublishableKey ?? process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
-
-/**
- * Inner component that syncs the Clerk JWT into the axios client.
- * Must be inside ClerkProvider.
- */
+/* ────────────────────────────────────────────────────── */
+/*  TokenSyncer — bridges Clerk JWT into axios client     */
+/* ────────────────────────────────────────────────────── */
 function TokenSyncer({ children }: { children: React.ReactNode }) {
-	const { getToken, isSignedIn } = useAuth();
+	const { getToken, isSignedIn, isLoaded } = useAuth();
 
 	useEffect(() => {
+		if (!isLoaded) return;
+
 		if (!isSignedIn) {
 			setAuthToken(null);
 			return;
 		}
-		getToken().then((token) => {
-			setAuthToken(token ?? null);
-		});
-	}, [isSignedIn, getToken]);
+
+		let cancelled = false;
+
+		// Fetch a fresh token and inject it into axios
+		getToken()
+			.then((token) => {
+				if (!cancelled) setAuthToken(token ?? null);
+			})
+			.catch(() => {
+				if (!cancelled) setAuthToken(null);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [isLoaded, isSignedIn, getToken]);
 
 	return <>{children}</>;
 }
 
+/* ────────────────────────────────────────────────────── */
+/*  Root Layout                                           */
+/* ────────────────────────────────────────────────────── */
 export default function RootLayout() {
 	return (
 		<GestureHandlerRootView style={{ flex: 1 }}>
-			<ClerkProvider publishableKey={CLERK_KEY} tokenCache={clerkTokenCache}>
-				<PersistQueryClientProvider
-					client={queryClient}
-					persistOptions={{ persister: asyncStoragePersister }}
-					onSuccess={() => SplashScreen.hideAsync()}
-				>
-					<TokenSyncer>
-						<Stack screenOptions={{ headerShown: false }} />
-					</TokenSyncer>
-				</PersistQueryClientProvider>
+			<ClerkProvider publishableKey={CLERK_KEY} tokenCache={tokenCache}>
+				<ClerkLoaded>
+					<QueryClientProvider client={queryClient}>
+						<SafeAreaProvider>
+							<TokenSyncer>
+								<StatusBar style="light" />
+								<Stack screenOptions={{ headerShown: false }} />
+							</TokenSyncer>
+						</SafeAreaProvider>
+					</QueryClientProvider>
+				</ClerkLoaded>
 			</ClerkProvider>
 		</GestureHandlerRootView>
 	);

@@ -1,11 +1,24 @@
 /**
  * Fetches the current user from GET /api/v1/me.
- * Returns the full MeUser object including role.
+ * Returns the user object including role, batch, semester etc.
  */
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
-import type { MeUser } from "@logbook/shared/types";
+
+export type MeUser = {
+	id: string;
+	clerkId: string;
+	email: string;
+	firstName: string | null;
+	lastName: string | null;
+	role: "student" | "faculty" | "hod";
+	batch: string | null;
+	currentSemester: number | null;
+	department: string | null;
+	imageUrl: string | null;
+	status: string;
+};
 
 async function fetchMe(): Promise<MeUser> {
 	const res = await apiClient.get<{ ok: boolean; data: MeUser }>("/api/v1/me");
@@ -19,7 +32,7 @@ export function useMe() {
 	return useQuery({
 		queryKey: ["me"],
 		queryFn: fetchMe,
-		staleTime: 5 * 60 * 1000,
-		retry: 1,
+		staleTime: 5 * 60 * 1000, // 5 minutes
+		retry: 2,
 	});
 }

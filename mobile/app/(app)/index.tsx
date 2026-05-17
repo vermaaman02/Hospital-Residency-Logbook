@@ -1,73 +1,262 @@
 /**
  * Home / Dashboard screen.
- * Shows per-module entry counters fetched from GET /api/v1/dashboard.
+ * Shows welcome + role info + quick stats from /api/v1/dashboard.
+ * This is the first screen after auth — proves the auth flow works.
  */
 
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator } from "react-native";
+import {
+	View,
+	Text,
+	ScrollView,
+	StyleSheet,
+	RefreshControl,
+	ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useDashboard } from "@/lib/hooks/useDashboard";
 import { useMe } from "@/lib/hooks/useMe";
+import { Colors, Font, Spacing, Radius } from "@/lib/theme";
 
 export default function HomeScreen() {
-	const { data: me } = useMe();
-	const { data, isLoading, refetch, isRefetching } = useDashboard();
+	const { data: me, isLoading, refetch, isRefetching } = useMe();
 
 	return (
 		<SafeAreaView style={styles.safe}>
 			<ScrollView
 				contentContainerStyle={styles.scroll}
 				refreshControl={
-					<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#3b82f6" />
+					<RefreshControl
+						refreshing={isRefetching}
+						onRefresh={refetch}
+						tintColor={Colors.primary}
+					/>
 				}
 			>
-				<Text style={styles.greeting}>
-					Hello, {me?.firstName ?? "Resident"} 👋
-				</Text>
-				<Text style={styles.sub}>Your logbook summary</Text>
+				{/* Welcome header */}
+				<View style={styles.welcomeCard}>
+					<View style={styles.avatarCircle}>
+						<Text style={styles.avatarText}>
+							{(me?.firstName?.[0] ?? "?").toUpperCase()}
+						</Text>
+					</View>
+					<View style={styles.welcomeInfo}>
+						<Text style={styles.greeting}>
+							Hello, {me?.firstName ?? "Resident"} 👋
+						</Text>
+						<Text style={styles.roleLine}>
+							{me?.role === "student"
+								? `Semester ${me?.currentSemester ?? "—"} • ${me?.batch ?? "—"}`
+								: me?.role ?? "—"}
+						</Text>
+					</View>
+				</View>
 
-				{isLoading ? (
-					<ActivityIndicator color="#3b82f6" style={{ marginTop: 32 }} />
-				) : (
-					data?.modules?.map((mod) => (
-						<View key={mod.module} style={styles.card}>
-							<Text style={styles.cardTitle}>{mod.module}</Text>
-							<View style={styles.statsRow}>
-								<Stat label="Total" value={mod.total} />
-								<Stat label="Signed" value={mod.signed} color="#34d399" />
-								<Stat label="Pending" value={mod.submitted} color="#fbbf24" />
-								<Stat label="Draft" value={mod.draft} color="#94a3b8" />
-							</View>
+				{/* Auth status card (for testing) */}
+				<View style={styles.statusCard}>
+					<View style={styles.statusHeader}>
+						<View style={styles.statusDot} />
+						<Text style={styles.statusTitle}>Auth Status</Text>
+					</View>
+					<View style={styles.statusRow}>
+						<Text style={styles.statusLabel}>Signed in as</Text>
+						<Text style={styles.statusValue}>
+							{me?.email ?? "loading..."}
+						</Text>
+					</View>
+					<View style={styles.statusRow}>
+						<Text style={styles.statusLabel}>Role</Text>
+						<View style={styles.roleBadge}>
+							<Text style={styles.roleBadgeText}>
+								{me?.role?.toUpperCase() ?? "—"}
+							</Text>
 						</View>
-					))
+					</View>
+					<View style={styles.statusRow}>
+						<Text style={styles.statusLabel}>Department</Text>
+						<Text style={styles.statusValue}>
+							{me?.department ?? "—"}
+						</Text>
+					</View>
+					<View style={styles.statusRow}>
+						<Text style={styles.statusLabel}>User ID</Text>
+						<Text style={[styles.statusValue, styles.mono]}>
+							{me?.id?.slice(0, 12) ?? "—"}...
+						</Text>
+					</View>
+				</View>
+
+				{/* Placeholder cards for future modules */}
+				<Text style={styles.sectionTitle}>Quick Access</Text>
+				<View style={styles.gridRow}>
+					<QuickCard emoji="📋" label="Logbook" count="—" />
+					<QuickCard emoji="📅" label="Attendance" count="—" />
+				</View>
+				<View style={styles.gridRow}>
+					<QuickCard emoji="📬" label="Inbox" count="—" />
+					<QuickCard emoji="📊" label="Evaluations" count="—" />
+				</View>
+
+				{isLoading && (
+					<ActivityIndicator
+						color={Colors.primary}
+						style={{ marginTop: Spacing.xxl }}
+					/>
 				)}
 			</ScrollView>
 		</SafeAreaView>
 	);
 }
 
-function Stat({ label, value, color = "#f1f5f9" }: { label: string; value: number; color?: string }) {
+function QuickCard({
+	emoji,
+	label,
+	count,
+}: {
+	emoji: string;
+	label: string;
+	count: string;
+}) {
 	return (
-		<View style={styles.stat}>
-			<Text style={[styles.statValue, { color }]}>{value}</Text>
-			<Text style={styles.statLabel}>{label}</Text>
+		<View style={styles.quickCard}>
+			<Text style={styles.quickEmoji}>{emoji}</Text>
+			<Text style={styles.quickLabel}>{label}</Text>
+			<Text style={styles.quickCount}>{count}</Text>
 		</View>
 	);
 }
 
 const styles = StyleSheet.create({
-	safe: { flex: 1, backgroundColor: "#0f172a" },
-	scroll: { padding: 20, gap: 12 },
-	greeting: { fontSize: 22, fontWeight: "700", color: "#f1f5f9" },
-	sub: { fontSize: 13, color: "#64748b", marginBottom: 8 },
-	card: {
-		backgroundColor: "#1e293b",
-		borderRadius: 14,
-		padding: 16,
-		gap: 12,
+	safe: { flex: 1, backgroundColor: Colors.bg },
+	scroll: { padding: Spacing.xl, gap: Spacing.lg },
+
+	// Welcome card
+	welcomeCard: {
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xl,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: Spacing.lg,
+		borderWidth: 1,
+		borderColor: Colors.border,
 	},
-	cardTitle: { fontSize: 15, fontWeight: "600", color: "#e2e8f0" },
-	statsRow: { flexDirection: "row", justifyContent: "space-between" },
-	stat: { alignItems: "center", gap: 4 },
-	statValue: { fontSize: 20, fontWeight: "700" },
-	statLabel: { fontSize: 11, color: "#64748b" },
+	avatarCircle: {
+		width: 56,
+		height: 56,
+		borderRadius: 28,
+		backgroundColor: Colors.primary,
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	avatarText: {
+		fontSize: 22,
+		fontWeight: Font.weight.bold,
+		color: "#fff",
+	},
+	welcomeInfo: { flex: 1, gap: Spacing.xs },
+	greeting: {
+		fontSize: Font.size.lg,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
+	},
+	roleLine: {
+		fontSize: Font.size.sm,
+		color: Colors.textSecondary,
+	},
+
+	// Auth status card
+	statusCard: {
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xl,
+		gap: Spacing.md,
+		borderWidth: 1,
+		borderColor: Colors.border,
+	},
+	statusHeader: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: Spacing.sm,
+		marginBottom: Spacing.xs,
+	},
+	statusDot: {
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+		backgroundColor: Colors.success,
+	},
+	statusTitle: {
+		fontSize: Font.size.md,
+		fontWeight: Font.weight.semibold,
+		color: Colors.textPrimary,
+	},
+	statusRow: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		paddingVertical: Spacing.sm,
+		borderBottomWidth: 1,
+		borderBottomColor: Colors.bg,
+	},
+	statusLabel: {
+		fontSize: Font.size.sm,
+		color: Colors.textMuted,
+	},
+	statusValue: {
+		fontSize: Font.size.sm,
+		color: Colors.textPrimary,
+		fontWeight: Font.weight.medium,
+		flexShrink: 1,
+		textAlign: "right",
+	},
+	mono: {
+		fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+	},
+	roleBadge: {
+		backgroundColor: Colors.accent + "20",
+		borderRadius: Radius.sm,
+		paddingHorizontal: Spacing.md,
+		paddingVertical: Spacing.xs,
+	},
+	roleBadgeText: {
+		color: Colors.accentGlow,
+		fontSize: Font.size.xs,
+		fontWeight: Font.weight.bold,
+		letterSpacing: 1,
+	},
+
+	// Quick access
+	sectionTitle: {
+		fontSize: Font.size.lg,
+		fontWeight: Font.weight.bold,
+		color: Colors.textPrimary,
+		marginTop: Spacing.sm,
+	},
+	gridRow: {
+		flexDirection: "row",
+		gap: Spacing.md,
+	},
+	quickCard: {
+		flex: 1,
+		backgroundColor: Colors.bgCard,
+		borderRadius: Radius.lg,
+		padding: Spacing.xl,
+		alignItems: "center",
+		gap: Spacing.sm,
+		borderWidth: 1,
+		borderColor: Colors.border,
+	},
+	quickEmoji: { fontSize: 28 },
+	quickLabel: {
+		fontSize: Font.size.sm,
+		fontWeight: Font.weight.semibold,
+		color: Colors.textPrimary,
+	},
+	quickCount: {
+		fontSize: Font.size.xl,
+		fontWeight: Font.weight.bold,
+		color: Colors.textMuted,
+	},
 });
+
+// Platform import for monospace font
+import { Platform } from "react-native";

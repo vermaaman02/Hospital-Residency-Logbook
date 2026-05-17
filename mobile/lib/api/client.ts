@@ -1,29 +1,23 @@
 /**
- * Axios instance for all /api/v1/* REST calls.
- * The Authorization header is injected by setAuthToken() which is called
- * from the root layout after Clerk provides a fresh session token.
+ * Axios client for all /api/v1/* REST calls.
+ * Authorization header is injected by TokenSyncer in the root layout
+ * after Clerk provides a fresh session JWT.
  */
 
 import axios from "axios";
-import Constants from "expo-constants";
 
-const extra = Constants.expoConfig?.extra as {
-	apiBaseUrl?: string;
-} | undefined;
-
-const BASE_URL = extra?.apiBaseUrl ?? "http://localhost:3000";
+const BASE_URL =
+	process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
 export const apiClient = axios.create({
 	baseURL: BASE_URL,
 	timeout: 15_000,
-	headers: {
-		"Content-Type": "application/json",
-	},
+	headers: { "Content-Type": "application/json" },
 });
 
 /**
- * Call this once after sign-in / token refresh to attach the Clerk JWT.
- * Passing null clears the header (on sign-out).
+ * Called from root layout on every auth state change.
+ * Sets or clears the Bearer token for all subsequent API calls.
  */
 export function setAuthToken(token: string | null) {
 	if (token) {
@@ -32,11 +26,3 @@ export function setAuthToken(token: string | null) {
 		delete apiClient.defaults.headers.common["Authorization"];
 	}
 }
-
-export type V1Response<T> = {
-	ok: true;
-	data: T;
-} | {
-	ok: false;
-	error: string;
-};

@@ -4,13 +4,16 @@
  * Accepts both Clerk cookie session and Authorization: Bearer <jwt>.
  */
 
-import { requireAuthHybrid } from "@/lib/auth";
+import { requireAuthHybrid, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, handleError } from "@/app/api/v1/_lib/respond";
 
 export async function GET() {
 	try {
 		const clerkId = await requireAuthHybrid();
+
+		// Auto-create DB record for first-time users (matches web dashboard behaviour)
+		await ensureUserInDb();
 
 		const user = await prisma.user.findUnique({
 			where: { clerkId },
