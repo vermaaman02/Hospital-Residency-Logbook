@@ -8,6 +8,7 @@
 
 import React from "react";
 import { FlatList, StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
 import {
 	Activity,
 	BookOpen,
@@ -75,6 +76,17 @@ const MODULES: Module[] = [
 ];
 
 export default function LogbookScreen() {
+	const router = useRouter();
+
+	const handleModulePress = (key: string) => {
+		if (key === "rotation-postings") {
+			router.push("/(app)/rotation-postings");
+		} else {
+			// TODO: Navigate to other modules as they are implemented
+			console.log(`Module ${key} not yet implemented`);
+		}
+	};
+
 	return (
 		<Screen bleed>
 			<FlatList
@@ -95,7 +107,7 @@ export default function LogbookScreen() {
 				renderItem={({ item }) => {
 					const Icon = item.icon;
 					return (
-						<Card onPress={() => {}}>
+						<Card onPress={() => handleModulePress(item.key)}>
 							<View style={styles.row}>
 								<IconBubble
 									tone={item.tone}
