@@ -20,6 +20,8 @@ import {
 	updateRotationPosting,
 	submitRotationPosting,
 	deleteRotationPosting,
+	addRotationPostingAttachment,
+	removeRotationPostingAttachment,
 } from "@/actions/rotation-postings";
 
 export async function GET(req: NextRequest) {
@@ -79,6 +81,22 @@ export async function POST(req: NextRequest) {
 			const { id } = body;
 			if (!id) return err("id is required", 400);
 			const result = await deleteRotationPosting(id);
+			return ok(result);
+		}
+
+		if (action === "add-attachment") {
+			const { id, attachmentUrl } = body;
+			if (!id) return err("id is required", 400);
+			if (!attachmentUrl) return err("attachmentUrl is required", 400);
+			const result = await addRotationPostingAttachment(id, attachmentUrl);
+			return ok(result);
+		}
+
+		if (action === "remove-attachment") {
+			const { id, attachmentUrl } = body;
+			if (!id) return err("id is required", 400);
+			if (!attachmentUrl) return err("attachmentUrl is required", 400);
+			const result = await removeRotationPostingAttachment(id, attachmentUrl);
 			return ok(result);
 		}
 

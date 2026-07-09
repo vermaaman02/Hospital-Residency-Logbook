@@ -39,9 +39,10 @@ export function Screen({
 	contentContainerStyle,
 	edges = ["top", "bottom"],
 }: Props) {
-	const Container: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-		if (scroll) {
-			return (
+	return (
+		<SafeAreaView edges={edges} style={[styles.safe, style]}>
+			{pattern === "dots" && <DotGrid />}
+			{scroll ? (
 				<ScrollView
 					style={styles.flex}
 					contentContainerStyle={[
@@ -53,22 +54,11 @@ export function Screen({
 				>
 					{children}
 				</ScrollView>
-			);
-		}
-		return (
-			<View style={[styles.flex, bleed ? undefined : styles.padded]}>
-				{children}
-			</View>
-		);
-	};
-
-	return (
-		<SafeAreaView
-			edges={edges}
-			style={[styles.safe, style]}
-		>
-			{pattern === "dots" && <DotGrid />}
-			<Container>{children}</Container>
+			) : (
+				<View style={[styles.flex, bleed ? undefined : styles.padded]}>
+					{children}
+				</View>
+			)}
 		</SafeAreaView>
 	);
 }

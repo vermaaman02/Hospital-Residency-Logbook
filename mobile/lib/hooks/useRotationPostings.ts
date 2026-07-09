@@ -155,6 +155,30 @@ export function useRotationPostings() {
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["rotation-postings"] }),
 	});
 
+	const addAttachmentMutation = useMutation({
+		mutationFn: async ({ id, attachmentUrl }: { id: string; attachmentUrl: string }) => {
+			const { data } = await apiClient.post("/api/v1/rotation-postings", {
+				action: "add-attachment",
+				id,
+				attachmentUrl,
+			});
+			return data;
+		},
+		onSuccess: () => qc.invalidateQueries({ queryKey: ["rotation-postings"] }),
+	});
+
+	const removeAttachmentMutation = useMutation({
+		mutationFn: async ({ id, attachmentUrl }: { id: string; attachmentUrl: string }) => {
+			const { data } = await apiClient.post("/api/v1/rotation-postings", {
+				action: "remove-attachment",
+				id,
+				attachmentUrl,
+			});
+			return data;
+		},
+		onSuccess: () => qc.invalidateQueries({ queryKey: ["rotation-postings"] }),
+	});
+
 	// Map postings by rotation name for easy lookup
 	const postingsByName = new Map(postings.map((p) => [p.rotationName, p]));
 
@@ -186,9 +210,13 @@ export function useRotationPostings() {
 		updatePosting: updateMutation.mutateAsync,
 		submitPosting: submitMutation.mutateAsync,
 		deletePosting: deleteMutation.mutateAsync,
+		addAttachment: addAttachmentMutation.mutateAsync,
+		removeAttachment: removeAttachmentMutation.mutateAsync,
 		isCreating: createMutation.isPending,
 		isUpdating: updateMutation.isPending,
 		isSubmitting: submitMutation.isPending,
 		isDeleting: deleteMutation.isPending,
+		isAddingAttachment: addAttachmentMutation.isPending,
+		isRemovingAttachment: removeAttachmentMutation.isPending,
 	};
 }
