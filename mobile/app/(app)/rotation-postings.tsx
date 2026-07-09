@@ -388,7 +388,7 @@ export default function RotationPostingsScreen() {
 		return f ? `${f.firstName} ${f.lastName}` : "—";
 	};
 
-	const onDateChange = (field: "startDate" | "endDate", event: DateTimePickerEvent, date?: Date) => {
+	const onDateChange = (field: "startDate" | "endDate", event: any, date?: Date) => {
 		if (field === "startDate") setShowStartPicker(false);
 		else setShowEndPicker(false);
 		if (date) {
@@ -758,14 +758,14 @@ export default function RotationPostingsScreen() {
 							<DateTimePicker
 								value={form.startDate || new Date()}
 								mode="date"
-								onChange={(e, d) => onDateChange("startDate", e, d)}
+								onValueChange={(e, d) => onDateChange("startDate", e, d)}
 							/>
 						)}
 						{showEndPicker && (
 							<DateTimePicker
 								value={form.endDate || new Date()}
 								mode="date"
-								onChange={(e, d) => onDateChange("endDate", e, d)}
+								onValueChange={(e, d) => onDateChange("endDate", e, d)}
 							/>
 						)}
 

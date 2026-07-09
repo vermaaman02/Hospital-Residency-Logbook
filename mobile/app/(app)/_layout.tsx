@@ -199,6 +199,18 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="rotation-postings"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="academic-cases-seminars"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }

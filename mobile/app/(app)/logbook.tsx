@@ -6,9 +6,10 @@
  * "confetti" feel without being overwhelming.
  */
 
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
 	Activity,
 	BookOpen,
@@ -30,6 +31,7 @@ import {
 	Stethoscope,
 	Syringe,
 	TrendingUp,
+	Search,
 } from "lucide-react-native";
 
 import {
@@ -40,6 +42,9 @@ import {
 	SectionHeader,
 	Text,
 	VStack,
+	Input,
+	HStack,
+	Badge,
 } from "@/components/ui";
 import { Colors, Layout, Spacing } from "@/lib/theme";
 
@@ -77,15 +82,56 @@ const MODULES: Module[] = [
 
 export default function LogbookScreen() {
 	const router = useRouter();
+	const [searchQuery, setSearchQuery] = useState("");
+	const [recentKeys, setRecentKeys] = useState<string[]>([]);
 
-	const handleModulePress = (key: string) => {
+	// Load recently used modules from AsyncStorage
+	useEffect(() => {
+		AsyncStorage.getItem("recent_modules")
+			.then((val) => {
+				if (val) {
+					try {
+						setRecentKeys(JSON.parse(val));
+					} catch (e) {
+						console.error(e);
+					}
+				}
+			})
+			.catch((e) => console.error(e));
+	}, []);
+
+	const handleModulePress = async (key: string) => {
+		// Update recent keys array (move selected to first position)
+		const updated = [key, ...recentKeys.filter((k) => k !== key)];
+		setRecentKeys(updated);
+		await AsyncStorage.setItem("recent_modules", JSON.stringify(updated));
+
 		if (key === "rotation-postings") {
 			router.push("/(app)/rotation-postings");
+		} else if (key === "case-presentations" || key === "seminars") {
+			router.push("/(app)/academic-cases-seminars");
 		} else {
-			// TODO: Navigate to other modules as they are implemented
+			// Navigate to other modules as they are implemented
 			console.log(`Module ${key} not yet implemented`);
 		}
 	};
+
+	// Filter and sort modules dynamically
+	const sortedModules = useMemo(() => {
+		const filtered = MODULES.filter((m) =>
+			m.label.toLowerCase().includes(searchQuery.toLowerCase())
+		);
+
+		return [...filtered].sort((a, b) => {
+			const idxA = recentKeys.indexOf(a.key);
+			const idxB = recentKeys.indexOf(b.key);
+
+			if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+			if (idxA !== -1) return -1;
+			if (idxB !== -1) return 1;
+			return 0; // maintain relative default ordering
+		});
+	}, [recentKeys, searchQuery]);
 
 	return (
 		<Screen bleed>
@@ -97,15 +143,27 @@ export default function LogbookScreen() {
 							subtitle="18 NMC-mandated entry types"
 							squiggleColor={Colors.accent}
 						/>
+
+						{/* Search Bar Input */}
+						<View style={styles.searchContainer}>
+							<Input
+								placeholder="Search logbook modules..."
+								value={searchQuery}
+								onChangeText={setSearchQuery}
+								style={styles.searchInput}
+							/>
+						</View>
 					</View>
 				}
-				data={MODULES}
+				data={sortedModules}
 				keyExtractor={(m) => m.key}
 				numColumns={1}
 				contentContainerStyle={styles.list}
 				ItemSeparatorComponent={() => <View style={{ height: Spacing["3"] }} />}
-				renderItem={({ item }) => {
+				renderItem={({ item, index }) => {
 					const Icon = item.icon;
+					const isRecentlyUsed = recentKeys.indexOf(item.key) !== -1;
+					
 					return (
 						<Card onPress={() => handleModulePress(item.key)}>
 							<View style={styles.row}>
@@ -115,7 +173,12 @@ export default function LogbookScreen() {
 									size={44}
 								/>
 								<View style={styles.rowText}>
-									<Heading level={4}>{item.label}</Heading>
+									<HStack justify="space-between" align="center">
+										<Heading level={4}>{item.label}</Heading>
+										{isRecentlyUsed && recentKeys[0] === item.key && (
+											<Badge label="Last used" tone="accent" />
+										)}
+									</HStack>
 									<Text variant="muted">Tap to open</Text>
 								</View>
 							</View>
@@ -132,6 +195,13 @@ const styles = StyleSheet.create({
 		paddingHorizontal: Layout.screenPadding,
 		paddingTop: Spacing["4"],
 		paddingBottom: Spacing["2"],
+	},
+	searchContainer: {
+		marginTop: Spacing["3"],
+		marginBottom: Spacing["2"],
+	},
+	searchInput: {
+		height: 44,
 	},
 	list: {
 		paddingHorizontal: Layout.screenPadding,
