@@ -55,3 +55,14 @@ export async function emitToRole(
 ) {
 	return emitRealtimeEvent(event, { ...data, _targetRole: role });
 }
+
+/**
+ * Emit a realtime event to a specific user room.
+ */
+export async function emitToUser(
+	userId: string,
+	event: string,
+	data?: Record<string, unknown>,
+) {
+	return emitRealtimeEvent(event, { ...data, _targetUser: userId });
+}

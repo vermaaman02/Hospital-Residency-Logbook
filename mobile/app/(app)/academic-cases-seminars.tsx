@@ -17,7 +17,7 @@ import {
 	Linking,
 	Modal,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import {
 	ArrowLeft,
@@ -51,6 +51,7 @@ import {
 	StatusBadge,
 	Text,
 	VStack,
+	ExportButton,
 } from "@/components/ui";
 import { useCasePresentations, CasePresentation, CasePresentationInput, PatientCategory } from "@/lib/hooks/useCasePresentations";
 import { useSeminars, Seminar, SeminarInput } from "@/lib/hooks/useSeminars";
@@ -145,7 +146,14 @@ function diffSnapshots(
 
 export default function AcademicCasesSeminarsScreen() {
 	const router = useRouter();
+	const { tab } = useLocalSearchParams<{ tab?: "cases" | "seminars" }>();
 	const [activeTab, setActiveTab] = useState<"cases" | "seminars">("cases");
+
+	React.useEffect(() => {
+		if (tab === "cases" || tab === "seminars") {
+			setActiveTab(tab);
+		}
+	}, [tab]);
 
 	// ─── HOOKS ──────────────────────────────────────────────────────────
 	const { facultyList } = useRotationPostings();
@@ -828,10 +836,15 @@ export default function AcademicCasesSeminarsScreen() {
 					scrollEnabled={!isDropdownOpen}
 					ListHeaderComponent={
 						<View style={styles.tabContent}>
-							<SectionHeader
-								title={activeTab === "cases" ? "Academic Case Presentation & Discussion" : "Seminar / Evidence Based Discussion Presented"}
-								subtitle={activeTab === "cases" ? "Target: 20 entries" : "Target: 10 entries"}
-							/>
+							<HStack justify="space-between" align="center" style={{ marginBottom: Spacing["2"] }}>
+								<View style={{ flex: 1, marginRight: Spacing["2"] }}>
+									<SectionHeader
+										title={activeTab === "cases" ? "Academic Case Presentation & Discussion" : "Seminar / Evidence Based Discussion Presented"}
+										subtitle={activeTab === "cases" ? "Target: 20 entries" : "Target: 10 entries"}
+									/>
+								</View>
+								<ExportButton module={activeTab === "cases" ? "case-presentations" : "seminars"} label="Download" />
+							</HStack>
 
 							{/* Stats card */}
 							<Card variant="featured-violet" style={styles.statsCard}>

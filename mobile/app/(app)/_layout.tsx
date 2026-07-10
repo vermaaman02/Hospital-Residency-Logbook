@@ -26,7 +26,11 @@ import {
 } from "lucide-react-native";
 
 import { useMe } from "@/lib/hooks/useMe";
+import { useInbox } from "@/lib/hooks/useInbox";
+import { notificationStore } from "@/lib/store/notifications";
 import { setAuthToken } from "@/lib/api/client";
+import { usePushNotifications, unregisterPushToken } from "@/lib/hooks/usePushNotifications";
+import { io } from "socket.io-client";
 import {
 	Button,
 	Card,
@@ -51,8 +55,69 @@ function AuthenticatedShell() {
 	const { signOut } = useAuth();
 	const qc = useQueryClient();
 	const { data: me, isLoading, isError, error, refetch } = useMe();
+	const { items = [] } = useInbox();
+	const pushTokenRef = usePushNotifications(me?.id);
+
+	const [lastViewed, setLastViewed] = React.useState(0);
+	const [clearedIds, setClearedIds] = React.useState<string[]>([]);
+
+	React.useEffect(() => {
+		notificationStore.init();
+		const unsubscribe = notificationStore.subscribe(() => {
+			setLastViewed(notificationStore.getLastViewed());
+			setClearedIds(notificationStore.getClearedIds());
+		});
+		return () => {
+			unsubscribe();
+		};
+	}, []);
+
+	const unreadCount = items.filter(item => {
+		const isCleared = clearedIds.includes(item.id);
+		const isNew = new Date(item.updatedAt).getTime() > lastViewed;
+		return !isCleared && isNew;
+	}).length;
+
+	React.useEffect(() => {
+		if (!me || me.role.toLowerCase() !== "student") return;
+
+		const socketUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+		const socket = io(socketUrl, {
+			transports: ["websocket", "polling"],
+		});
+
+		socket.on("connect", () => {
+			console.log("[Socket.IO] Mobile connected, joining room user:" + me.id);
+			socket.emit("join:user", me.id);
+		});
+
+		socket.on("notification:received", () => {
+			console.log("[Socket.IO] notification:received, invalidating queries...");
+			qc.invalidateQueries();
+		});
+
+		socket.on("entry:updated", () => {
+			console.log("[Socket.IO] entry:updated, invalidating queries...");
+			qc.invalidateQueries();
+		});
+
+		socket.on("rotation:updated", () => {
+			console.log("[Socket.IO] rotation:updated, invalidating queries...");
+			qc.invalidateQueries();
+		});
+
+		socket.on("thesis:updated", () => {
+			console.log("[Socket.IO] thesis:updated, invalidating queries...");
+			qc.invalidateQueries();
+		});
+
+		return () => {
+			socket.disconnect();
+		};
+	}, [me, qc]);
 
 	const handleSignOut = async () => {
+		await unregisterPushToken(pushTokenRef.current);
 		setAuthToken(null);
 		qc.clear();
 		await signOut();
@@ -182,6 +247,12 @@ function AuthenticatedShell() {
 					tabBarIcon: ({ color, focused }) => (
 						<Inbox size={focused ? 26 : 22} color={color} strokeWidth={2.5} />
 					),
+					tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+				}}
+				listeners={{
+					tabPress: () => {
+						notificationStore.markAllRead();
+					},
 				}}
 			/>
 			<Tabs.Screen

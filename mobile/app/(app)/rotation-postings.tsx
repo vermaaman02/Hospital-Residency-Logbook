@@ -61,6 +61,7 @@ import {
 	StatusBadge,
 	Text,
 	VStack,
+	ExportButton,
 } from "@/components/ui";
 import {
 	useRotationPostings,
@@ -196,6 +197,7 @@ export default function RotationPostingsScreen() {
 		deletePosting,
 		addAttachment,
 		removeAttachment,
+		enabledRotationMap,
 	} = useRotationPostings();
 
 	const {
@@ -696,10 +698,11 @@ export default function RotationPostingsScreen() {
 
 	const renderRotationCard = (rotation: typeof ROTATION_POSTINGS[number], isElective: boolean) => {
 		const posting = postingsByName.get(rotation.name);
-		const isEditing = editingSlNo === rotation.slNo;
-		const canEdit = posting
+		const isEnabled = enabledRotationMap.get(rotation.slNo) === true;
+		const isEditing = editingSlNo === rotation.slNo && isEnabled;
+		const canEdit = isEnabled && (posting
 			? posting.status === "DRAFT" || posting.status === "NEEDS_REVISION"
-			: true;
+			: true);
 		const showRemark = posting?.status === "NEEDS_REVISION" && posting?.facultyRemark;
 
 		if (isEditing) {
@@ -874,9 +877,14 @@ export default function RotationPostingsScreen() {
 									icon={<Text variant="bodyStrong" color={Colors.inverse}>{rotation.slNo}</Text>}
 								/>
 								<VStack gap="0.5" style={styles.flex1}>
-									<Text variant="bodyStrong" numberOfLines={2}>{rotation.name}</Text>
+									<HStack gap="2" align="center" wrap>
+										<Text variant="bodyStrong" numberOfLines={2} style={!isEnabled ? { color: Colors.muted } : undefined}>{rotation.name}</Text>
+										{!isEnabled && <Badge label="Disabled by HOD" tone="danger" />}
+									</HStack>
 									{posting ? (
 										<StatusBadge status={posting.status as any} />
+									) : !isEnabled ? (
+										<Text variant="bodySm" color={Colors.muted}>Contact HOD to enable</Text>
 									) : (
 										<Text variant="bodySm" color={Colors.muted}>Not filled — Tap to add</Text>
 									)}
@@ -1504,10 +1512,15 @@ export default function RotationPostingsScreen() {
 					keyExtractor={(item) => item.slNo.toString()}
 					ListHeaderComponent={
 						<View style={styles.tabContent}>
-							<SectionHeader
-								title="Log of Rotation Postings"
-								subtitle="7 core + 13 elective postings as per NMC guidelines"
-							/>
+							<HStack justify="space-between" align="center" style={{ marginBottom: Spacing["2"] }}>
+								<View style={{ flex: 1, marginRight: Spacing["2"] }}>
+									<SectionHeader
+										title="Log of Rotation Postings"
+										subtitle="7 core + 13 elective postings as per NMC guidelines"
+									/>
+								</View>
+								<ExportButton module="rotation-postings" label="Download" />
+							</HStack>
 
 							{/* Stats */}
 							<Card variant="featured-violet" style={styles.statsCard}>

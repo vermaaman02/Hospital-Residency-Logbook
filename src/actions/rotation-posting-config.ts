@@ -6,9 +6,10 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, requireRole, requireAuthHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
+import { emitRealtimeEvent } from "@/lib/realtime-emit";
 
 export interface RotationConfigWithDetails {
 	rotationSlNo: number;
@@ -212,6 +213,8 @@ export async function updateRotationPostingConfig(
 			isEnabled,
 		},
 	});
+
+	await emitRealtimeEvent("rotation:updated");
 }
 
 /**
@@ -262,6 +265,7 @@ export async function updateRotationPostingConfigForSpecificStudent(
 				studentId,
 			},
 		});
+		await emitRealtimeEvent("rotation:updated");
 		return;
 	}
 
@@ -288,6 +292,8 @@ export async function updateRotationPostingConfigForSpecificStudent(
 			isEnabled,
 		},
 	});
+
+	await emitRealtimeEvent("rotation:updated");
 }
 
 /**
@@ -331,6 +337,8 @@ export async function bulkUpdateRotationPostingConfigs(
 			}),
 		),
 	);
+
+	await emitRealtimeEvent("rotation:updated");
 }
 
 /**
@@ -428,7 +436,7 @@ export async function getEnabledRotationsForStudent(
 	departmentId: string,
 	studentId?: string,
 ): Promise<RotationConfigWithDetails[]> {
-	await requireAuth();
+	await requireAuthHybrid();
 
 	const baseConfigs = await prisma.rotationPostingConfiguration.findMany({
 		where: {

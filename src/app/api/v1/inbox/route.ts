@@ -50,8 +50,15 @@ export async function GET(req: NextRequest) {
 			if (studentIds.length === 0) return ok({ items: [], nextCursor: null });
 		}
 
+		const clearedItemIds = (
+			await prisma.clearedNotification.findMany({
+				where: { userId: user.id },
+				select: { itemId: true },
+			})
+		).map((n) => n.itemId);
+
 		const studentFilter =
-			isStudent ? { userId: user.id }
+			isStudent ? { userId: user.id, id: clearedItemIds.length > 0 ? { notIn: clearedItemIds } : undefined }
 			: studentIds.length > 0 ? { userId: { in: studentIds } }
 			: {};
 

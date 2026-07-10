@@ -18,6 +18,7 @@ import {
 } from "@/lib/validators/administrative";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
+import { sendRealtimeNotification } from "@/lib/notifications";
 import { ROTATION_POSTINGS } from "@/lib/constants/rotation-postings";
 import { validateRotationEnabledForStudentDetails } from "@/actions/rotation-posting-config";
 import {
@@ -603,6 +604,12 @@ export async function signRotationPosting(id: string, remark?: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/student/rotation-postings");
 	emitRealtimeEvent("rotation:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Rotation Posting Signed",
+		`Your rotation posting for "${entry.rotationName}" has been approved and signed.`,
+		{ type: "rotation", id: entry.id }
+	);
 	return { success: true };
 }
 
@@ -641,6 +648,12 @@ export async function rejectRotationPosting(id: string, remark: string) {
 	revalidatePath("/dashboard/hod/rotation-postings");
 	revalidatePath("/dashboard/student/rotation-postings");
 	emitRealtimeEvent("rotation:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Rotation Posting Revision Required",
+		`Revision has been requested for your rotation posting "${entry.rotationName}".`,
+		{ type: "rotation", id: entry.id }
+	);
 	return { success: true };
 }
 

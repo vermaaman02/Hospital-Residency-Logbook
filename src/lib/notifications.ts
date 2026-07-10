@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
+import { emitToUser } from "@/lib/realtime-emit";
 
 const VAPID_PUBLIC = process.env.WEB_PUSH_VAPID_PUBLIC;
 const VAPID_PRIVATE = process.env.WEB_PUSH_VAPID_PRIVATE;
@@ -92,4 +93,55 @@ export async function sendNotificationToAllSubscribedUsers(
 		results.push({ endpoint: s.endpoint, userId: s.userId, result: r });
 	}
 	return results;
+}
+
+/**
+ * Sends a real-time notification to a student user:
+ * 1. Broadcasts to user's Socket.io room (foreground real-time updates)
+ * 2. Delivers Expo Push Notification (background alert messages)
+ */
+export async function sendRealtimeNotification(
+	userId: string,
+	title: string,
+	body: string,
+	data?: Record<string, any>
+) {
+	try {
+		// 1. Send via WebSocket for live in-app updates
+		await emitToUser(userId, "notification:received", { title, body, data });
+
+		// 2. Query Expo mobile push tokens
+		const pushTokens = await prisma.mobilePushToken.findMany({
+			where: { userId },
+			select: { token: true },
+		});
+
+		if (pushTokens.length > 0) {
+			const messages = pushTokens.map((t) => ({
+				to: t.token,
+				sound: "default",
+				title,
+				body,
+				data,
+			}));
+
+			// Deliver to Expo push notification server
+			const res = await fetch("https://exp.host/--/api/v2/push/send", {
+				method: "POST",
+				headers: {
+					"Accept": "application/json",
+					"Accept-Encoding": "gzip, deflate",
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(messages),
+				signal: AbortSignal.timeout(5000),
+			});
+
+			if (!res.ok) {
+				console.warn(`[Expo Push] Dispatch failed with code ${res.status}`);
+			}
+		}
+	} catch (e) {
+		console.error("[Realtime Notification] Failed to deliver", e);
+	}
 }

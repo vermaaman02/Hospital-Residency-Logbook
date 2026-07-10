@@ -125,7 +125,7 @@ async function deletePosting(id: string) {
 export function useRotationPostings() {
 	const qc = useQueryClient();
 
-	const { data: postings = [], isLoading, error, refetch } = useQuery({
+	const { data: postings = [], isLoading: isLoadingPostings, error, refetch: refetchPostings } = useQuery({
 		queryKey: ["rotation-postings"],
 		queryFn: fetchRotationPostings,
 	});
@@ -134,6 +134,24 @@ export function useRotationPostings() {
 		queryKey: ["faculty-list"],
 		queryFn: fetchFacultyList,
 	});
+
+	const { data: enabledConfigs = [], isLoading: isLoadingConfigs, refetch: refetchConfigs } = useQuery({
+		queryKey: ["rotation-postings-config"],
+		queryFn: async () => {
+			const { data } = await apiClient.get("/api/v1/rotation-postings/config");
+			return data.data ?? [];
+		},
+	});
+
+	const refetch = async () => {
+		await Promise.all([refetchPostings(), refetchConfigs()]);
+	};
+
+	const enabledRotationMap = new Map<number, boolean>(
+		enabledConfigs.map((c: any) => [c.rotationSlNo, c.isEnabled])
+	);
+
+	const isLoading = isLoadingPostings || isLoadingConfigs;
 
 	const createMutation = useMutation({
 		mutationFn: createPosting,
@@ -206,6 +224,8 @@ export function useRotationPostings() {
 		isLoading,
 		error,
 		refetch,
+		enabledRotationMap,
+		enabledConfigs,
 		createPosting: createMutation.mutateAsync,
 		updatePosting: updateMutation.mutateAsync,
 		submitPosting: submitMutation.mutateAsync,

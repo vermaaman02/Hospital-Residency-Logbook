@@ -59,6 +59,7 @@ model User {
   thesis                     Thesis?
   trainingMentoringRecords   TrainingMentoringRecord[]
   transportLogs              TransportLog[]
+  clearedNotifications       ClearedNotification[]
   entryRevisionsOwned        EntryRevision[]                       @relation("EntryRevisionsOwned")
   entryRevisionsReviewed     EntryRevision[]                       @relation("EntryRevisionsReviewed")
   mobilePushTokens           MobilePushToken[]
@@ -1143,4 +1144,16 @@ enum PatientCategory {
   PEDIATRIC_NON_TRAUMA
   PEDIATRIC_TRAUMA
   OTHER
+}
+
+model ClearedNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  itemId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+  @@index([userId])
 }

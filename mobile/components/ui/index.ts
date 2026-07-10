@@ -20,3 +20,4 @@ export { Confetti } from "./Confetti";
 export { SectionHeader } from "./SectionHeader";
 export { Divider } from "./Divider";
 export { VStack, HStack, Spacer } from "./Stack";
+export { ExportButton } from "./ExportButton";

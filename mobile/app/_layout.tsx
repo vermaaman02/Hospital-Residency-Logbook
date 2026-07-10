@@ -22,7 +22,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { setAuthToken } from "@/lib/api/client";
+import { setAuthToken, apiClient } from "@/lib/api/client";
 import { Colors, useThemeFonts } from "@/lib/theme";
 
 /* ────────────────────────────────────────────────────── */
@@ -58,24 +58,35 @@ function TokenSyncer({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		if (!isLoaded) return;
 
+		// Set up an interceptor to inject a fresh token on every request
+		const interceptor = apiClient.interceptors.request.use(
+			async (config) => {
+				if (isSignedIn) {
+					try {
+						const token = await getToken();
+						if (token) {
+							config.headers.Authorization = `Bearer ${token}`;
+						}
+					} catch (e) {
+						console.error("[TokenSyncer] Failed to fetch token", e);
+					}
+				}
+				return config;
+			},
+			(error) => Promise.reject(error)
+		);
+
+		// Also do initial set for backwards compatibility / immediate requests
 		if (!isSignedIn) {
 			setAuthToken(null);
-			return;
+		} else {
+			getToken().then((token) => {
+				setAuthToken(token ?? null);
+			});
 		}
 
-		let cancelled = false;
-
-		// Fetch a fresh token and inject it into axios
-		getToken()
-			.then((token) => {
-				if (!cancelled) setAuthToken(token ?? null);
-			})
-			.catch(() => {
-				if (!cancelled) setAuthToken(null);
-			});
-
 		return () => {
-			cancelled = true;
+			apiClient.interceptors.request.eject(interceptor);
 		};
 	}, [isLoaded, isSignedIn, getToken]);
 

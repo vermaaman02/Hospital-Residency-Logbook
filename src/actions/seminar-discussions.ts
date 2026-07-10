@@ -16,6 +16,7 @@ import { seminarSchema, type SeminarInput } from "@/lib/validators/academics";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 const STUDENT_PATH = "/dashboard/student/case-presentations";
 const FACULTY_PATH = "/dashboard/faculty/case-presentations";
@@ -374,6 +375,12 @@ export async function signSeminarDiscussion(id: string, remark?: string) {
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Seminar Discussion Signed",
+		`Your seminar discussion entry for "${entry.patientName || "Patient"}" has been approved and signed.`,
+		{ type: "seminar", id: entry.id }
+	);
 	return { success: true };
 }
 
@@ -412,6 +419,12 @@ export async function rejectSeminarDiscussion(id: string, remark: string) {
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Seminar Discussion Revision Required",
+		`Revision has been requested for your seminar discussion "${entry.patientName || "Patient"}".`,
+		{ type: "seminar", id: entry.id }
+	);
 	return { success: true };
 }
 

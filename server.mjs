@@ -35,9 +35,15 @@ const httpServer = createServer((req, res) => {
       try {
         const { event, data } = JSON.parse(body);
         if (event) {
-          io.emit(event, data);
+          if (data && data._targetUser) {
+            io.to(`user:${data._targetUser}`).emit(event, data);
+          } else if (data && data._targetRole) {
+            io.to(`role:${data._targetRole}`).emit(event, data);
+          } else {
+            io.emit(event, data);
+          }
           if (dev) {
-            console.log(`[Socket.IO] Emitted: ${event}`);
+            console.log(`[Socket.IO] Emitted: ${event} to ${data?._targetUser ? `user:${data._targetUser}` : (data?._targetRole ? `role:${data._targetRole}` : "all")}`);
           }
         }
         res.writeHead(200, { "Content-Type": "application/json" });

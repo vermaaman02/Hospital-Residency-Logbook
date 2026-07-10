@@ -18,6 +18,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 const STUDENT_PATH = "/dashboard/student/case-presentations";
 const FACULTY_PATH = "/dashboard/faculty/case-presentation-reviews";
@@ -413,6 +414,12 @@ export async function signCasePresentation(id: string, remark?: string) {
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Case Presentation Signed",
+		`Your case presentation entry for "${entry.patientName || "Patient"}" has been approved and signed.`,
+		{ type: "case-presentation", id: entry.id }
+	);
 	return { success: true };
 }
 
@@ -452,6 +459,12 @@ export async function rejectCasePresentation(id: string, remark: string) {
 	revalidatePath(FACULTY_PATH);
 	revalidatePath(REVIEW_PATH);
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Case Presentation Revision Required",
+		`Revision has been requested for your case presentation "${entry.patientName || "Patient"}".`,
+		{ type: "case-presentation", id: entry.id }
+	);
 	return { success: true };
 }
 
