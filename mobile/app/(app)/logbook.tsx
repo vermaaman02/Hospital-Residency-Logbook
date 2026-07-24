@@ -110,6 +110,10 @@ export default function LogbookScreen() {
 			router.push("/(app)/rotation-postings");
 		} else if (key === "case-presentations" || key === "seminars") {
 			router.push("/(app)/academic-cases-seminars");
+		} else if (key === "journal-clubs") {
+			router.push("/(app)/journal-clubs");
+		} else if (key === "logbook-reviews") {
+			router.push("/(app)/internal-assessments");
 		} else {
 			// Navigate to other modules as they are implemented
 			console.log(`Module ${key} not yet implemented`);

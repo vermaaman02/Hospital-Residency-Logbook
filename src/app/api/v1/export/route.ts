@@ -273,6 +273,248 @@ export async function GET(req: NextRequest) {
 			}
 		}
 
+		// ─── JOURNAL CLUBS EXPORTS ──────────────────────────────────────────
+		if (module === "journal-clubs") {
+			const entries = await prisma.journalClub.findMany({
+				where: { userId },
+				orderBy: { slNo: "asc" },
+			});
+
+			const facultyList = await prisma.user.findMany({
+				where: { role: "FACULTY" as any },
+				select: { id: true, firstName: true, lastName: true },
+			});
+			const facultyMap = new Map(facultyList.map((f) => [f.id, `Dr. ${f.firstName} ${f.lastName}`]));
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				const autoTableFn =
+					(
+						autoTable as unknown as {
+							default?: typeof autoTable;
+							autoTable?: typeof autoTable;
+						}
+					).default ??
+					(autoTable as unknown as { autoTable?: typeof autoTable }).autoTable ??
+					autoTable;
+
+				doc.setFontSize(14);
+				doc.text(
+					"JOURNAL CLUB DISCUSSION / CRITICAL APPRAISAL OF LITERATURE PRESENTED",
+					148,
+					15,
+					{ align: "center" }
+				);
+
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl. No.", "Date", "Journal Article", "Type of Study", "Faculty Sign", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					formatDate(e.date),
+					e.journalArticle || "—",
+					e.typeOfStudy || "—",
+					facultyMap.get(e.facultyId || "") || "—",
+					e.status
+				]);
+
+				autoTableFn(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 15 },
+						1: { cellWidth: 25 },
+						2: { cellWidth: 100 },
+						3: { cellWidth: 60 },
+						4: { cellWidth: 45 },
+						5: { cellWidth: 25 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="journal_clubs_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				// EXCEL FORMAT
+				const wb = XLSX.utils.book_new();
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Date: formatDate(e.date),
+					"Journal Article": e.journalArticle ?? "—",
+					"Type of Study": e.typeOfStudy ?? "—",
+					"Faculty Signature": facultyMap.get(e.facultyId || "") ?? "—",
+					Status: e.status,
+					Remark: e.facultyRemark ?? "—",
+				}));
+
+				const ws = XLSX.utils.json_to_sheet(
+					data.length > 0 ? data : [{ "Sl. No.": "", Date: "No entries" }]
+				);
+
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 14 }, { wch: 45 }, { wch: 30 },
+					{ wch: 28 }, { wch: 12 }, { wch: 28 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Journal Clubs");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="journal_clubs_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
+		// ─── INTERNAL ASSESSMENTS EXPORTS ──────────────────────────────────
+		if (module === "internal-assessments") {
+			const assessments = await prisma.internalAssessment.findMany({
+				where: {
+					batchId: student.batchId || undefined,
+					isPublished: true,
+				},
+				orderBy: { createdAt: "desc" },
+				include: {
+					submissions: {
+						where: { studentId: userId },
+						include: {
+							evaluation: {
+								include: {
+									evaluatedBy: { select: { firstName: true, lastName: true } },
+								},
+							},
+						},
+					},
+				},
+			});
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				const autoTableFn =
+					(
+						autoTable as unknown as {
+							default?: typeof autoTable;
+							autoTable?: typeof autoTable;
+						}
+					).default ??
+					(autoTable as unknown as { autoTable?: typeof autoTable }).autoTable ??
+					autoTable;
+
+				doc.setFontSize(14);
+				doc.text("INTERNAL ASSESSMENTS & EVALUATIONS REPORT", 148, 15, { align: "center" });
+
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Title", "Type", "Deadline", "Status", "Marks", "Grade", "Feedback"
+				];
+
+				const rows = assessments.map((a) => {
+					const sub = a.submissions[0];
+					const ev = sub?.evaluation;
+					const status = sub ? sub.status : "PENDING";
+					const marksStr = ev?.marks !== null && ev?.marks !== undefined ? `${ev.marks}/${a.maxMarks || 100}` : "—";
+					return [
+						a.title,
+						a.assessmentType,
+						formatDate(a.deadline),
+						status,
+						marksStr,
+						ev?.grade || "—",
+						ev?.feedback || ev?.rejectionReason || "—"
+					];
+				});
+
+				autoTableFn(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [139, 92, 246], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 65 },
+						1: { cellWidth: 30 },
+						2: { cellWidth: 30 },
+						3: { cellWidth: 30 },
+						4: { cellWidth: 25 },
+						5: { cellWidth: 20 },
+						6: { cellWidth: 65 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="internal_assessments_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				// EXCEL FORMAT
+				const wb = XLSX.utils.book_new();
+				const data = assessments.map((a) => {
+					const sub = a.submissions[0];
+					const ev = sub?.evaluation;
+					const status = sub ? sub.status : "PENDING";
+					const evaluatorName = ev?.evaluatedBy ? `Dr. ${ev.evaluatedBy.firstName} ${ev.evaluatedBy.lastName}` : "—";
+					return {
+						Title: a.title,
+						Type: a.assessmentType,
+						Deadline: formatDate(a.deadline),
+						Status: status,
+						Marks: ev?.marks ?? "—",
+						"Max Marks": a.maxMarks ?? 100,
+						Grade: ev?.grade ?? "—",
+						Feedback: ev?.feedback ?? ev?.rejectionReason ?? "—",
+						"Evaluated By": evaluatorName,
+					};
+				});
+
+				const ws = XLSX.utils.json_to_sheet(
+					data.length > 0 ? data : [{ Title: "", Type: "No assessments found" }]
+				);
+
+				ws["!cols"] = [
+					{ wch: 35 }, { wch: 15 }, { wch: 14 }, { wch: 14 },
+					{ wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 40 }, { wch: 25 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Internal Assessments");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="internal_assessments_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
 		return new Response("Unknown export module", { status: 400 });
 	} catch (e) {
 		console.error("[Export Route Handler Error]", e);

@@ -17,7 +17,7 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, View, ViewStyle } from "react-native";
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { Colors, Radius, Spacing, HardShadow as ShadowTokens } from "@/lib/theme";
 
 type Variant =
@@ -32,7 +32,7 @@ type Props = {
 	children: React.ReactNode;
 	variant?: Variant;
 	onPress?: () => void;
-	style?: ViewStyle;
+	style?: StyleProp<ViewStyle>;
 	/** Override interior padding */
 	padding?: number;
 };

@@ -9,12 +9,13 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ======================== PATHS ========================
 
@@ -53,7 +54,7 @@ async function resolveUser(clerkId: string) {
  * Create a new journal club entry (inline row).
  */
 export async function createJournalClub(data: JournalClubData) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const lastEntry = await prisma.journalClub.findFirst({
@@ -85,7 +86,7 @@ export async function createJournalClub(data: JournalClubData) {
  * Update an existing journal club entry (inline save).
  */
 export async function updateJournalClub(id: string, data: JournalClubData) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.journalClub.findUnique({ where: { id } });
@@ -118,7 +119,7 @@ export async function updateJournalClub(id: string, data: JournalClubData) {
  * If auto-review is enabled, automatically signs the entry.
  */
 export async function submitJournalClub(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.journalClub.findUnique({ where: { id } });
@@ -179,7 +180,7 @@ export async function submitJournalClub(id: string) {
  * Delete a draft journal club entry.
  */
 export async function deleteJournalClub(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.journalClub.findUnique({ where: { id } });
@@ -201,7 +202,7 @@ export async function deleteJournalClub(id: string) {
  * Get all journal club entries for the current student.
  */
 export async function getMyJournalClubs() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	return prisma.journalClub.findMany({
@@ -214,7 +215,7 @@ export async function getMyJournalClubs() {
  * Get available faculty for the student's "Faculty Sign" dropdown.
  */
 export async function getAvailableJournalClubFaculty() {
-	await requireAuth();
+	await requireAuthHybrid();
 
 	return prisma.user.findMany({
 		where: {
@@ -232,7 +233,7 @@ export async function getAvailableJournalClubFaculty() {
  * Faculty/HOD: Get all journal club submissions for review.
  */
 export async function getJournalClubsForReview() {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) return [];
 
@@ -303,7 +304,7 @@ export async function getJournalClubsForReview() {
  * Faculty/HOD: Sign (approve) a journal club entry.
  */
 export async function signJournalClub(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.journalClub.findUnique({ where: { id } });
@@ -341,6 +342,12 @@ export async function signJournalClub(id: string, remark?: string) {
 
 	revalidateAll();
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Journal Club Signed",
+		`Your Journal Club entry "${entry.journalArticle || "Entry #" + entry.slNo}" has been approved and signed.`,
+		{ type: "journal-clubs", id: entry.id }
+	);
 	return { success: true };
 }
 
@@ -348,8 +355,8 @@ export async function signJournalClub(id: string, remark?: string) {
  * Faculty/HOD: Reject a journal club entry with remark.
  */
 export async function rejectJournalClub(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const clerkId = await requireAuthHybrid();
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
@@ -377,6 +384,12 @@ export async function rejectJournalClub(id: string, remark: string) {
 
 	revalidateAll();
 	emitRealtimeEvent("entry:updated");
+	await sendRealtimeNotification(
+		entry.userId,
+		"Journal Club Revision Required",
+		`Revision requested for your Journal Club entry "${entry.journalArticle || "Entry #" + entry.slNo}": ${remark}`,
+		{ type: "journal-clubs", id: entry.id }
+	);
 	return { success: true };
 }
 
@@ -384,7 +397,7 @@ export async function rejectJournalClub(id: string, remark: string) {
  * Faculty/HOD: Bulk sign multiple journal club entries.
  */
 export async function bulkSignJournalClubs(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.journalClub.findMany({
@@ -420,6 +433,14 @@ export async function bulkSignJournalClubs(ids: string[]) {
 
 	revalidateAll();
 	emitRealtimeEvent("entry:updated");
+	for (const entry of entries) {
+		await sendRealtimeNotification(
+			entry.userId,
+			"Journal Club Signed",
+			`Your Journal Club entry "${entry.journalArticle || "Entry #" + entry.slNo}" has been approved and signed.`,
+			{ type: "journal-clubs", id: entry.id }
+		);
+	}
 	return { success: true };
 }
 
@@ -427,7 +448,7 @@ export async function bulkSignJournalClubs(ids: string[]) {
  * Faculty/HOD: Get all journal club entries for a specific student (read-only view).
  */
 export async function getStudentJournalClubs(studentId: string) {
-	await requireRole(["faculty", "hod"]);
+	await requireRoleHybrid(["faculty", "hod"]);
 	return prisma.journalClub.findMany({
 		where: { userId: studentId },
 		orderBy: { slNo: "asc" },

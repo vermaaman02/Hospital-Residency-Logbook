@@ -213,7 +213,7 @@ export default function HomeScreen() {
 							icon={<Inbox size={22} color={Colors.inverse} strokeWidth={2.5} />}
 						/>
 						<QuickTile
-							href="/(app)/profile"
+							href="/(app)/internal-assessments"
 							tone="sky"
 							label="Evaluations"
 							subtitle="Assessments & scores"

@@ -18,7 +18,7 @@ import { Card } from "./Card";
 import { HStack } from "./Stack";
 
 interface ExportButtonProps {
-	module: "rotation-postings" | "case-presentations" | "seminars";
+	module: "rotation-postings" | "case-presentations" | "seminars" | "journal-clubs" | "internal-assessments";
 	label?: string;
 	size?: "sm" | "md" | "lg";
 }

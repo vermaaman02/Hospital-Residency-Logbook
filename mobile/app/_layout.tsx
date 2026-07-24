@@ -15,6 +15,7 @@
  */
 
 import { useEffect } from "react";
+import { LogBox } from "react-native";
 import { Stack } from "expo-router";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
@@ -24,6 +25,11 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setAuthToken, apiClient } from "@/lib/api/client";
 import { Colors, useThemeFonts } from "@/lib/theme";
+
+LogBox.ignoreLogs([
+	"Clerk: Clerk has been loaded with development keys",
+	"`new NativeEventEmitter()` was called with a non-null argument",
+]);
 
 /* ────────────────────────────────────────────────────── */
 /*  TanStack Query client                                 */

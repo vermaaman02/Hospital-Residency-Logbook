@@ -29,7 +29,7 @@ import { useMe } from "@/lib/hooks/useMe";
 import { useInbox } from "@/lib/hooks/useInbox";
 import { notificationStore } from "@/lib/store/notifications";
 import { setAuthToken } from "@/lib/api/client";
-import { usePushNotifications, unregisterPushToken } from "@/lib/hooks/usePushNotifications";
+import { usePushNotifications, unregisterPushToken, showLocalNotification } from "@/lib/hooks/usePushNotifications";
 import { io } from "socket.io-client";
 import {
 	Button,
@@ -91,9 +91,12 @@ function AuthenticatedShell() {
 			socket.emit("join:user", me.id);
 		});
 
-		socket.on("notification:received", () => {
-			console.log("[Socket.IO] notification:received, invalidating queries...");
+		socket.on("notification:received", (payload?: { title?: string; body?: string; data?: any }) => {
+			console.log("[Socket.IO] notification:received, invalidating queries...", payload);
 			qc.invalidateQueries();
+			if (payload?.title && payload?.body) {
+				showLocalNotification(payload.title, payload.body, payload.data);
+			}
 		});
 
 		socket.on("entry:updated", () => {
@@ -278,6 +281,18 @@ function AuthenticatedShell() {
 			/>
 			<Tabs.Screen
 				name="academic-cases-seminars"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="journal-clubs"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="internal-assessments"
 				options={{
 					href: null,
 				}}

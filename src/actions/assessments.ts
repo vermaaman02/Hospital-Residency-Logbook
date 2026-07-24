@@ -10,11 +10,12 @@
 
 "use server";
 
-import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ======================== TYPES ========================
 
@@ -64,8 +65,9 @@ function revalidateAll() {
 // ======================== CREATE / MANAGE ASSESSMENTS ========================
 
 export async function createAssessment(input: CreateAssessmentInput) {
-	const { role } = await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	// Faculty can only create for assigned batches
@@ -113,8 +115,9 @@ export async function updateAssessment(
 	assessmentId: string,
 	input: Partial<CreateAssessmentInput>,
 ) {
-	await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const existing = await prisma.internalAssessment.findUnique({
@@ -122,8 +125,6 @@ export async function updateAssessment(
 	});
 	if (!existing) throw new Error("Assessment not found");
 	if (existing.createdById !== user.id) {
-		// HOD can edit anyone's, faculty can only edit own
-		const { role } = await requireRole(["hod", "faculty"]);
 		if (role !== "hod")
 			throw new Error("You can only edit your own assessments");
 	}
@@ -174,8 +175,9 @@ export async function updateAssessment(
 }
 
 export async function deleteAssessment(assessmentId: string) {
-	await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const existing = await prisma.internalAssessment.findUnique({
@@ -183,7 +185,6 @@ export async function deleteAssessment(assessmentId: string) {
 	});
 	if (!existing) throw new Error("Assessment not found");
 
-	const { role } = await requireRole(["hod", "faculty"]);
 	if (role !== "hod" && existing.createdById !== user.id) {
 		throw new Error("You can only delete your own assessments");
 	}
@@ -195,8 +196,9 @@ export async function deleteAssessment(assessmentId: string) {
 }
 
 export async function togglePublishAssessment(assessmentId: string) {
-	await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const existing = await prisma.internalAssessment.findUnique({
@@ -218,7 +220,7 @@ export async function togglePublishAssessment(assessmentId: string) {
 
 /** HOD: Get all assessments with submission counts */
 export async function getAllAssessments() {
-	await requireRole(["hod"]);
+	await requireRoleHybrid(["hod"]);
 
 	return prisma.internalAssessment.findMany({
 		orderBy: { createdAt: "desc" },
@@ -259,8 +261,9 @@ export async function getAllAssessments() {
 
 /** Faculty: Get assessments for assigned batches only */
 export async function getFacultyAssessments() {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
+	await requireRoleHybrid(["faculty", "hod"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const assignments = await prisma.facultyBatchAssignment.findMany({
@@ -312,8 +315,8 @@ export async function getFacultyAssessments() {
 
 /** Student: Get published assessments for their batch */
 export async function getStudentAssessments() {
-	await requireAuth();
-	const user = await ensureUserInDb();
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user || !user.batchId) return [];
 
 	return prisma.internalAssessment.findMany({
@@ -359,8 +362,9 @@ export async function getStudentAssessments() {
 
 /** Get detailed view of a single assessment with all submissions (for HOD/Faculty) */
 export async function getAssessmentDetail(assessmentId: string) {
-	const { role } = await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const assessment = await prisma.internalAssessment.findUnique({
@@ -426,8 +430,8 @@ export async function submitAssessment(
 	content?: string,
 	attachments?: string[],
 ) {
-	await requireAuth();
-	const user = await ensureUserInDb();
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	// Verify published and batch match
@@ -494,8 +498,8 @@ export async function saveDraftSubmission(
 	content?: string,
 	attachments?: string[],
 ) {
-	await requireAuth();
-	const user = await ensureUserInDb();
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const assessment = await prisma.internalAssessment.findUnique({
@@ -539,8 +543,9 @@ export async function saveDraftSubmission(
 // ======================== EVALUATION ACTIONS (FACULTY / HOD) ========================
 
 export async function evaluateSubmission(input: EvaluateSubmissionInput) {
-	const { role } = await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const submission = await prisma.assessmentSubmission.findUnique({
@@ -621,12 +626,19 @@ export async function evaluateSubmission(input: EvaluateSubmissionInput) {
 
 	revalidateAll();
 	emitRealtimeEvent("assessment:evaluated", { submissionId: input.submissionId });
+	await sendRealtimeNotification(
+		submission.studentId,
+		"Assessment Evaluated",
+		`Your submission for "${submission.assessment.title}" has been evaluated. Marks: ${input.marks ?? "—"}/${submission.assessment.maxMarks ?? "100"}, Grade: ${input.grade ?? "N/A"}.`,
+		{ type: "internal-assessments", id: submission.assessmentId }
+	);
 	return evaluation;
 }
 
 export async function rejectSubmission(input: RejectSubmissionInput) {
-	const { role } = await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
 	const submission = await prisma.assessmentSubmission.findUnique({
@@ -682,17 +694,22 @@ export async function rejectSubmission(input: RejectSubmissionInput) {
 
 	revalidateAll();
 	emitRealtimeEvent("assessment:evaluated", { submissionId: input.submissionId, rejected: true });
+	await sendRealtimeNotification(
+		submission.studentId,
+		"Assessment Revision Required",
+		`Revision requested for "${submission.assessment.title}": ${input.rejectionReason}`,
+		{ type: "internal-assessments", id: submission.assessmentId }
+	);
 	return { success: true };
 }
 
 // ======================== UTILITY QUERIES ========================
 
 export async function getAvailableBatches() {
-	await requireRole(["hod", "faculty"]);
-	const user = await ensureUserInDb();
+	const { role } = await requireRoleHybrid(["hod", "faculty"]);
+	const clerkId = await requireAuthHybrid();
+	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
-	const { role } = await requireRole(["hod", "faculty"]);
 
 	if (role === "hod") {
 		return prisma.batch.findMany({
@@ -713,7 +730,7 @@ export async function getAvailableBatches() {
 }
 
 export async function getAssessmentStats() {
-	await requireRole(["hod"]);
+	await requireRoleHybrid(["hod"]);
 
 	const [total, published, batches] = await Promise.all([
 		prisma.internalAssessment.count(),
