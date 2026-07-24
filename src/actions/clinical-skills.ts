@@ -11,7 +11,7 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
 	CLINICAL_SKILLS_ADULT,
@@ -21,6 +21,7 @@ import { revalidatePath } from "next/cache";
 import { isAutoReviewEnabled } from "./auto-review";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ======================== PATHS ========================
 
@@ -67,7 +68,7 @@ async function resolveUser(clerkId: string) {
  * Auto-initialize all 10 skills for a student if none exist yet.
  */
 export async function initializeClinicalSkills(type: "adult" | "pediatric") {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
@@ -102,7 +103,7 @@ export async function initializeClinicalSkills(type: "adult" | "pediatric") {
  * Get all clinical skills entries for the current student.
  */
 export async function getMyClinicalSkills(type: "adult" | "pediatric") {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
@@ -116,7 +117,7 @@ export async function getMyClinicalSkills(type: "adult" | "pediatric") {
  * Get available faculty for the observing faculty dropdown.
  */
 export async function getAvailableClinicalSkillFaculty() {
-	await requireAuth();
+	await requireAuthHybrid();
 	return prisma.user.findMany({
 		where: {
 			role: { in: ["FACULTY" as never, "HOD" as never] },
@@ -135,7 +136,7 @@ export async function updateClinicalSkill(
 	id: string,
 	data: ClinicalSkillData,
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
@@ -173,7 +174,7 @@ export async function submitClinicalSkill(
 	type: "adult" | "pediatric",
 	id: string,
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const model = getModel(type);
 
@@ -243,7 +244,7 @@ export async function submitClinicalSkill(
  * Faculty/HOD: Get all clinical skill submissions for review.
  */
 export async function getClinicalSkillsForReview(type: "adult" | "pediatric") {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) return [];
 
@@ -324,7 +325,7 @@ export async function signClinicalSkill(
 	id: string,
 	remark?: string,
 ) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 	const model = getModel(type);
 
@@ -367,6 +368,14 @@ export async function signClinicalSkill(
 		});
 	});
 
+	// Push notification to student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Clinical Skill Signed Off",
+		`Your clinical skill "${entry.skillName}" (${type === "adult" ? "Adult" : "Pediatric"}) has been signed off.`,
+		{ module: "clinical-skills", type, id }
+	);
+
 	revalidateAll();
 	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true };
@@ -380,9 +389,8 @@ export async function rejectClinicalSkill(
 	id: string,
 	remark: string,
 ) {
-	const { userId } = await requireRole(["faculty", "hod"]);
-	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const model = getModel(type);
 	const entityType =
@@ -413,6 +421,14 @@ export async function rejectClinicalSkill(
 		});
 	});
 
+	// Push notification to student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Clinical Skill Revision Requested",
+		`Revision requested for clinical skill "${entry.skillName}" (${type === "adult" ? "Adult" : "Pediatric"}): ${remark}`,
+		{ module: "clinical-skills", type, id }
+	);
+
 	revalidateAll();
 	emitRealtimeEvent("entry:updated", { module: "clinical-skills", type });
 	return { success: true };
@@ -425,7 +441,7 @@ export async function bulkSignClinicalSkills(
 	type: "adult" | "pediatric",
 	ids: string[],
 ) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 	const model = getModel(type);
 	const entityType =
@@ -475,7 +491,7 @@ export async function getStudentClinicalSkills(
 	studentId: string,
 	type: "adult" | "pediatric",
 ) {
-	await requireRole(["faculty", "hod"]);
+	await requireRoleHybrid(["faculty", "hod"]);
 	const model = getModel(type);
 
 	return (model as typeof prisma.clinicalSkillAdult).findMany({

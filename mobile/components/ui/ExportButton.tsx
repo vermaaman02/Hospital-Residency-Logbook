@@ -18,12 +18,19 @@ import { Card } from "./Card";
 import { HStack } from "./Stack";
 
 interface ExportButtonProps {
-	module: "rotation-postings" | "case-presentations" | "seminars" | "journal-clubs" | "internal-assessments";
+	module:
+		| "rotation-postings"
+		| "case-presentations"
+		| "seminars"
+		| "journal-clubs"
+		| "internal-assessments"
+		| "clinical-skills";
 	label?: string;
 	size?: "sm" | "md" | "lg";
+	extraParams?: Record<string, string>;
 }
 
-export function ExportButton({ module, label = "Export Form", size = "sm" }: ExportButtonProps) {
+export function ExportButton({ module, label = "Export Form", size = "sm", extraParams }: ExportButtonProps) {
 	const [modalVisible, setModalVisible] = useState(false);
 	const [loading, setLoading] = useState<"pdf" | "excel" | null>(null);
 
@@ -34,6 +41,7 @@ export function ExportButton({ module, label = "Export Form", size = "sm" }: Exp
 			const { data } = await apiClient.post("/api/v1/export/token", {
 				module,
 				format,
+				...extraParams,
 			});
 
 			const token = data.data?.token;

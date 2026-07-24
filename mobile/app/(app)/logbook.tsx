@@ -112,6 +112,8 @@ export default function LogbookScreen() {
 			router.push("/(app)/academic-cases-seminars");
 		} else if (key === "journal-clubs") {
 			router.push("/(app)/journal-clubs");
+		} else if (key === "clinical-skills-adult" || key === "clinical-skills-pediatric") {
+			router.push("/(app)/clinical-skills");
 		} else if (key === "logbook-reviews") {
 			router.push("/(app)/internal-assessments");
 		} else {

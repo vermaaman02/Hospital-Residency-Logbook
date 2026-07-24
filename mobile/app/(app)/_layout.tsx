@@ -297,6 +297,12 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="clinical-skills"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }

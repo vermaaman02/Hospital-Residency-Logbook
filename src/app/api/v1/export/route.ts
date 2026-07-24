@@ -515,6 +515,103 @@ export async function GET(req: NextRequest) {
 			}
 		}
 
+		// ─── CLINICAL SKILLS EXPORTS ─────────────────────────────────────────
+		if (module === "clinical-skills") {
+			const skillType = url.searchParams.get("type") === "pediatric" ? "pediatric" : "adult";
+			const skills = skillType === "adult"
+				? await prisma.clinicalSkillAdult.findMany({
+						where: { userId },
+						orderBy: { slNo: "asc" },
+				  })
+				: await prisma.clinicalSkillPediatric.findMany({
+						where: { userId },
+						orderBy: { slNo: "asc" },
+				  });
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				const autoTableFn = (autoTable as any).default || autoTable;
+
+				doc.setFontSize(14);
+				doc.text(
+					`LOG OF CLINICAL SKILL TRAINING — ${skillType.toUpperCase()} PATIENT`,
+					148,
+					15,
+					{ align: "center" }
+				);
+
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", `Clinical Skill (${skillType === "adult" ? "Adult" : "Pediatric"})`, "Representative Diagnosis", "Confidence Level", "Status"
+				];
+
+				const rows = skills.map((s) => [
+					s.slNo.toString(),
+					s.skillName,
+					s.representativeDiagnosis || "Not filled",
+					s.confidenceLevel || "—",
+					s.status
+				]);
+
+				autoTableFn(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 12 },
+						1: { cellWidth: 90 },
+						2: { cellWidth: 100 },
+						3: { cellWidth: 45 },
+						4: { cellWidth: 25 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="clinical_skills_${skillType}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = skills.map((s) => ({
+					"Sl. No.": s.slNo,
+					"Clinical Skill": s.skillName,
+					"Representative Patient Clinical Diagnosis": s.representativeDiagnosis || "Not filled",
+					"Confidence Level": s.confidenceLevel || "—",
+					"Total Times Performed": s.totalTimesPerformed ?? 0,
+					Status: s.status,
+					"Faculty Remark": s.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 45 }, { wch: 40 }, { wch: 22 },
+					{ wch: 22 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, `Clinical Skills (${skillType})`);
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="clinical_skills_${skillType}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
 		return new Response("Unknown export module", { status: 400 });
 	} catch (e) {
 		console.error("[Export Route Handler Error]", e);
