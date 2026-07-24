@@ -10,7 +10,7 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
@@ -21,6 +21,7 @@ import {
 	recordReview,
 	recordSubmission,
 } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function revalidateAll() {
  * with default DRAFT status if not already present.
  */
 export async function initializeCaseManagement(category: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.caseManagementLog.count({
@@ -77,34 +78,43 @@ export async function initializeCaseManagement(category: string) {
  * the initial sub-category set). Auto-increments slNo.
  */
 export async function addCaseManagementRow(category: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	const maxSlNo = await prisma.caseManagementLog.aggregate({
+	const subCategories = getSubCategories(category);
+	const existingEntries = await prisma.caseManagementLog.findMany({
 		where: { userId: user.id, category: category as never },
-		_max: { slNo: true },
+		select: { caseSubCategory: true, slNo: true },
 	});
 
-	const entry = await prisma.caseManagementLog.create({
-		data: {
-			userId: user.id,
-			category: category as never,
-			slNo: (maxSlNo._max.slNo ?? 0) + 1,
-			caseSubCategory: "",
-			status: "DRAFT" as never,
-		},
-	});
+	const existingSubCats = new Set(existingEntries.map((e) => e.caseSubCategory));
+	const missingSubCat = subCategories.find((sc) => !existingSubCats.has(sc));
+	const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
 
-	revalidateAll();
-	emitRealtimeEvent("entry:updated", { module: "case-management", category });
-	return entry;
+	if (missingSubCat) {
+		const entry = await prisma.caseManagementLog.create({
+			data: {
+				userId: user.id,
+				category: category as never,
+				slNo: maxSlNo + 1,
+				caseSubCategory: missingSubCat,
+				status: "DRAFT" as never,
+			},
+		});
+
+		revalidateAll();
+		emitRealtimeEvent("entry:updated", { module: "case-management", category });
+		return entry;
+	}
+
+	throw new Error(`All ${subCategories.length} case types for this category are already present in your logbook.`);
 }
 
 /**
  * Delete a DRAFT case management row. Only the owner can delete, and only DRAFT entries.
  */
 export async function deleteCaseManagementEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
@@ -122,17 +132,40 @@ export async function deleteCaseManagementEntry(id: string) {
 // ─── Read (Student) ─────────────────────────────────────────
 
 export async function getMyCaseManagementEntries(category: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	return prisma.caseManagementLog.findMany({
+	let entries = await prisma.caseManagementLog.findMany({
 		where: { userId: user.id, category: category as never },
 		orderBy: { slNo: "asc" },
 	});
+
+	// Auto-seed predefined sub-categories if category has not been initialized yet
+	if (entries.length === 0) {
+		const subCategories = getSubCategories(category);
+		if (subCategories.length > 0) {
+			await prisma.caseManagementLog.createMany({
+				data: subCategories.map((sc, idx) => ({
+					userId: user.id,
+					category: category as never,
+					slNo: idx + 1,
+					caseSubCategory: sc,
+					status: "DRAFT" as never,
+				})),
+			});
+
+			entries = await prisma.caseManagementLog.findMany({
+				where: { userId: user.id, category: category as never },
+				orderBy: { slNo: "asc" },
+			});
+		}
+	}
+
+	return entries;
 }
 
 export async function getMyCaseManagementSummary() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	// Count only entries that have been actually filled (have at least completeDiagnosis or competencyLevel set)
@@ -192,7 +225,7 @@ export async function getMyCaseManagementSummary() {
 // ─── Faculty List ───────────────────────────────────────────
 
 export async function getAvailableCaseManagementFaculty() {
-	await requireAuth();
+	await requireAuthHybrid();
 
 	return prisma.user.findMany({
 		where: {
@@ -221,7 +254,7 @@ export async function updateCaseManagementEntry(
 		facultyId?: string | null;
 	},
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.caseManagementLog.findUnique({
@@ -262,7 +295,7 @@ export async function updateCaseManagementEntry(
 // ─── Submit ─────────────────────────────────────────────────
 
 export async function submitCaseManagementEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.caseManagementLog.findUnique({
@@ -330,7 +363,7 @@ export async function submitCaseManagementEntry(id: string) {
 // ─── Faculty/HOD: Review ────────────────────────────────────
 
 export async function getCaseManagementForReview(category?: string) {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) return [];
 
@@ -427,7 +460,7 @@ export async function getCaseManagementForReview(category?: string) {
 }
 
 export async function signCaseManagementEntry(id: string, remark?: string) {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
@@ -463,16 +496,23 @@ export async function signCaseManagementEntry(id: string, remark?: string) {
 		});
 	});
 
+	// Push notification to student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Case Management Signed Off",
+		`Your case management entry "${entry.caseSubCategory || entry.category}" has been signed off.`,
+		{ module: "case-management", id, category: entry.category }
+	);
+
 	revalidateAll();
 	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
 export async function rejectCaseManagementEntry(id: string, remark: string) {
-	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
+	const { userId: clerkId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
-
 
 	const entry = await prisma.caseManagementLog.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -496,13 +536,21 @@ export async function rejectCaseManagementEntry(id: string, remark: string) {
 		});
 	});
 
+	// Push notification to student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Case Management Revision Requested",
+		`Revision requested for case management entry "${entry.caseSubCategory || entry.category}": ${remark}`,
+		{ module: "case-management", id, category: entry.category }
+	);
+
 	revalidateAll();
 	emitRealtimeEvent("entry:updated", { module: "case-management" });
 	return { success: true };
 }
 
 export async function bulkSignCaseManagementEntries(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.caseManagementLog.findMany({
@@ -538,7 +586,7 @@ export async function getStudentCaseManagement(
 	studentId: string,
 	category?: string,
 ) {
-	await requireRole(["faculty", "hod"]);
+	await requireRoleHybrid(["faculty", "hod"]);
 
 	const where: Record<string, unknown> = { userId: studentId };
 	if (category) where.category = category as never;

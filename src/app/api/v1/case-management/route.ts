@@ -1,15 +1,9 @@
 /**
  * GET  /api/v1/case-management?category=<cat>   — list entries for a category
- * POST /api/v1/case-management                   — create/update/submit an entry
- *
- * body.action:
- *   "update"  — inline-edit a row   (fields: id, ...data)
- *   "submit"  — submit entry for review (fields: id)
- *   "delete"  — delete a DRAFT row  (fields: id)
- *   "init"    — initialise category rows (fields: category)
- *   "add"     — add a new row (fields: category)
- *
- * Accepts both Clerk cookie session and Authorization: Bearer <jwt>.
+ * GET  /api/v1/case-management?view=summary       — 24 category summary statistics
+ * GET  /api/v1/case-management?mode=review        — faculty review list
+ * GET  /api/v1/case-management?mode=faculty-list  — list supervising faculty
+ * POST /api/v1/case-management                   — create/update/submit/sign/reject entries
  */
 
 import { type NextRequest } from "next/server";
@@ -23,6 +17,11 @@ import {
 	deleteCaseManagementEntry,
 	initializeCaseManagement,
 	addCaseManagementRow,
+	getAvailableCaseManagementFaculty,
+	getCaseManagementForReview,
+	signCaseManagementEntry,
+	rejectCaseManagementEntry,
+	bulkSignCaseManagementEntries,
 } from "@/actions/case-management";
 
 export async function GET(req: NextRequest) {
@@ -32,15 +31,28 @@ export async function GET(req: NextRequest) {
 		const url = new URL(req.url);
 		const category = url.searchParams.get("category");
 		const view = url.searchParams.get("view");
+		const mode = url.searchParams.get("mode");
+
+		if (mode === "review") {
+			const reviewEntries = await getCaseManagementForReview(category || undefined);
+			return ok({ entries: reviewEntries });
+		}
+
+		if (mode === "faculty-list") {
+			const facultyList = await getAvailableCaseManagementFaculty();
+			return ok({ faculty: facultyList });
+		}
 
 		if (view === "summary") {
 			const summary = await getMyCaseManagementSummary();
-			return ok(summary);
+			const facultyList = await getAvailableCaseManagementFaculty();
+			return ok({ ...summary, faculty: facultyList });
 		}
 
 		if (!category) return err("category query param required", 400);
 		const entries = await getMyCaseManagementEntries(category);
-		return ok(entries);
+		const facultyList = await getAvailableCaseManagementFaculty();
+		return ok({ entries, faculty: facultyList });
 	} catch (e) {
 		return handleError(e);
 	}
@@ -68,9 +80,10 @@ export async function POST(req: NextRequest) {
 		}
 
 		if (action === "update") {
-			const { id, ...data } = body;
+			const { id, data, ...rest } = body;
 			if (!id) return err("id is required", 400);
-			const result = await updateCaseManagementEntry(id, data);
+			const updateData = data || rest;
+			const result = await updateCaseManagementEntry(id, updateData);
 			return ok(result);
 		}
 
@@ -85,6 +98,27 @@ export async function POST(req: NextRequest) {
 			const { id } = body;
 			if (!id) return err("id is required", 400);
 			const result = await deleteCaseManagementEntry(id);
+			return ok(result);
+		}
+
+		if (action === "sign") {
+			const { id, remark } = body;
+			if (!id) return err("id is required", 400);
+			const result = await signCaseManagementEntry(id, remark);
+			return ok(result);
+		}
+
+		if (action === "reject") {
+			const { id, remark } = body;
+			if (!id || !remark) return err("id and remark are required", 400);
+			const result = await rejectCaseManagementEntry(id, remark);
+			return ok(result);
+		}
+
+		if (action === "bulk-sign") {
+			const { ids } = body;
+			if (!ids || !Array.isArray(ids)) return err("ids array is required", 400);
+			const result = await bulkSignCaseManagementEntries(ids);
 			return ok(result);
 		}
 

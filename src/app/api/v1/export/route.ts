@@ -612,6 +612,109 @@ export async function GET(req: NextRequest) {
 			}
 		}
 
+		// ─── CASE MANAGEMENT EXPORTS ──────────────────────────────────────────
+		if (module === "case-management") {
+			const category = url.searchParams.get("category") || "RESUSCITATION";
+			const entries = await prisma.caseManagementLog.findMany({
+				where: { userId, category: category as never },
+				orderBy: { slNo: "asc" },
+			});
+
+			const categoryLabel = category.replace(/_/g, " ");
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				const autoTableFn = (autoTable as any).default || autoTable;
+
+				doc.setFontSize(14);
+				doc.text(
+					`LOG OF CASE MANAGEMENT — ${categoryLabel.toUpperCase()}`,
+					148,
+					15,
+					{ align: "center" }
+				);
+
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Case Sub-Category", "Date", "Patient Info", "Complete Diagnosis", "Competency", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.caseSubCategory || "—",
+					e.date ? formatDate(e.date) : "—",
+					[e.patientName, e.patientAge ? `${e.patientAge}y` : null, e.patientSex, e.uhid ? `UHID:${e.uhid}` : null].filter(Boolean).join(" / ") || "—",
+					e.completeDiagnosis || "Not filled",
+					e.competencyLevel || "—",
+					e.status
+				]);
+
+				autoTableFn(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 55 },
+						2: { cellWidth: 25 },
+						3: { cellWidth: 55 },
+						4: { cellWidth: 80 },
+						5: { cellWidth: 22 },
+						6: { cellWidth: 25 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="case_management_${category.toLowerCase()}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					"Case Sub-Category": e.caseSubCategory || "—",
+					Date: e.date ? formatDate(e.date) : "—",
+					"Patient Name": e.patientName || "—",
+					"Patient Age": e.patientAge ?? "—",
+					"Patient Sex": e.patientSex || "—",
+					UHID: e.uhid || "—",
+					"Complete Diagnosis": e.completeDiagnosis || "Not filled",
+					"Competency Level": e.competencyLevel || "—",
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 40 }, { wch: 14 }, { wch: 25 },
+					{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 45 },
+					{ wch: 16 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Case Management");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="case_management_${category.toLowerCase()}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
 		return new Response("Unknown export module", { status: 400 });
 	} catch (e) {
 		console.error("[Export Route Handler Error]", e);

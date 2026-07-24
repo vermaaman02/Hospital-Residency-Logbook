@@ -303,6 +303,12 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="case-management"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }
