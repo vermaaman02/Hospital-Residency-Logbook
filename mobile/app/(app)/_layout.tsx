@@ -327,6 +327,18 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="transport"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="consent-bad-news"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }

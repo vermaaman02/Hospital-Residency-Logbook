@@ -28,7 +28,10 @@ interface ExportButtonProps {
 		| "case-management"
 		| "procedures"
 		| "diagnostics"
-		| "imaging";
+		| "imaging"
+		| "transport"
+		| "consent"
+		| "bad-news";
 	label?: string;
 	size?: "sm" | "md" | "lg";
 	extraParams?: Record<string, string>;

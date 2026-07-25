@@ -122,6 +122,10 @@ export default function LogbookScreen() {
 			router.push("/(app)/diagnostics");
 		} else if (key === "imaging") {
 			router.push("/(app)/imaging");
+		} else if (key === "transport") {
+			router.push("/(app)/transport");
+		} else if (key === "consent-bad-news") {
+			router.push("/(app)/consent-bad-news");
 		} else if (key === "logbook-reviews") {
 			router.push("/(app)/internal-assessments");
 		} else {

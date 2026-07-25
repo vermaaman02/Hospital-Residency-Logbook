@@ -1027,6 +1027,200 @@ export async function GET(req: NextRequest) {
 			}
 		}
 
+		// ─── TRANSPORT LOGS EXPORTS ─────────────────────────────────────────
+		if (module === "transport") {
+			const entries = await prisma.transportLog.findMany({
+				where: { userId },
+				orderBy: { slNo: "asc" },
+			});
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				doc.setFontSize(16);
+				doc.text("TRANSPORT OF CRITICALLY ILL PATIENT LOGS", 10, 15);
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Date", "Patient Info", "Diagnosis", "Procedure / Description", "Location", "Skill Level", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.date ? formatDate(e.date) : "—",
+					[e.patientName, e.patientAge ? `${e.patientAge}y` : null, e.patientSex, e.uhid ? `UHID:${e.uhid}` : null].filter(Boolean).join(" / ") || "—",
+					e.completeDiagnosis || "—",
+					e.procedureDescription || "—",
+					e.performedAtLocation || "—",
+					e.skillLevel || "—",
+					e.status
+				]);
+
+				autoTable(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 22 },
+						2: { cellWidth: 50 },
+						3: { cellWidth: 60 },
+						4: { cellWidth: 65 },
+						5: { cellWidth: 25 },
+						6: { cellWidth: 22 },
+						7: { cellWidth: 22 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="transport_logs_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Date: e.date ? formatDate(e.date) : "—",
+					"Patient Name": e.patientName || "—",
+					"Patient Age": e.patientAge ?? "—",
+					"Patient Sex": e.patientSex || "—",
+					UHID: e.uhid || "—",
+					"Complete Diagnosis": e.completeDiagnosis || "Not filled",
+					"Procedure / Transport Description": e.procedureDescription || "—",
+					"Performed Location": e.performedAtLocation || "—",
+					"Skill Level": e.skillLevel || "—",
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 14 }, { wch: 25 },
+					{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 40 },
+					{ wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Transport Logs");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="transport_logs_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
+		// ─── INFORMED CONSENT & BAD NEWS EXPORTS ───────────────────────────
+		if (module === "consent" || module === "bad-news") {
+			const isConsent = module === "consent";
+			const title = isConsent ? "TAKING INFORMED CONSENT LOGS" : "BREAKING BAD NEWS LOGS";
+			const sheetName = isConsent ? "Informed Consent" : "Breaking Bad News";
+			const fileNamePrefix = isConsent ? "consent_logs" : "bad_news_logs";
+
+			const entries = isConsent
+				? await prisma.consentLog.findMany({ where: { userId }, orderBy: { slNo: "asc" } })
+				: await prisma.badNewsLog.findMany({ where: { userId }, orderBy: { slNo: "asc" } });
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				doc.setFontSize(16);
+				doc.text(title, 10, 15);
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Date", "Patient Info", "Diagnosis", isConsent ? "Procedure Consent Taken For" : "Nature of Bad News / Scenario", "Location", "Skill Level", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.date ? formatDate(e.date) : "—",
+					[e.patientName, e.patientAge ? `${e.patientAge}y` : null, e.patientSex, e.uhid ? `UHID:${e.uhid}` : null].filter(Boolean).join(" / ") || "—",
+					e.completeDiagnosis || "—",
+					e.procedureDescription || "—",
+					e.performedAtLocation || "—",
+					e.skillLevel || "—",
+					e.status
+				]);
+
+				autoTable(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 22 },
+						2: { cellWidth: 50 },
+						3: { cellWidth: 60 },
+						4: { cellWidth: 65 },
+						5: { cellWidth: 25 },
+						6: { cellWidth: 22 },
+						7: { cellWidth: 22 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="${fileNamePrefix}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Date: e.date ? formatDate(e.date) : "—",
+					"Patient Name": e.patientName || "—",
+					"Patient Age": e.patientAge ?? "—",
+					"Patient Sex": e.patientSex || "—",
+					UHID: e.uhid || "—",
+					"Complete Diagnosis": e.completeDiagnosis || "Not filled",
+					[isConsent ? "Procedure Description" : "Nature of Bad News / Scenario"]: e.procedureDescription || "—",
+					"Performed Location": e.performedAtLocation || "—",
+					"Skill Level": e.skillLevel || "—",
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 14 }, { wch: 25 },
+					{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 40 },
+					{ wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, sheetName);
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="${fileNamePrefix}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
 		return new Response("Unknown export module", { status: 400 });
 	} catch (e) {
 		console.error("[Export Route Handler Error]", e);
