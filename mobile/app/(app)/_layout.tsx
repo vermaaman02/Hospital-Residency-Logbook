@@ -309,6 +309,24 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="procedures"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="diagnostics"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="imaging"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }

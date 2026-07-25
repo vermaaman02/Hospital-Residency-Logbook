@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
 		}
 
 		const { userId, module, format } = claim;
+		const searchParams = req.nextUrl.searchParams;
 
 		// Fetch student user details
 		const student = await prisma.user.findUnique({
@@ -710,6 +711,317 @@ export async function GET(req: NextRequest) {
 					headers: {
 						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 						"Content-Disposition": `attachment; filename="case_management_${category.toLowerCase()}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
+		// ─── PROCEDURE LOGS EXPORTS ──────────────────────────────────────────
+		if (module === "procedures") {
+			const category = (claim as any).category || searchParams.get("category");
+			const where: any = { userId };
+			if (category) where.procedureCategory = category as any;
+
+			const entries = await prisma.procedureLog.findMany({
+				where,
+				orderBy: [{ procedureCategory: "asc" }, { slNo: "asc" }],
+			});
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				const autoTableFn =
+					(
+						autoTable as unknown as {
+							default?: typeof autoTable;
+							autoTable?: typeof autoTable;
+						}
+					).default ??
+					(autoTable as unknown as { autoTable?: typeof autoTable }).autoTable ??
+					autoTable;
+
+				doc.setFontSize(14);
+				doc.text(
+					category ? `PROCEDURE LOGS — ${category.replace(/_/g, " ")}` : "PROCEDURE LOGS",
+					148,
+					15,
+					{ align: "center" }
+				);
+
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Category", "Date", "Patient Info",
+					"Diagnosis & Description", "Location", "Skill Level", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.procedureCategory || "—",
+					e.date ? formatDate(e.date) : "—",
+					[e.patientName, e.patientAge ? `${e.patientAge}y` : null, e.patientSex, e.uhid ? `UHID:${e.uhid}` : null].filter(Boolean).join(" / ") || "—",
+					[e.completeDiagnosis, e.procedureDescription ? `Desc: ${e.procedureDescription}` : null].filter(Boolean).join("\n") || "Not filled",
+					e.performedAtLocation || "—",
+					e.skillLevel || "—",
+					e.status
+				]);
+
+				autoTableFn(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 45 },
+						2: { cellWidth: 22 },
+						3: { cellWidth: 50 },
+						4: { cellWidth: 75 },
+						5: { cellWidth: 25 },
+						6: { cellWidth: 22 },
+						7: { cellWidth: 22 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="procedure_logs_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Category: e.procedureCategory || "—",
+					Date: e.date ? formatDate(e.date) : "—",
+					"Patient Name": e.patientName || "—",
+					"Patient Age": e.patientAge ?? "—",
+					"Patient Sex": e.patientSex || "—",
+					UHID: e.uhid || "—",
+					"Complete Diagnosis": e.completeDiagnosis || "Not filled",
+					"Procedure Description": e.procedureDescription || "—",
+					"Performed Location": e.performedAtLocation || "—",
+					"Skill Level": e.skillLevel || "—",
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 35 }, { wch: 14 }, { wch: 25 },
+					{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 40 },
+					{ wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Procedure Logs");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="procedure_logs_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
+		// ─── DIAGNOSTIC SKILLS EXPORTS ───────────────────────────────────────
+		if (module === "diagnostics") {
+			const category = (claim as any).category || searchParams.get("category");
+			const where: any = { userId };
+			if (category) where.diagnosticCategory = category as any;
+
+			const entries = await prisma.diagnosticSkill.findMany({
+				where,
+				orderBy: [{ diagnosticCategory: "asc" }, { slNo: "asc" }],
+			});
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				doc.setFontSize(16);
+				doc.text("LOG OF DIAGNOSTIC SKILLS PERFORMED / INTERPRETED", 10, 15);
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Category", "Skill Name", "Representative Diagnosis",
+					"Confidence Level", "Total Performed", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.diagnosticCategory || "—",
+					e.skillName || "—",
+					e.representativeDiagnosis || "Not filled",
+					e.confidenceLevel || "—",
+					(e.totalTimesPerformed ?? 0).toString(),
+					e.status
+				]);
+
+				autoTable(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 45 },
+						2: { cellWidth: 65 },
+						3: { cellWidth: 80 },
+						4: { cellWidth: 30 },
+						5: { cellWidth: 25 },
+						6: { cellWidth: 22 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="diagnostic_skills_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Category: e.diagnosticCategory || "—",
+					"Skill Name": e.skillName || "—",
+					"Representative Diagnosis": e.representativeDiagnosis || "Not filled",
+					"Confidence Level": e.confidenceLevel || "—",
+					"Total Times Performed": e.totalTimesPerformed ?? 0,
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 35 }, { wch: 45 }, { wch: 45 },
+					{ wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Diagnostic Skills");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="diagnostic_skills_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.xlsx"`,
+					},
+				});
+			}
+		}
+
+		// ─── IMAGING LOGS EXPORTS ───────────────────────────────────────────
+		if (module === "imaging") {
+			const category = (claim as any).category || searchParams.get("category");
+			const where: any = { userId };
+			if (category) where.imagingCategory = category as any;
+
+			const entries = await prisma.imagingLog.findMany({
+				where,
+				orderBy: [{ imagingCategory: "asc" }, { slNo: "asc" }],
+			});
+
+			if (format === "pdf") {
+				const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+				doc.setFontSize(16);
+				doc.text("LOG OF IMAGING ANALYSIS", 10, 15);
+				doc.setFontSize(10);
+				doc.text(
+					`Student: ${studentName}  |  Batch: ${student.batchRelation?.name || "N/A"}  |  Generated: ${formatDate(new Date())}`,
+					10,
+					25
+				);
+
+				const headers = [
+					"Sl.", "Category", "Date", "Patient Info",
+					"Diagnosis & Description", "Location", "Skill Level", "Status"
+				];
+
+				const rows = entries.map((e) => [
+					e.slNo.toString(),
+					e.imagingCategory || "—",
+					e.date ? formatDate(e.date) : "—",
+					[e.patientName, e.patientAge ? `${e.patientAge}y` : null, e.patientSex, e.uhid ? `UHID:${e.uhid}` : null].filter(Boolean).join(" / ") || "—",
+					[e.completeDiagnosis, e.procedureDescription ? `Desc: ${e.procedureDescription}` : null].filter(Boolean).join("\n") || "Not filled",
+					e.performedAtLocation || "—",
+					e.skillLevel || "—",
+					e.status
+				]);
+
+				autoTable(doc, {
+					head: [headers],
+					body: rows,
+					startY: 32,
+					theme: "grid",
+					styles: { font: "helvetica", fontSize: 8, cellPadding: 2 },
+					headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+					columnStyles: {
+						0: { cellWidth: 10 },
+						1: { cellWidth: 45 },
+						2: { cellWidth: 22 },
+						3: { cellWidth: 50 },
+						4: { cellWidth: 75 },
+						5: { cellWidth: 25 },
+						6: { cellWidth: 22 },
+						7: { cellWidth: 22 }
+					}
+				});
+
+				const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+				return new NextResponse(pdfBuffer, {
+					headers: {
+						"Content-Type": "application/pdf",
+						"Content-Disposition": `attachment; filename="imaging_logs_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.pdf"`,
+					},
+				});
+			} else {
+				const data = entries.map((e) => ({
+					"Sl. No.": e.slNo,
+					Category: e.imagingCategory || "—",
+					Date: e.date ? formatDate(e.date) : "—",
+					"Patient Name": e.patientName || "—",
+					"Patient Age": e.patientAge ?? "—",
+					"Patient Sex": e.patientSex || "—",
+					UHID: e.uhid || "—",
+					"Complete Diagnosis": e.completeDiagnosis || "Not filled",
+					"Imaging Type / Findings": e.procedureDescription || "—",
+					"Performed Location": e.performedAtLocation || "—",
+					"Skill Level": e.skillLevel || "—",
+					Status: e.status,
+					"Faculty Remark": e.facultyRemark || "",
+				}));
+
+				const wb = XLSX.utils.book_new();
+				const ws = XLSX.utils.json_to_sheet(data);
+				ws["!cols"] = [
+					{ wch: 8 }, { wch: 35 }, { wch: 14 }, { wch: 25 },
+					{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 40 },
+					{ wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 30 }
+				];
+
+				XLSX.utils.book_append_sheet(wb, ws, "Imaging Logs");
+				const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+				return new NextResponse(wbOut, {
+					headers: {
+						"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						"Content-Disposition": `attachment; filename="imaging_logs_${category ? category.toLowerCase() : "all"}_${safeName}_${dateStr}.xlsx"`,
 					},
 				});
 			}

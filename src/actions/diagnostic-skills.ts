@@ -10,7 +10,7 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
 	diagnosticSkillSchema,
@@ -20,7 +20,12 @@ import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
 import { isAutoReviewEnabled } from "@/actions/auto-review";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendRealtimeNotification } from "@/lib/notifications";
+import {
+	ABG_ANALYSIS_SKILLS,
+	ECG_ANALYSIS_SKILLS,
+	OTHER_DIAGNOSTIC_SKILLS,
+} from "@/lib/constants/diagnostic-types";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -42,10 +47,17 @@ async function resolveUser(clerkId: string) {
 	return user;
 }
 
+function getSkillConfigs(category: string) {
+	const upper = category.toUpperCase().replace(/-/g, "_");
+	if (upper.includes("ABG") || upper.includes("BLOOD_GAS")) return ABG_ANALYSIS_SKILLS;
+	if (upper.includes("ECG") || upper.includes("ELECTROCARDIOGRAPH")) return ECG_ANALYSIS_SKILLS;
+	return OTHER_DIAGNOSTIC_SKILLS;
+}
+
 // ─── Create ─────────────────────────────────────────────────
 
 export async function createDiagnosticSkillEntry(data: DiagnosticSkillInput) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const validated = diagnosticSkillSchema.parse(data);
 
@@ -74,7 +86,7 @@ export async function createDiagnosticSkillEntry(data: DiagnosticSkillInput) {
 	});
 
 	revalidate(validated.diagnosticCategory);
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: validated.diagnosticCategory });
 	return { success: true, entry };
 }
 
@@ -84,7 +96,7 @@ export async function updateDiagnosticSkillEntry(
 	id: string,
 	data: DiagnosticSkillInput,
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const validated = diagnosticSkillSchema.parse(data);
 
@@ -102,7 +114,8 @@ export async function updateDiagnosticSkillEntry(
 			confidenceLevel: validated.confidenceLevel as never,
 			totalTimesPerformed: validated.totalTimesPerformed ?? 0,
 			imageUrls: validated.imageUrls ?? existing.imageUrls,
-			status: "DRAFT" as never,
+			facultyId: (data as any).facultyId ?? existing.facultyId,
+			status: existing.status === "NEEDS_REVISION" ? ("DRAFT" as never) : existing.status,
 		},
 	});
 
@@ -120,14 +133,14 @@ export async function updateDiagnosticSkillEntry(
 	}).catch((e) => console.error("[REVISION_ERROR]", e));
 
 	revalidate(validated.diagnosticCategory);
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: validated.diagnosticCategory });
 	return { success: true, entry };
 }
 
 // ─── Submit ─────────────────────────────────────────────────
 
 export async function submitDiagnosticSkillEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.diagnosticSkill.findFirst({
@@ -167,26 +180,15 @@ export async function submitDiagnosticSkillEntry(id: string) {
 		return updated;
 	});
 
-	// Send notification to student on submission
-	if (!autoReview) {
-		await sendNotificationToUser(user.id, {
-			title: "Diagnostic Skill Submitted",
-			body: `Your diagnostic skill entry "${existing.skillName}" has been submitted for review.`,
-			type: "entry_submitted",
-			entityType: "DiagnosticSkill",
-			entityId: id,
-		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
-	}
-
 	revalidate(existing.diagnosticCategory);
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: existing.diagnosticCategory });
 	return { success: true, entry, autoSigned: autoReview };
 }
 
 // ─── Delete ─────────────────────────────────────────────────
 
 export async function deleteDiagnosticSkillEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.diagnosticSkill.findFirst({
@@ -199,17 +201,17 @@ export async function deleteDiagnosticSkillEntry(id: string) {
 	await prisma.diagnosticSkill.delete({ where: { id } });
 
 	revalidate(existing.diagnosticCategory);
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: existing.diagnosticCategory });
 	return { success: true };
 }
 
 // ─── Read (student) ─────────────────────────────────────────
 
 export async function getMyDiagnosticSkillEntries(category: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	const entries = await prisma.diagnosticSkill.findMany({
+	let entries = await prisma.diagnosticSkill.findMany({
 		where: {
 			userId: user.id,
 			diagnosticCategory: category as never,
@@ -217,11 +219,35 @@ export async function getMyDiagnosticSkillEntries(category: string) {
 		orderBy: { slNo: "asc" },
 	});
 
+	// Auto-seed predefined 10 skills if empty
+	if (entries.length === 0) {
+		const configs = getSkillConfigs(category);
+		if (configs.length > 0) {
+			await prisma.diagnosticSkill.createMany({
+				data: configs.map((cfg) => ({
+					userId: user.id,
+					diagnosticCategory: category as never,
+					slNo: cfg.slNo,
+					skillName: cfg.name,
+					status: "DRAFT" as never,
+				})),
+			});
+
+			entries = await prisma.diagnosticSkill.findMany({
+				where: {
+					userId: user.id,
+					diagnosticCategory: category as never,
+				},
+				orderBy: { slNo: "asc" },
+			});
+		}
+	}
+
 	return entries;
 }
 
 export async function getMyDiagnosticSkillEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.diagnosticSkill.findFirst({
@@ -233,26 +259,38 @@ export async function getMyDiagnosticSkillEntry(id: string) {
 
 /** Summary across all 3 diagnostic categories */
 export async function getMyDiagnosticSkillSummary() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	const entries = await prisma.diagnosticSkill.groupBy({
+	const filledCounts = await prisma.diagnosticSkill.groupBy({
 		by: ["diagnosticCategory"],
-		where: { userId: user.id },
+		where: {
+			userId: user.id,
+			OR: [
+				{ representativeDiagnosis: { not: null } },
+				{ confidenceLevel: { not: null } },
+				{ status: { in: ["SUBMITTED", "SIGNED", "NEEDS_REVISION"] as never[] } },
+			],
+		},
 		_count: { id: true },
 	});
 
-	const summary: Record<string, number> = {};
-	for (const e of entries) {
-		summary[e.diagnosticCategory] = e._count.id;
-	}
-	return summary;
+	const signedCounts = await prisma.diagnosticSkill.groupBy({
+		by: ["diagnosticCategory"],
+		where: { userId: user.id, status: "SIGNED" as never },
+		_count: { id: true },
+	});
+
+	return {
+		totalByCategory: Object.fromEntries(filledCounts.map((e) => [e.diagnosticCategory, e._count.id])),
+		signedByCategory: Object.fromEntries(signedCounts.map((e) => [e.diagnosticCategory, e._count.id])),
+	};
 }
 
 // ─── Faculty/HOD Review ─────────────────────────────────────
 
 export async function getDiagnosticSkillsForReview(category?: string) {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) return [];
 
@@ -316,7 +354,6 @@ export async function getDiagnosticSkillsForReview(category?: string) {
 		orderBy: { signedAt: "desc" },
 	});
 
-	// Create a map of entityId to signatures
 	const signaturesMap = new Map<string, typeof signatures>();
 	for (const sig of signatures) {
 		if (!signaturesMap.has(sig.entityId)) {
@@ -325,7 +362,6 @@ export async function getDiagnosticSkillsForReview(category?: string) {
 		signaturesMap.get(sig.entityId)?.push(sig);
 	}
 
-	// Attach signatures to entries
 	return entries.map((entry) => ({
 		...entry,
 		signatures: signaturesMap.get(entry.id) || [],
@@ -335,7 +371,7 @@ export async function getDiagnosticSkillsForReview(category?: string) {
 // ─── Sign Entry ──────────────────────────────────────────────
 
 export async function signDiagnosticSkillEntry(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.diagnosticSkill.findUnique({ where: { id } });
@@ -372,24 +408,23 @@ export async function signDiagnosticSkillEntry(id: string, remark?: string) {
 		});
 	});
 
-	// Send notification to student
-	await sendNotificationToUser(entry.userId, {
-		title: "Diagnostic Skill Signed",
-		body: `Your diagnostic skill entry "${entry.skillName}" has been signed.`,
-		type: "entry_signed",
-		entityType: "DiagnosticSkill",
-		entityId: id,
-	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+	// Send Real-Time Push Notification to Student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Diagnostic Skill Signed",
+		`Your diagnostic skill entry '${entry.skillName}' has been signed off.`,
+		{ type: "ENTRY_SIGNED", entityId: id, module: "diagnostics", category: entry.diagnosticCategory },
+	).catch(() => {});
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: entry.diagnosticCategory });
 	return { success: true };
 }
 
 // ─── Reject Entry ────────────────────────────────────────────
 
 export async function rejectDiagnosticSkillEntry(id: string, remark: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.diagnosticSkill.findUnique({ where: { id } });
@@ -418,24 +453,23 @@ export async function rejectDiagnosticSkillEntry(id: string, remark: string) {
 		});
 	});
 
-	// Send notification to student
-	await sendNotificationToUser(entry.userId, {
-		title: "Diagnostic Skill Needs Revision",
-		body: `Your diagnostic skill entry "${entry.skillName}" needs revision: ${remark}`,
-		type: "entry_rejected",
-		entityType: "DiagnosticSkill",
-		entityId: id,
-	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+	// Send Real-Time Push Notification to Student
+	await sendRealtimeNotification(
+		entry.userId,
+		"Diagnostic Skill Revision Requested",
+		`Revision requested for diagnostic skill entry '${entry.skillName}': ${remark}`,
+		{ type: "ENTRY_REVISED", entityId: id, module: "diagnostics", category: entry.diagnosticCategory },
+	).catch(() => {});
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category: entry.diagnosticCategory });
 	return { success: true };
 }
 
 // ─── Bulk Sign ───────────────────────────────────────────────
 
 export async function bulkSignDiagnosticSkillEntries(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.diagnosticSkill.findMany({
@@ -473,7 +507,7 @@ export async function bulkSignDiagnosticSkillEntries(ids: string[]) {
 	});
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "diagnostics" });
 	return { success: true, signedCount: entries.length };
 }
 
@@ -483,7 +517,7 @@ export async function getStudentDiagnosticSkills(
 	studentId: string,
 	category?: string,
 ) {
-	await requireRole(["faculty", "hod"]);
+	await requireRoleHybrid(["faculty", "hod"]);
 
 	const where: Record<string, unknown> = { userId: studentId };
 	if (category) where.diagnosticCategory = category as never;

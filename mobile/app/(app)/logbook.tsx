@@ -116,6 +116,12 @@ export default function LogbookScreen() {
 			router.push("/(app)/clinical-skills");
 		} else if (key === "case-management") {
 			router.push("/(app)/case-management");
+		} else if (key === "procedures") {
+			router.push("/(app)/procedures");
+		} else if (key === "diagnostics") {
+			router.push("/(app)/diagnostics");
+		} else if (key === "imaging") {
+			router.push("/(app)/imaging");
 		} else if (key === "logbook-reviews") {
 			router.push("/(app)/internal-assessments");
 		} else {

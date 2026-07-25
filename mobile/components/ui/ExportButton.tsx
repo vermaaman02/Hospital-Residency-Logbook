@@ -25,7 +25,10 @@ interface ExportButtonProps {
 		| "journal-clubs"
 		| "internal-assessments"
 		| "clinical-skills"
-		| "case-management";
+		| "case-management"
+		| "procedures"
+		| "diagnostics"
+		| "imaging";
 	label?: string;
 	size?: "sm" | "md" | "lg";
 	extraParams?: Record<string, string>;

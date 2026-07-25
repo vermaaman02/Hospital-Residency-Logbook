@@ -45,7 +45,8 @@ async function DiagnosticsContent() {
 						enumValue as keyof typeof DIAGNOSTIC_SKILLS_BY_CATEGORY
 					] ?? [];
 				const totalSkills = skills.length;
-				const entryCount = summary[enumValue] ?? 0;
+				const summaryMap = (summary as any)?.totalByCategory ?? summary ?? {};
+				const entryCount = summaryMap[enumValue] ?? 0;
 				const progressPercent =
 					totalSkills > 0 ?
 						Math.min(100, Math.round((entryCount / totalSkills) * 100))

@@ -11,16 +11,18 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import { PROCEDURE_CATEGORIES } from "@/lib/constants/procedure-categories";
 import {
 	buildSnapshot,
 	recordReview,
 	recordSubmission,
 } from "@/lib/entry-revisions";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -36,35 +38,76 @@ function revalidateAll() {
 	revalidatePath("/dashboard/hod/procedures");
 }
 
+// ─── Initialize Category ────────────────────────────────────
+
+/**
+ * Initialize default rows for a given procedure category up to maxEntries if empty.
+ */
+export async function initializeProcedureLogCategory(procedureCategory: string) {
+	const clerkId = await requireAuthHybrid();
+	const user = await resolveUser(clerkId);
+
+	const existingCount = await prisma.procedureLog.count({
+		where: { userId: user.id, procedureCategory: procedureCategory as never },
+	});
+
+	if (existingCount > 0) return { initialized: false };
+
+	const catConfig = PROCEDURE_CATEGORIES.find((c) => c.enumValue === procedureCategory);
+	const targetCount = catConfig?.maxEntries || 10;
+	// Initialize default batch of rows (up to 10 initial rows or targetCount if less)
+	const initialRows = Math.min(10, targetCount);
+
+	await prisma.procedureLog.createMany({
+		data: Array.from({ length: initialRows }).map((_, idx) => ({
+			userId: user.id,
+			procedureCategory: procedureCategory as never,
+			slNo: idx + 1,
+			status: "DRAFT" as never,
+		})),
+	});
+
+	revalidateAll();
+	emitRealtimeEvent("entry:updated", { module: "procedures", category: procedureCategory });
+	return { initialized: true };
+}
+
 // ─── Add Row ────────────────────────────────────────────────
 
 /**
  * Add a single new empty row for a given procedure category.
- * Sl.No is auto-incremented based on existing rows.
+ * Sl.No is auto-incremented based on existing rows up to maxEntries.
  */
 export async function addProcedureLogRow(procedureCategory: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	const lastEntry = await prisma.procedureLog.findFirst({
+	const catConfig = PROCEDURE_CATEGORIES.find((c) => c.enumValue === procedureCategory);
+	const maxEntries = catConfig?.maxEntries || 50;
+
+	const existingEntries = await prisma.procedureLog.findMany({
 		where: { userId: user.id, procedureCategory: procedureCategory as never },
-		orderBy: { slNo: "desc" },
 		select: { slNo: true },
+		orderBy: { slNo: "desc" },
 	});
 
-	const newSlNo = (lastEntry?.slNo ?? 0) + 1;
+	if (existingEntries.length >= maxEntries) {
+		throw new Error(`Maximum entry capacity (${maxEntries} rows) reached for ${catConfig?.label || procedureCategory}.`);
+	}
+
+	const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
 
 	const entry = await prisma.procedureLog.create({
 		data: {
 			userId: user.id,
 			procedureCategory: procedureCategory as never,
-			slNo: newSlNo,
+			slNo: maxSlNo + 1,
 			status: "DRAFT" as never,
 		},
 	});
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures", category: procedureCategory });
 	return entry;
 }
 
@@ -72,7 +115,7 @@ export async function addProcedureLogRow(procedureCategory: string) {
  * Delete a DRAFT procedure log row. Only the owner can delete, and only DRAFT entries.
  */
 export async function deleteProcedureLogEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
@@ -83,24 +126,47 @@ export async function deleteProcedureLogEntry(id: string) {
 
 	await prisma.procedureLog.delete({ where: { id } });
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true };
 }
 
 // ─── Read (Student) ─────────────────────────────────────────
 
 export async function getMyProcedureLogEntries(procedureCategory: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
-	return prisma.procedureLog.findMany({
+	let entries = await prisma.procedureLog.findMany({
 		where: { userId: user.id, procedureCategory: procedureCategory as never },
 		orderBy: { slNo: "asc" },
 	});
+
+	// Auto-seed initial rows if category has 0 entries
+	if (entries.length === 0) {
+		const catConfig = PROCEDURE_CATEGORIES.find((c) => c.enumValue === procedureCategory);
+		const initialCount = Math.min(10, catConfig?.maxEntries || 10);
+		if (initialCount > 0) {
+			await prisma.procedureLog.createMany({
+				data: Array.from({ length: initialCount }).map((_, idx) => ({
+					userId: user.id,
+					procedureCategory: procedureCategory as never,
+					slNo: idx + 1,
+					status: "DRAFT" as never,
+				})),
+			});
+
+			entries = await prisma.procedureLog.findMany({
+				where: { userId: user.id, procedureCategory: procedureCategory as never },
+				orderBy: { slNo: "asc" },
+			});
+		}
+	}
+
+	return entries;
 }
 
 export async function getMyProcedureLogSummary() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	// Count only entries that have been actually filled
@@ -160,7 +226,7 @@ export async function getMyProcedureLogSummary() {
 // ─── Faculty List ───────────────────────────────────────────
 
 export async function getAvailableProcedureFaculty() {
-	await requireAuth();
+	await requireAuthHybrid();
 
 	return prisma.user.findMany({
 		where: {
@@ -190,7 +256,7 @@ export async function updateProcedureLogEntry(
 		facultyId?: string | null;
 	},
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.procedureLog.findUnique({
@@ -222,14 +288,14 @@ export async function updateProcedureLogEntry(
 	});
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true, data: entry };
 }
 
 // ─── Submit ─────────────────────────────────────────────────
 
 export async function submitProcedureLogEntry(id: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.procedureLog.findUnique({
@@ -275,14 +341,14 @@ export async function submitProcedureLogEntry(id: string) {
 	}
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true };
 }
 
 // ─── Faculty/HOD: Review ────────────────────────────────────
 
 export async function getProcedureLogsForReview(procedureCategory?: string) {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId: userId } });
 	if (!user) return [];
 
@@ -363,7 +429,7 @@ export async function getProcedureLogsForReview(procedureCategory?: string) {
 }
 
 export async function signProcedureLogEntry(id: string, remark?: string) {
-	const { userId, role } = await requireRole(["faculty", "hod"]);
+	const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.procedureLog.findUnique({ where: { id } });
@@ -399,13 +465,22 @@ export async function signProcedureLogEntry(id: string, remark?: string) {
 		});
 	});
 
+	// Send Real-Time Push Notification to Student
+	const catConfig = PROCEDURE_CATEGORIES.find((c) => c.enumValue === entry.procedureCategory);
+	await sendRealtimeNotification(
+		entry.userId,
+		"Procedure Log Signed",
+		`Your procedure log entry '${catConfig?.label || entry.procedureCategory}' (Sl No: ${entry.slNo}) has been signed off.`,
+		{ type: "ENTRY_SIGNED", entityId: id, module: "procedures", category: entry.procedureCategory },
+	).catch(() => {});
+
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true };
 }
 
 export async function rejectProcedureLogEntry(id: string, remark: string) {
-	const { userId: clerkId, role } = await requireRole(["faculty", "hod"]);
+	const { userId: clerkId, role } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await prisma.user.findUnique({ where: { clerkId } });
 	if (!user) throw new Error("User not found");
 
@@ -431,13 +506,22 @@ export async function rejectProcedureLogEntry(id: string, remark: string) {
 		});
 	});
 
+	// Send Real-Time Push Notification to Student
+	const catConfig = PROCEDURE_CATEGORIES.find((c) => c.enumValue === entry.procedureCategory);
+	await sendRealtimeNotification(
+		entry.userId,
+		"Procedure Log Revision Requested",
+		`Revision requested for procedure log entry '${catConfig?.label || entry.procedureCategory}': ${remark}`,
+		{ type: "ENTRY_REVISED", entityId: id, module: "procedures", category: entry.procedureCategory },
+	).catch(() => {});
+
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true };
 }
 
 export async function bulkSignProcedureLogEntries(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.procedureLog.findMany({
@@ -463,7 +547,7 @@ export async function bulkSignProcedureLogEntries(ids: string[]) {
 	]);
 
 	revalidateAll();
-	await emitRealtimeEvent("entry:updated");
+	emitRealtimeEvent("entry:updated", { module: "procedures" });
 	return { success: true, signedCount: entries.length };
 }
 
@@ -473,7 +557,7 @@ export async function getStudentProcedureLogs(
 	studentId: string,
 	procedureCategory?: string,
 ) {
-	await requireRole(["faculty", "hod"]);
+	await requireRoleHybrid(["faculty", "hod"]);
 
 	const where: Record<string, unknown> = { userId: studentId };
 	if (procedureCategory) where.procedureCategory = procedureCategory as never;

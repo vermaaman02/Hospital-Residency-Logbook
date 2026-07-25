@@ -11,13 +11,14 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuthHybrid, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
+import { IMAGING_CATEGORIES } from "@/lib/constants/imaging-categories";
 import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendRealtimeNotification } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -33,36 +34,72 @@ function revalidateAll() {
   revalidatePath("/dashboard/hod/imaging");
 }
 
+// ─── Initialize Category ────────────────────────────────────
+
+export async function initializeImagingLogCategory(imagingCategory: string) {
+  const clerkId = await requireAuthHybrid();
+  const user = await resolveUser(clerkId);
+
+  const existingCount = await prisma.imagingLog.count({
+    where: { userId: user.id, imagingCategory: imagingCategory as never },
+  });
+
+  if (existingCount > 0) return { initialized: false };
+
+  const catConfig = IMAGING_CATEGORIES.find((c) => c.enumValue === imagingCategory);
+  const targetCount = Math.min(10, catConfig?.maxEntries || 10);
+
+  await prisma.imagingLog.createMany({
+    data: Array.from({ length: targetCount }).map((_, idx) => ({
+      userId: user.id,
+      imagingCategory: imagingCategory as never,
+      slNo: idx + 1,
+      status: "DRAFT" as never,
+    })),
+  });
+
+  revalidateAll();
+  emitRealtimeEvent("entry:updated", { module: "imaging", category: imagingCategory });
+  return { initialized: true };
+}
+
 // ─── Add Row ────────────────────────────────────────────────
 
 export async function addImagingLogRow(imagingCategory: string) {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
-  const lastEntry = await prisma.imagingLog.findFirst({
+  const catConfig = IMAGING_CATEGORIES.find((c) => c.enumValue === imagingCategory);
+  const maxEntries = catConfig?.maxEntries || 50;
+
+  const existingEntries = await prisma.imagingLog.findMany({
     where: { userId: user.id, imagingCategory: imagingCategory as never },
-    orderBy: { slNo: "desc" },
     select: { slNo: true },
+    orderBy: { slNo: "desc" },
   });
 
-  const newSlNo = (lastEntry?.slNo ?? 0) + 1;
+  if (existingEntries.length >= maxEntries) {
+    throw new Error(`Maximum entry capacity (${maxEntries} rows) reached for ${catConfig?.label || imagingCategory}.`);
+  }
+
+  const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
 
   const entry = await prisma.imagingLog.create({
     data: {
       userId: user.id,
       imagingCategory: imagingCategory as never,
-      slNo: newSlNo,
+      slNo: maxSlNo + 1,
       status: "DRAFT" as never,
     },
   });
 
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging", category: imagingCategory });
   return entry;
 }
 
 export async function deleteImagingLogEntry(id: string) {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
   const entry = await prisma.imagingLog.findUnique({ where: { id } });
@@ -73,24 +110,47 @@ export async function deleteImagingLogEntry(id: string) {
 
   await prisma.imagingLog.delete({ where: { id } });
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true };
 }
 
 // ─── Read (Student) ─────────────────────────────────────────
 
 export async function getMyImagingLogEntries(imagingCategory: string) {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
-  return prisma.imagingLog.findMany({
+  let entries = await prisma.imagingLog.findMany({
     where: { userId: user.id, imagingCategory: imagingCategory as never },
     orderBy: { slNo: "asc" },
   });
+
+  // Auto-seed initial rows if category has 0 entries
+  if (entries.length === 0) {
+    const catConfig = IMAGING_CATEGORIES.find((c) => c.enumValue === imagingCategory);
+    const initialCount = Math.min(10, catConfig?.maxEntries || 10);
+    if (initialCount > 0) {
+      await prisma.imagingLog.createMany({
+        data: Array.from({ length: initialCount }).map((_, idx) => ({
+          userId: user.id,
+          imagingCategory: imagingCategory as never,
+          slNo: idx + 1,
+          status: "DRAFT" as never,
+        })),
+      });
+
+      entries = await prisma.imagingLog.findMany({
+        where: { userId: user.id, imagingCategory: imagingCategory as never },
+        orderBy: { slNo: "asc" },
+      });
+    }
+  }
+
+  return entries;
 }
 
 export async function getMyImagingLogSummary() {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
   const counts = await prisma.imagingLog.groupBy({
@@ -111,22 +171,7 @@ export async function getMyImagingLogSummary() {
 
   const signedCounts = await prisma.imagingLog.groupBy({
     by: ["imagingCategory"],
-    where: { userId: user.id, status: "SIGNED" },
-    _count: { id: true },
-  });
-
-  const submittedCounts = await prisma.imagingLog.groupBy({
-    by: ["imagingCategory"],
-    where: {
-      userId: user.id,
-      status: { in: ["SUBMITTED", "SIGNED", "NEEDS_REVISION"] as never[] },
-    },
-    _count: { id: true },
-  });
-
-  const needsRevisionCounts = await prisma.imagingLog.groupBy({
-    by: ["imagingCategory"],
-    where: { userId: user.id, status: "NEEDS_REVISION" },
+    where: { userId: user.id, status: "SIGNED" as never },
     _count: { id: true },
   });
 
@@ -137,19 +182,13 @@ export async function getMyImagingLogSummary() {
     signedByCategory: Object.fromEntries(
       signedCounts.map((c) => [c.imagingCategory, c._count.id]),
     ),
-    submittedByCategory: Object.fromEntries(
-      submittedCounts.map((c) => [c.imagingCategory, c._count.id]),
-    ),
-    needsRevisionByCategory: Object.fromEntries(
-      needsRevisionCounts.map((c) => [c.imagingCategory, c._count.id]),
-    ),
   };
 }
 
 // ─── Faculty List ───────────────────────────────────────────
 
 export async function getAvailableImagingFaculty() {
-  await requireAuth();
+  await requireAuthHybrid();
 
   return prisma.user.findMany({
     where: {
@@ -172,18 +211,19 @@ export async function updateImagingLogEntry(
     patientSex?: string | null;
     uhid?: string | null;
     completeDiagnosis?: string | null;
-    procedureDescription?: string | null;
+    imagingType?: string | null;
     performedAtLocation?: string | null;
     skillLevel?: string | null;
-    totalProcedureTally?: number;
+    totalImagingTally?: number;
     facultyId?: string | null;
-    imageUrls?: string[];
   },
 ) {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
-  const existing = await prisma.imagingLog.findUnique({ where: { id } });
+  const existing = await prisma.imagingLog.findUnique({
+    where: { id },
+  });
   if (!existing || existing.userId !== user.id) {
     throw new Error("Entry not found or unauthorized");
   }
@@ -200,41 +240,29 @@ export async function updateImagingLogEntry(
       patientSex: data.patientSex,
       uhid: data.uhid,
       completeDiagnosis: data.completeDiagnosis,
-      procedureDescription: data.procedureDescription,
+      procedureDescription: (data as any).imagingType ?? (data as any).procedureDescription ?? null,
       performedAtLocation: data.performedAtLocation,
       skillLevel: data.skillLevel as never,
-      totalProcedureTally: data.totalProcedureTally,
+      totalProcedureTally: data.totalImagingTally ?? 0,
       facultyId: data.facultyId,
-      imageUrls: data.imageUrls ?? existing.imageUrls,
-      status: existing.status === "NEEDS_REVISION" ? "DRAFT" : existing.status,
+      status: existing.status === "NEEDS_REVISION" ? ("DRAFT" as never) : existing.status,
     },
   });
 
-  // Record update revision for tracking changes
-  await prisma.entryRevision.create({
-    data: {
-      entityType: "ImagingLog",
-      entityId: id,
-      ownerId: user.id,
-      version: await prisma.entryRevision.count({ where: { entityId: id } }) + 1,
-      kind: "SUBMISSION",
-      snapshot: buildSnapshot(entry) as any,
-      attachments: entry.imageUrls,
-    },
-  }).catch((e) => console.error("[REVISION_ERROR]", e));
-
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true, data: entry };
 }
 
 // ─── Submit ─────────────────────────────────────────────────
 
 export async function submitImagingLogEntry(id: string) {
-  const clerkId = await requireAuth();
+  const clerkId = await requireAuthHybrid();
   const user = await resolveUser(clerkId);
 
-  const existing = await prisma.imagingLog.findUnique({ where: { id } });
+  const existing = await prisma.imagingLog.findUnique({
+    where: { id },
+  });
   if (!existing || existing.userId !== user.id) {
     throw new Error("Entry not found or unauthorized");
   }
@@ -245,63 +273,44 @@ export async function submitImagingLogEntry(id: string) {
   const autoReview = await isAutoReviewEnabled("imagingLogs");
 
   if (autoReview) {
-    await prisma.$transaction(async (tx) => {
-      await tx.imagingLog.update({
+    await prisma.$transaction([
+      prisma.imagingLog.update({
         where: { id },
-        data: { status: "SIGNED" },
-      });
-      await tx.digitalSignature.create({
+        data: { status: "SIGNED" as never },
+      }),
+      prisma.digitalSignature.create({
         data: {
           signedById: "auto-review",
           entityType: "ImagingLog",
           entityId: id,
           remark: "Auto-reviewed by system",
         },
-      });
-      await recordReview(tx, {
-        entityType: "ImagingLog",
-        entityId: id,
-        ownerId: existing.userId,
-        reviewerId: "auto-review",
-        reviewerRole: "hod",
-        decision: "SIGNED",
-        remark: "Auto-reviewed by system",
-      });
-    });
+      }),
+    ]);
   } else {
     await prisma.$transaction(async (tx) => {
-      await tx.imagingLog.update({
+      const updated = await tx.imagingLog.update({
         where: { id },
-        data: { status: "SUBMITTED" },
+        data: { status: "SUBMITTED" as never },
       });
       await recordSubmission(tx, {
         entityType: "ImagingLog",
         entityId: id,
         ownerId: user.id,
-        snapshot: buildSnapshot(existing),
-        attachments: existing.imageUrls,
+        snapshot: buildSnapshot(updated),
       });
     });
-
-    // Send notification to student on submission
-    await sendNotificationToUser(user.id, {
-      title: "Imaging Log Submitted",
-      body: `Your imaging log entry${existing.completeDiagnosis ? ` for "${existing.completeDiagnosis}"` : ""} has been submitted for review.`,
-      type: "entry_submitted",
-      entityType: "ImagingLog",
-      entityId: id,
-    }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
   }
 
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true };
 }
 
 // ─── Faculty/HOD: Review ────────────────────────────────────
 
 export async function getImagingLogsForReview(imagingCategory?: string) {
-  const { userId, role } = await requireRole(["faculty", "hod"]);
+  const { userId, role } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await prisma.user.findUnique({ where: { clerkId: userId } });
   if (!user) return [];
 
@@ -346,12 +355,11 @@ export async function getImagingLogsForReview(imagingCategory?: string) {
     },
   });
 
-  // Fetch digital signatures for each entry
   const entryIds = entries.map((e) => e.id);
   const signatures = await prisma.digitalSignature.findMany({
     where: {
-      entityId: { in: entryIds },
       entityType: "ImagingLog",
+      entityId: { in: entryIds },
     },
     include: {
       signedBy: {
@@ -362,14 +370,16 @@ export async function getImagingLogsForReview(imagingCategory?: string) {
         },
       },
     },
+    orderBy: { signedAt: "desc" },
   });
 
-  // Attach signatures to entries
   const signaturesMap = new Map<string, typeof signatures>();
-  signatures.forEach((sig) => {
-    const existing = signaturesMap.get(sig.entityId) || [];
-    signaturesMap.set(sig.entityId, [...existing, sig]);
-  });
+  for (const sig of signatures) {
+    if (!signaturesMap.has(sig.entityId)) {
+      signaturesMap.set(sig.entityId, []);
+    }
+    signaturesMap.get(sig.entityId)?.push(sig);
+  }
 
   return entries.map((entry) => ({
     ...entry,
@@ -378,7 +388,7 @@ export async function getImagingLogsForReview(imagingCategory?: string) {
 }
 
 export async function signImagingLogEntry(id: string, remark?: string) {
-  const { userId } = await requireRole(["faculty", "hod"]);
+  const { userId } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await resolveUser(userId);
 
   const entry = await prisma.imagingLog.findUnique({ where: { id } });
@@ -391,16 +401,8 @@ export async function signImagingLogEntry(id: string, remark?: string) {
     await tx.imagingLog.update({
       where: { id },
       data: {
-        status: "SIGNED",
+        status: "SIGNED" as never,
         facultyRemark: remark || entry.facultyRemark,
-      },
-    });
-    await tx.digitalSignature.create({
-      data: {
-        signedById: user.id,
-        entityType: "ImagingLog",
-        entityId: id,
-        remark,
       },
     });
     await recordReview(tx, {
@@ -410,27 +412,34 @@ export async function signImagingLogEntry(id: string, remark?: string) {
       reviewerId: user.id,
       reviewerRole: "faculty",
       decision: "SIGNED",
-      remark,
+      remark: remark ?? null,
+    });
+    await tx.digitalSignature.create({
+      data: {
+        signedById: user.id,
+        entityType: "ImagingLog",
+        entityId: id,
+        remark,
+      },
     });
   });
 
-  // Send notification to student
-  await sendNotificationToUser(entry.userId, {
-    title: "Imaging Log Signed",
-    body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
-    type: "entry_signed",
-    entityType: "ImagingLog",
-    entityId: id,
-  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+  // Send Real-Time Push Notification to Student
+  const catConfig = IMAGING_CATEGORIES.find((c) => c.enumValue === entry.imagingCategory);
+  await sendRealtimeNotification(
+    entry.userId,
+    "Imaging Log Signed",
+    `Your imaging log entry '${catConfig?.label || entry.imagingCategory}' (Sl No: ${entry.slNo}) has been signed off.`,
+    { type: "ENTRY_SIGNED", entityId: id, module: "imaging", category: entry.imagingCategory },
+  ).catch(() => {});
 
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true };
 }
 
 export async function rejectImagingLogEntry(id: string, remark: string) {
-  await requireRole(["faculty", "hod"]);
-  const clerkId = await requireAuth();
+  const { userId: clerkId } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await prisma.user.findUnique({ where: { clerkId } });
   if (!user) throw new Error("User not found");
 
@@ -441,7 +450,7 @@ export async function rejectImagingLogEntry(id: string, remark: string) {
     await tx.imagingLog.update({
       where: { id },
       data: {
-        status: "NEEDS_REVISION",
+        status: "NEEDS_REVISION" as never,
         facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}`,
       },
     });
@@ -456,22 +465,22 @@ export async function rejectImagingLogEntry(id: string, remark: string) {
     });
   });
 
-  // Send notification to student
-  await sendNotificationToUser(entry.userId, {
-    title: "Imaging Log Needs Revision",
-    body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} needs revision: ${remark}`,
-    type: "entry_rejected",
-    entityType: "ImagingLog",
-    entityId: id,
-  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+  // Send Real-Time Push Notification to Student
+  const catConfig = IMAGING_CATEGORIES.find((c) => c.enumValue === entry.imagingCategory);
+  await sendRealtimeNotification(
+    entry.userId,
+    "Imaging Log Revision Requested",
+    `Revision requested for imaging log entry '${catConfig?.label || entry.imagingCategory}': ${remark}`,
+    { type: "ENTRY_REVISED", entityId: id, module: "imaging", category: entry.imagingCategory },
+  ).catch(() => {});
 
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true };
 }
 
 export async function bulkSignImagingLogEntries(ids: string[]) {
-  const { userId } = await requireRole(["faculty", "hod"]);
+  const { userId } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await resolveUser(userId);
 
   const entries = await prisma.imagingLog.findMany({
@@ -483,7 +492,9 @@ export async function bulkSignImagingLogEntries(ids: string[]) {
   await prisma.$transaction(async (tx) => {
     await tx.imagingLog.updateMany({
       where: { id: { in: entries.map((e) => e.id) } },
-      data: { status: "SIGNED" },
+      data: {
+        status: "SIGNED" as never,
+      },
     });
     for (const entry of entries) {
       await tx.digitalSignature.create({
@@ -502,20 +513,11 @@ export async function bulkSignImagingLogEntries(ids: string[]) {
         decision: "SIGNED",
         remark: "Bulk signed",
       });
-
-      // Send notification to student for each entry
-      await sendNotificationToUser(entry.userId, {
-        title: "Imaging Log Signed",
-        body: `Your imaging log entry${entry.completeDiagnosis ? ` for "${entry.completeDiagnosis}"` : ""} has been signed.`,
-        type: "entry_signed",
-        entityType: "ImagingLog",
-        entityId: entry.id,
-      }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
     }
   });
 
   revalidateAll();
-  await emitRealtimeEvent("entry:updated");
+  emitRealtimeEvent("entry:updated", { module: "imaging" });
   return { success: true, signedCount: entries.length };
 }
 
@@ -525,13 +527,13 @@ export async function getStudentImagingLogs(
   studentId: string,
   imagingCategory?: string,
 ) {
-  await requireRole(["faculty", "hod"]);
+  await requireRoleHybrid(["faculty", "hod"]);
 
   const where: Record<string, unknown> = { userId: studentId };
   if (imagingCategory) where.imagingCategory = imagingCategory as never;
 
-	return prisma.imagingLog.findMany({
-		where,
-		orderBy: [{ imagingCategory: "asc" }, { slNo: "asc" }],
-	});
+  return prisma.imagingLog.findMany({
+    where,
+    orderBy: [{ imagingCategory: "asc" }, { slNo: "asc" }],
+  });
 }
