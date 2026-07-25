@@ -89,10 +89,10 @@ export const dailyAttendanceSchema = z.object({
 	presentAbsent: z.enum(["Present", "Absent", "Leave", "Holiday"], {
 		error: "Attendance status is required",
 	}),
-	hodName: z.string().optional(),
-	postedDepartment: z.string().optional(),
-	latitude: z.number().optional(),
-	longitude: z.number().optional(),
+	hodName: z.string().nullable().optional(),
+	postedDepartment: z.string().nullable().optional(),
+	latitude: z.number().nullable().optional(),
+	longitude: z.number().nullable().optional(),
 });
 
 export type DailyAttendanceInput = z.infer<typeof dailyAttendanceSchema>;

@@ -14,6 +14,7 @@ import {
 	Activity,
 	BookOpen,
 	Briefcase,
+	CalendarCheck,
 	Camera,
 	CheckSquare,
 	ClipboardList,
@@ -78,7 +79,8 @@ const MODULES: Module[] = [
 	{ key: "quality-improvement", label: "Quality Improvement", icon: TrendingUp, tone: TONES[0] },
 	{ key: "logbook-reviews", label: "Logbook Reviews", icon: CheckSquare, tone: TONES[1] },
 	{ key: "evaluation-graph", label: "My Evaluation Graph", icon: PieChart, tone: TONES[2] },
-	{ key: "rotation-postings", label: "Rotation Postings", icon: RefreshCw, tone: TONES[3] },
+	{ key: "attendance", label: "Attendance — Clinical Posting", icon: CalendarCheck, tone: TONES[3] },
+	{ key: "rotation-postings", label: "Rotation Postings", icon: RefreshCw, tone: TONES[4] },
 ];
 
 export default function LogbookScreen() {
@@ -141,6 +143,8 @@ export default function LogbookScreen() {
 			router.push("/(app)/logbook-reviews");
 		} else if (key === "evaluation-graph") {
 			router.push("/(app)/evaluation-graph");
+		} else if (key === "attendance") {
+			router.push("/(app)/attendance");
 		} else {
 			console.log(`Module ${key} not yet implemented`);
 		}

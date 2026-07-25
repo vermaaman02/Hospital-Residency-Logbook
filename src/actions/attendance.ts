@@ -11,7 +11,7 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
 	attendanceSheetSchema,
@@ -28,6 +28,8 @@ import {
 	recordSubmission,
 } from "@/lib/entry-revisions";
 
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
+
 const DAYS_OF_WEEK = [
 	"MONDAY",
 	"TUESDAY",
@@ -38,9 +40,13 @@ const DAYS_OF_WEEK = [
 	"SUNDAY",
 ] as const;
 
-/** Resolve the DB user from Clerk userId */
-async function resolveUser(clerkId: string) {
-	const user = await prisma.user.findUnique({ where: { clerkId } });
+/** Resolve the DB user from Clerk userId or Prisma ID */
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
 	if (!user) throw new Error("User not found in database");
 	return user;
 }
@@ -206,7 +212,7 @@ export async function toggleHoliday(data: {
 // ======================== STUDENT: CONFIG & HOLIDAYS ========================
 
 export async function getMyAttendanceConfig() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	if (!user.batchId) return null;
 	return prisma.attendanceConfig.findUnique({
@@ -215,7 +221,7 @@ export async function getMyAttendanceConfig() {
 }
 
 export async function getMyHolidays() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	return prisma.attendanceHoliday.findMany({
 		where:
@@ -271,21 +277,29 @@ function getDistanceInMeters(
  *  - Optionally checks geolocation within campus radius
  */
 export async function markDailyAttendance(data: DailyAttendanceInput) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const validated = dailyAttendanceSchema.parse(data);
 
 	// ===== Normalise dates for comparison =====
 	const now = new Date();
-	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 	const markDate = new Date(validated.date);
-	markDate.setHours(0, 0, 0, 0);
+	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-	// ===== VALIDATION: Students can only mark TODAY =====
-	if (markDate.getTime() !== todayStart.getTime()) {
-		throw new Error(
-			"You can only mark attendance for today. Past and future dates are not allowed.",
-		);
+	// Timezone-safe same calendar day comparison
+	const isSameCalendarDay =
+		now.getFullYear() === markDate.getFullYear() &&
+		now.getMonth() === markDate.getMonth() &&
+		now.getDate() === markDate.getDate();
+
+	if (!isSameCalendarDay) {
+		const diffMs = Math.abs(now.getTime() - markDate.getTime());
+		// Allow within a 24h grace window for timezone differences
+		if (diffMs > 24 * 60 * 60 * 1000) {
+			throw new Error(
+				"You can only mark attendance for today. Past and future dates are not allowed.",
+			);
+		}
 	}
 
 	// ===== VALIDATION: Only "Present" or "Leave" for students =====
@@ -716,7 +730,7 @@ export async function updateDailyEntry(
 	entryId: string,
 	data: { presentAbsent?: string; hodName?: string },
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.attendanceEntry.findUnique({
@@ -751,7 +765,7 @@ export async function updateDailyEntry(
 
 /** Delete a single entry (for removing a mistakenly marked day) */
 export async function deleteDailyEntry(entryId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.attendanceEntry.findUnique({
@@ -774,7 +788,7 @@ export async function deleteDailyEntry(entryId: string) {
 // ======================== STUDENT: SHEET CRUD ========================
 
 export async function createAttendanceSheet(data: AttendanceSheetInput) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const validated = attendanceSheetSchema.parse(data);
 
@@ -814,7 +828,7 @@ export async function updateAttendanceSheet(
 	sheetId: string,
 	data: AttendanceSheetInput,
 ) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 	const validated = attendanceSheetSchema.parse(data);
 
@@ -862,7 +876,7 @@ export async function updateAttendanceSheet(
 }
 
 export async function submitAttendanceSheet(sheetId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.attendanceSheet.findFirst({
@@ -910,7 +924,7 @@ export async function submitAttendanceSheet(sheetId: string) {
 }
 
 export async function retractAttendanceSheet(sheetId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.attendanceSheet.findFirst({
@@ -934,7 +948,7 @@ export async function retractAttendanceSheet(sheetId: string) {
 }
 
 export async function deleteAttendanceSheet(sheetId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const existing = await prisma.attendanceSheet.findFirst({
@@ -949,7 +963,7 @@ export async function deleteAttendanceSheet(sheetId: string) {
 }
 
 export async function getMyAttendanceSheets() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	return prisma.attendanceSheet.findMany({
@@ -962,7 +976,7 @@ export async function getMyAttendanceSheets() {
 // ======================== STUDENT: ANALYTICS ========================
 
 export async function getMyAttendanceAnalytics() {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	// Fetch all entries directly (daily-based)
@@ -1508,7 +1522,7 @@ export async function getBatchAttendanceSummary(batchId?: string) {
 
 /** Submit a single daily entry for review */
 export async function submitDailyEntry(entryId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.attendanceEntry.findUnique({
@@ -1553,7 +1567,7 @@ export async function submitDailyEntry(entryId: string) {
 
 /** Submit multiple daily entries for review at once */
 export async function submitMultipleDailyEntries(entryIds: string[]) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const autoReview = await isAutoReviewEnabled("attendance");
@@ -1596,7 +1610,7 @@ export async function submitMultipleDailyEntries(entryIds: string[]) {
 
 /** Retract a submitted daily entry back to draft */
 export async function retractDailyEntry(entryId: string) {
-	const clerkId = await requireAuth();
+	const clerkId = await requireAuthHybrid();
 	const user = await resolveUser(clerkId);
 
 	const entry = await prisma.attendanceEntry.findUnique({
@@ -1629,6 +1643,7 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 
 	const entry = await prisma.attendanceEntry.findUnique({
 		where: { id: entryId },
+		include: { attendanceSheet: { select: { userId: true } } },
 	});
 	if (!entry) throw new Error("Entry not found");
 	if (entry.status !== "SUBMITTED") throw new Error("Entry is not submitted");
@@ -1651,6 +1666,22 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 		},
 	});
 
+	await sendNotificationToUser(entry.attendanceSheet.userId, {
+		title: "Attendance",
+		body: `Your attendance entry for ${entry.date ? new Date(entry.date).toLocaleDateString("en-IN") : entry.day} has been signed.`,
+		type: "entry_signed",
+		entityType: "AttendanceEntry",
+		entityId: entryId,
+		href: "/dashboard/student/attendance",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.attendanceSheet.userId,
+		"Attendance Entry Signed",
+		`Your attendance entry for ${entry.date ? new Date(entry.date).toLocaleDateString("en-IN") : entry.day} has been signed off.`,
+		{ type: "entry_signed", entityType: "AttendanceEntry", entityId: entryId }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
+
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");
 	revalidatePath("/dashboard/student/attendance");
@@ -1660,14 +1691,12 @@ export async function signDailyEntry(entryId: string, remark?: string) {
 
 /** Faculty/HOD: Reject a single daily entry with remark */
 export async function rejectDailyEntry(entryId: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
-
+	const { userId } = await requireRole(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.attendanceEntry.findUnique({
 		where: { id: entryId },
+		include: { attendanceSheet: { select: { userId: true } } },
 	});
 	if (!entry) throw new Error("Entry not found");
 	if (entry.status !== "SUBMITTED") throw new Error("Entry is not submitted");
@@ -1676,6 +1705,22 @@ export async function rejectDailyEntry(entryId: string, remark: string) {
 		where: { id: entryId },
 		data: { status: "NEEDS_REVISION", facultyRemark: `[${user.firstName} ${user.lastName}] ${remark}` },
 	});
+
+	await sendNotificationToUser(entry.attendanceSheet.userId, {
+		title: "Attendance",
+		body: `Your attendance entry for ${entry.date ? new Date(entry.date).toLocaleDateString("en-IN") : entry.day} needs revision: ${remark}`,
+		type: "entry_needs_revision",
+		entityType: "AttendanceEntry",
+		entityId: entryId,
+		href: "/dashboard/student/attendance",
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.attendanceSheet.userId,
+		"Attendance Entry Needs Revision",
+		`Your attendance entry for ${entry.date ? new Date(entry.date).toLocaleDateString("en-IN") : entry.day} needs revision: ${remark}`,
+		{ type: "entry_rejected", entityType: "AttendanceEntry", entityId: entryId }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidatePath("/dashboard/faculty/attendance");
 	revalidatePath("/dashboard/hod/attendance");

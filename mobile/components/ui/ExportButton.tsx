@@ -37,7 +37,8 @@ interface ExportButtonProps {
 		| "research-activities"
 		| "disaster-drills"
 		| "quality-improvement"
-		| "logbook-reviews";
+		| "logbook-reviews"
+		| "attendance";
 	label?: string;
 	size?: "sm" | "md" | "lg";
 	extraParams?: Record<string, string>;
