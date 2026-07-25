@@ -4,6 +4,7 @@ import {
 	getMyDiagnosticSkillSummary,
 	getMyDiagnosticSkillEntries,
 	getDiagnosticSkillsForReview,
+	addDiagnosticSkillRow,
 	updateDiagnosticSkillEntry,
 	submitDiagnosticSkillEntry,
 	deleteDiagnosticSkillEntry,
@@ -48,6 +49,12 @@ export async function POST(req: NextRequest) {
 	try {
 		const body = await req.json();
 		const { action, id, category, data, remark, ids } = body;
+
+		if (action === "add" || action === "create") {
+			if (!category) return err("Missing category", 400);
+			const res = await addDiagnosticSkillRow(category, data?.skillName, data?.slNo);
+			return ok(res);
+		}
 
 		if (action === "update") {
 			if (!id || !data) return err("Missing id or data", 400);

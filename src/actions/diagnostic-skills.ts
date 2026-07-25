@@ -90,6 +90,119 @@ export async function createDiagnosticSkillEntry(data: DiagnosticSkillInput) {
 	return { success: true, entry };
 }
 
+export async function addDiagnosticSkillRow(
+	category: string,
+	skillName?: string,
+	requestedSlNo?: number,
+) {
+	const clerkId = await requireAuthHybrid();
+	const user = await resolveUser(clerkId);
+
+	// 1. Fetch predefined skills config for category
+	const configs = getSkillConfigs(category);
+
+	// 2. Fetch existing entries from database
+	const existingEntries = await prisma.diagnosticSkill.findMany({
+		where: {
+			userId: user.id,
+			diagnosticCategory: category as never,
+		},
+		orderBy: { slNo: "asc" },
+	});
+
+	const existingNames = new Set(existingEntries.map((e) => e.skillName.trim().toLowerCase()));
+
+	// 3. If user explicitly selected a skillName
+	if (skillName && skillName.trim()) {
+		const targetName = skillName.trim();
+		if (existingNames.has(targetName.toLowerCase())) {
+			throw new Error(`The skill "${targetName}" has already been added to your logbook.`);
+		}
+
+		// Find config for slNo matching targetName if present
+		const matchingCfg = configs.find(
+			(c) => c.name.trim().toLowerCase() === targetName.toLowerCase()
+		);
+		const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
+		const slNoToUse = requestedSlNo ?? matchingCfg?.slNo ?? (maxSlNo + 1);
+
+		const entry = await prisma.diagnosticSkill.create({
+			data: {
+				userId: user.id,
+				diagnosticCategory: category as never,
+				slNo: slNoToUse,
+				skillName: targetName,
+				status: "DRAFT" as never,
+			},
+		});
+
+		revalidate(category);
+		emitRealtimeEvent("entry:updated", { module: "diagnostics", category });
+		return {
+			success: true,
+			entry,
+			message: `Added skill: ${targetName}`,
+		};
+	}
+
+	// 4. Default fallback if no skillName provided
+	const existingSlNos = new Set(existingEntries.map((e) => e.slNo));
+	const uncreatedConfig = configs.find(
+		(cfg) => !existingSlNos.has(cfg.slNo) && !existingNames.has(cfg.name.trim().toLowerCase())
+	);
+
+	if (uncreatedConfig) {
+		const entry = await prisma.diagnosticSkill.create({
+			data: {
+				userId: user.id,
+				diagnosticCategory: category as never,
+				slNo: uncreatedConfig.slNo,
+				skillName: uncreatedConfig.name,
+				status: "DRAFT" as never,
+			},
+		});
+
+		revalidate(category);
+		emitRealtimeEvent("entry:updated", { module: "diagnostics", category });
+		return {
+			success: true,
+			entry,
+			message: `Initialized standard skill (${uncreatedConfig.slNo}/${configs.length}): ${uncreatedConfig.name}`,
+		};
+	}
+
+	// 5. Validate maximum limit (20 slots max)
+	const MAX_DIAGNOSTIC_SKILLS = 20;
+	if (existingEntries.length >= MAX_DIAGNOSTIC_SKILLS) {
+		throw new Error(
+			`All ${existingEntries.length} available diagnostic skill slots for this category have already been added to your logbook.`
+		);
+	}
+
+	// 6. If under max capacity, insert custom skill
+	const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
+	const nextSlNo = maxSlNo + 1;
+	const nameToUse = `Diagnostic Skill #${nextSlNo}`;
+
+	const entry = await prisma.diagnosticSkill.create({
+		data: {
+			userId: user.id,
+			diagnosticCategory: category as never,
+			slNo: nextSlNo,
+			skillName: nameToUse,
+			status: "DRAFT" as never,
+		},
+	});
+
+	revalidate(category);
+	emitRealtimeEvent("entry:updated", { module: "diagnostics", category });
+	return {
+		success: true,
+		entry,
+		message: `Added custom diagnostic skill #${nextSlNo}`,
+	};
+}
+
 // ─── Update ─────────────────────────────────────────────────
 
 export async function updateDiagnosticSkillEntry(

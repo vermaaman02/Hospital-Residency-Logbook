@@ -29,6 +29,10 @@ import { Colors, useThemeFonts } from "@/lib/theme";
 LogBox.ignoreLogs([
 	"Clerk: Clerk has been loaded with development keys",
 	"`new NativeEventEmitter()` was called with a non-null argument",
+	"TypeError: Cannot read property 'inst' of null",
+	"Warning: TypeError: Cannot read property 'inst' of null",
+	"ImagePicker.MediaTypeOptions",
+	"isUploadingImage",
 ]);
 
 /* ────────────────────────────────────────────────────── */

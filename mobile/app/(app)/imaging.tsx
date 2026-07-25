@@ -4,6 +4,7 @@ import {
 	Alert,
 	BackHandler,
 	FlatList,
+	Image,
 	Modal,
 	Pressable,
 	ScrollView,
@@ -16,11 +17,13 @@ import {
 	AlertTriangle,
 	ArrowLeft,
 	Calendar as CalendarIcon,
+	Camera,
 	CheckCircle2,
 	ChevronRight,
+	Image as ImageIcon,
 	Lock,
 	MapPin,
-	Maximize2,
+	Minus,
 	Plus,
 	User,
 	X,
@@ -48,15 +51,66 @@ import {
 	IMAGING_CATEGORIES,
 	ImagingCategoryConfig,
 } from "@/lib/constants/imaging-categories";
+import {
+	pickAndUploadImageToCloudinary,
+	captureAndUploadImageToCloudinary,
+} from "@/lib/utils/cloudinary";
 import { Colors, Radius, Spacing } from "@/lib/theme";
 
-const SKILL_LEVELS = [
-	{ label: "S", value: "S", description: "Simulation" },
-	{ label: "O", value: "O", description: "Observed" },
-	{ label: "A", value: "A", description: "Assisted" },
-	{ label: "PS", value: "PS", description: "Performed under Supervision" },
-	{ label: "PI", value: "PI", description: "Performed Independently" },
+export interface SkillLevelOption {
+	label: string;
+	value: "S" | "O" | "A" | "PS" | "PI";
+	description: string;
+	bgColor: string;
+	borderColor: string;
+	textColor: string;
+}
+
+export const SKILL_LEVEL_OPTIONS: SkillLevelOption[] = [
+	{
+		label: "S",
+		value: "S",
+		description: "Simulation",
+		bgColor: "#F1F5F9",
+		borderColor: "#94A3B8",
+		textColor: "#475569",
+	},
+	{
+		label: "O",
+		value: "O",
+		description: "Observed",
+		bgColor: "#E8F0FE",
+		borderColor: "#4285F4",
+		textColor: "#1A73E8",
+	},
+	{
+		label: "A",
+		value: "A",
+		description: "Assisted",
+		bgColor: "#EEF2FF",
+		borderColor: "#6366F1",
+		textColor: "#4338CA",
+	},
+	{
+		label: "PS",
+		value: "PS",
+		description: "Performed under Supervision",
+		bgColor: "#FEF3C7",
+		borderColor: "#F59E0B",
+		textColor: "#B45309",
+	},
+	{
+		label: "PI",
+		value: "PI",
+		description: "Performed Independently",
+		bgColor: "#D1FAE5",
+		borderColor: "#10B981",
+		textColor: "#047857",
+	},
 ];
+
+const LOCATION_OPTIONS = ["ER", "ICU", "OR", "Ward", "Radiology", "Trauma Bay", "OPD"];
+const SEX_OPTIONS = ["Male", "Female", "Other"];
 
 export default function ImagingScreen() {
 	const router = useRouter();
@@ -119,10 +173,10 @@ function ImagingOverviewGrid({
 						<Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
 							<ArrowLeft size={22} color={Colors.foreground} />
 						</Pressable>
-						<VStack style={{ flex: 1 }}>
+						<VStack style={{ flex: 1, minWidth: 0 }}>
 							<Heading level={2}>Imaging Logs</Heading>
-							<Text variant="muted">
-								Ultrasound, POCUS, X-Ray, CT Scan, and MRI imaging analysis
+							<Text variant="muted" numberOfLines={1}>
+								Ultrasound, POCUS, X-Ray, CT & MRI Analysis
 							</Text>
 						</VStack>
 					</HStack>
@@ -130,10 +184,10 @@ function ImagingOverviewGrid({
 					<Card variant="flat" style={styles.infoCard}>
 						<VStack gap="1">
 							<Text variant="bodyStrong" color={Colors.accent}>
-								Skill Progression Track
+								Skill Level Progression (S/O/A/PS/PI)
 							</Text>
 							<Text variant="bodySm" color={Colors.muted}>
-								Skill Levels: S (Simulation) → O (Observed) → A (Assisted) → PS (Performed Supervised) → PI (Performed Independently)
+								Log imaging studies across 5 levels: S (Simulation), O (Observed), A (Assisted), PS (Performed under Supervision), PI (Performed Independently).
 							</Text>
 						</VStack>
 					</Card>
@@ -152,23 +206,20 @@ function ImagingOverviewGrid({
 						<VStack gap="2">
 							<HStack align="center" justify="space-between">
 								<HStack align="center" gap="2">
-									<IconBubble icon={<Maximize2 size={18} color={Colors.surface} />} tone="sky" size={32} />
-									<Badge label={item.code} tone="neutral" />
+									<IconBubble icon={<ImageIcon size={18} color={Colors.surface} />} tone="accent" size={32} />
+									<Badge label={`Code ${item.code} • Max ${item.maxEntries}`} tone="neutral" />
 								</HStack>
 								<ChevronRight size={20} color={Colors.mutedSoft} />
 							</HStack>
 
 							<VStack gap="1">
 								<Heading level={3}>{item.label}</Heading>
-								<Text variant="bodySm" color={Colors.muted}>
-									{filledCount} of {item.maxEntries} entries
-								</Text>
 							</VStack>
 
 							<VStack gap="1">
 								<HStack align="center" justify="space-between">
 									<Text variant="bodySm">
-										{filledCount} / {item.maxEntries} logged
+										{filledCount} of {item.maxEntries} entries logged
 									</Text>
 									<Text variant="bodySm" color={Colors.accent}>
 										{progressPercent}%
@@ -235,14 +286,25 @@ function ImagingCategoryDetailView({
 
 	const handleAddRow = async () => {
 		if (entries.length >= category.maxEntries) {
-			Alert.alert("Capacity Reached", `Maximum limit of ${category.maxEntries} entries reached for this category.`);
+			Alert.alert(
+				"Capacity Reached",
+				`All ${category.maxEntries} entry rows for ${category.label} have already been added to your logbook.`
+			);
 			return;
 		}
 		try {
-			await addRow(category.enumValue);
+			const newEntry = await addRow(category.enumValue);
 			refetchEntries();
+			if (newEntry) {
+				setEditingEntry(newEntry);
+			}
 		} catch (e: any) {
-			Alert.alert("Error", e.message || "Failed to add new imaging row.");
+			const msg =
+				e?.response?.data?.error ||
+				e?.response?.data?.message ||
+				e?.message ||
+				`All ${category.maxEntries} entry rows for ${category.label} have already been added to your logbook.`;
+			Alert.alert("Notice", msg);
 		}
 	};
 
@@ -269,6 +331,8 @@ function ImagingCategoryDetailView({
 									procedureDescription: null,
 									performedAtLocation: null,
 									skillLevel: null,
+									totalProcedureTally: 0,
+									imageUrls: [],
 									facultyId: null,
 								},
 							});
@@ -326,26 +390,29 @@ function ImagingCategoryDetailView({
 
 	return (
 		<View style={styles.detailContainer}>
+			{/* Top Header */}
 			<View style={styles.subViewHeader}>
 				<HStack align="center" justify="space-between">
-					<HStack align="center" gap="2" style={{ flex: 1 }}>
+					<HStack align="center" gap="2" style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
 						<Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
 							<ArrowLeft size={22} color={Colors.foreground} />
 						</Pressable>
-						<VStack style={{ flex: 1 }}>
+						<VStack style={{ flex: 1, minWidth: 0 }}>
 							<Heading level={3} numberOfLines={1}>
 								{category.label}
 							</Heading>
-							<Text variant="muted">
-								{category.maxEntries} max slots — tap row to edit
+							<Text variant="muted" numberOfLines={1}>
+								{entries.length} of {category.maxEntries} entries — tap to edit
 							</Text>
 						</VStack>
 					</HStack>
 
-					<ExportButton
-						module="imaging"
-						extraParams={{ category: category.enumValue }}
-					/>
+					<View style={{ flexShrink: 0 }}>
+						<ExportButton
+							module="imaging"
+							extraParams={{ category: category.enumValue }}
+						/>
+					</View>
 				</HStack>
 			</View>
 
@@ -360,43 +427,44 @@ function ImagingCategoryDetailView({
 					contentContainerStyle={styles.listContainer}
 					ListHeaderComponent={
 						<Card variant="flat" style={styles.progressSummaryCard}>
-							<HStack align="center" justify="space-between">
-								<VStack gap="1">
-									<Heading level={3} numberOfLines={1}>
-										{category.label}
-									</Heading>
-									<Text variant="muted">
-										{signedCount} of {category.maxEntries} entries signed off
-									</Text>
-								</VStack>
+							<VStack gap="2">
+								<HStack align="center" justify="space-between">
+									<VStack gap="1" style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+										<Heading level={3} numberOfLines={1}>{category.label}</Heading>
+										<Text variant="muted">
+											{signedCount} of {entries.length} entries signed off
+										</Text>
+									</VStack>
 
-								<HStack align="center" gap="2">
-									<Badge label={`${entries.length}/${category.maxEntries}`} tone="accent" />
-									{userRole === "student" && entries.length < category.maxEntries && (
-										<Button
-											label="Add Row"
-											variant="primary"
-											size="sm"
-											onPress={handleAddRow}
-											loading={isAddingRow}
-										/>
-									)}
+									<HStack align="center" gap="2" style={{ flexShrink: 0 }}>
+										<Badge label={`${filledCount}/${entries.length}`} tone="accent" />
+										{userRole === "student" && (
+											<Button
+												label="+ Add Row"
+												variant="primary"
+												size="sm"
+												onPress={handleAddRow}
+												loading={isAddingRow}
+											/>
+										)}
+									</HStack>
 								</HStack>
-							</HStack>
 
-							<View style={[styles.trackBackground, { marginTop: 12 }]}>
-								<View
-									style={[
-										styles.trackFill,
-										{ width: `${(signedCount / category.maxEntries) * 100}%` },
-									]}
-								/>
-							</View>
+								<View style={styles.trackBackground}>
+									<View
+										style={[
+											styles.trackFill,
+											{ width: `${entries.length > 0 ? (signedCount / entries.length) * 100 : 0}%` },
+										]}
+									/>
+								</View>
+							</VStack>
 						</Card>
 					}
 					renderItem={({ item }) => (
 						<ImagingLogCard
 							entry={item}
+							categoryLabel={category.label}
 							userRole={userRole}
 							onEdit={() => setEditingEntry(item)}
 							onClear={() => handleClearDraft(item)}
@@ -412,7 +480,7 @@ function ImagingCategoryDetailView({
 			{editingEntry && (
 				<ImagingLogEditModal
 					entry={editingEntry}
-					categoryLabel={category.label}
+					category={category}
 					facultyList={summary?.faculty || []}
 					visible={Boolean(editingEntry)}
 					onClose={() => setEditingEntry(null)}
@@ -431,7 +499,7 @@ function ImagingCategoryDetailView({
 							<VStack gap="3">
 								<Heading level={3}>Request Revision</Heading>
 								<Text variant="muted">
-									Specify revision details for Sl No: {rejectionModalEntry.slNo}.
+									Specify revision details for entry Sl No: {rejectionModalEntry.slNo}.
 								</Text>
 								<Input
 									placeholder="Enter faculty feedback/remark..."
@@ -461,6 +529,7 @@ function ImagingCategoryDetailView({
 
 function ImagingLogCard({
 	entry,
+	categoryLabel,
 	userRole,
 	onEdit,
 	onClear,
@@ -470,6 +539,7 @@ function ImagingLogCard({
 	isSubmitting,
 }: {
 	entry: ImagingLogEntry;
+	categoryLabel: string;
 	userRole: "student" | "review";
 	onEdit: () => void;
 	onClear: () => void;
@@ -487,31 +557,28 @@ function ImagingLogCard({
 			? "needsRevision"
 			: "draft";
 
-	const formattedDate = entry.date ? new Date(entry.date).toLocaleDateString() : "No date";
-	const patientInfo = [
-		entry.patientName,
-		entry.patientAge ? `${entry.patientAge}y` : null,
-		entry.patientSex,
-		entry.uhid ? `UHID: ${entry.uhid}` : null,
-	]
-		.filter(Boolean)
-		.join(" / ");
+	const levelConfig = SKILL_LEVEL_OPTIONS.find((s) => s.value === entry.skillLevel);
 
 	return (
 		<Card variant="default" style={styles.entryCard}>
 			<VStack gap="2">
-				<HStack align="center" justify="space-between">
-					<HStack align="center" gap="2">
-						<Badge label={`Sl ${entry.slNo}`} tone="neutral" />
-						{entry.skillLevel ? (
-							<Badge label={entry.skillLevel} tone="accent" />
-						) : (
-							<Badge label="Unset" tone="neutral" />
-						)}
+				{/* Header */}
+				<HStack align="center" justify="space-between" style={{ width: "100%" }}>
+					<HStack align="center" gap="2" style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+						<View style={{ flexShrink: 0 }}>
+							<Badge label={`SL ${entry.slNo}`} tone="neutral" />
+						</View>
+						<Heading level={4} numberOfLines={1} style={{ flex: 1, flexShrink: 1 }}>
+							{entry.patientName || `${categoryLabel} #${entry.slNo}`}
+						</Heading>
 					</HStack>
-					<Badge label={entry.status} tone={tone} />
+
+					<View style={{ flexShrink: 0 }}>
+						<Badge label={entry.status} tone={tone} />
+					</View>
 				</HStack>
 
+				{/* Rejection Banner */}
 				{entry.status === "NEEDS_REVISION" && entry.facultyRemark && (
 					<View style={styles.rejectionBanner}>
 						<AlertTriangle size={14} color={Colors.warningForeground} />
@@ -521,29 +588,62 @@ function ImagingLogCard({
 					</View>
 				)}
 
+				{/* Details Box */}
 				<VStack gap="1" style={styles.entryFieldsBox}>
 					<HStack align="center" justify="space-between">
-						<HStack align="center" gap="1">
-							<CalendarIcon size={12} color={Colors.mutedSoft} />
-							<Text variant="muted">{formattedDate}</Text>
+						<Text variant="muted">Date:</Text>
+						<Text variant="bodyStrong">
+							{entry.date ? new Date(entry.date).toLocaleDateString() : "Not set"}
+						</Text>
+					</HStack>
+
+					{(entry.patientName || entry.patientAge || entry.patientSex || entry.uhid) && (
+						<HStack align="center" justify="space-between">
+							<Text variant="muted">Patient Info:</Text>
+							<Text variant="bodySm" style={{ fontWeight: "600" }}>
+								{[
+									entry.patientName,
+									entry.patientAge ? `${entry.patientAge}y` : null,
+									entry.patientSex,
+									entry.uhid ? `UHID: ${entry.uhid}` : null,
+								]
+									.filter(Boolean)
+									.join(" | ")}
+							</Text>
 						</HStack>
-						{entry.performedAtLocation && (
-							<HStack align="center" gap="1">
-								<MapPin size={12} color={Colors.mutedSoft} />
-								<Text variant="bodyStrong">{entry.performedAtLocation}</Text>
-							</HStack>
+					)}
+
+					<HStack align="center" justify="space-between">
+						<Text variant="muted">Skill Level (S/O/A/PS/PI):</Text>
+						{levelConfig ? (
+							<View
+								style={[
+									styles.dynamicLevelBadge,
+									{
+										backgroundColor: levelConfig.bgColor,
+										borderColor: levelConfig.borderColor,
+									},
+								]}
+							>
+								<Text
+									variant="bodySm"
+									style={{ color: levelConfig.textColor, fontWeight: "600" }}
+								>
+									{levelConfig.value} — {levelConfig.description}
+								</Text>
+							</View>
+						) : (
+							<Text variant="muted" style={{ fontStyle: "italic" }}>
+								Not selected
+							</Text>
 						)}
 					</HStack>
 
-					{patientInfo ? (
-						<HStack align="center" gap="2">
-							<User size={12} color={Colors.mutedSoft} />
-							<Text variant="bodyStrong">{patientInfo}</Text>
+					{entry.performedAtLocation && (
+						<HStack align="center" justify="space-between">
+							<Text variant="muted">Location:</Text>
+							<Badge label={entry.performedAtLocation} tone="neutral" />
 						</HStack>
-					) : (
-						<Text variant="muted" style={{ fontStyle: "italic" }}>
-							No patient info recorded
-						</Text>
 					)}
 
 					{entry.completeDiagnosis && (
@@ -557,14 +657,37 @@ function ImagingLogCard({
 
 					{entry.procedureDescription && (
 						<VStack gap="1">
-							<Text variant="muted">Imaging Type / Findings:</Text>
-							<Text variant="bodySm" style={styles.diagnosisText}>
-								{entry.procedureDescription}
+							<Text variant="muted">Procedure / Findings:</Text>
+							<Text variant="bodySm">{entry.procedureDescription}</Text>
+						</VStack>
+					)}
+
+					{(entry.totalProcedureTally ?? entry.totalImagingTally ?? 0) > 0 && (
+						<HStack align="center" justify="space-between">
+							<Text variant="muted">Total Tally:</Text>
+							<Text variant="bodyStrong">
+								{entry.totalProcedureTally ?? entry.totalImagingTally} times
 							</Text>
+						</HStack>
+					)}
+
+					{/* Clinical Scan Image Thumbnails Preview */}
+					{entry.imageUrls && entry.imageUrls.length > 0 && (
+						<VStack gap="1" style={{ marginTop: 4 }}>
+							<HStack align="center" gap="1">
+								<ImageIcon size={12} color={Colors.mutedSoft} />
+								<Text variant="muted">Attached Scans ({entry.imageUrls.length}):</Text>
+							</HStack>
+							<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+								{entry.imageUrls.map((url, idx) => (
+									<Image key={idx} source={{ uri: url }} style={styles.cardImageThumbnail} />
+								))}
+							</ScrollView>
 						</VStack>
 					)}
 				</VStack>
 
+				{/* Card Actions Footer */}
 				<HStack justify="flex-end" gap="2" style={styles.cardFooter}>
 					{userRole === "student" && (
 						<>
@@ -598,48 +721,105 @@ function ImagingLogCard({
 
 function ImagingLogEditModal({
 	entry,
-	categoryLabel,
+	category,
 	facultyList,
 	visible,
 	onClose,
 	onSave,
 }: {
 	entry: ImagingLogEntry;
-	categoryLabel: string;
+	category: ImagingCategoryConfig;
 	facultyList: Array<{ id: string; firstName: string; lastName: string }>;
 	visible: boolean;
 	onClose: () => void;
 	onSave: (data: any) => Promise<void>;
 }) {
-	const [selectedDate, setSelectedDate] = useState<Date>(
-		entry.date ? new Date(entry.date) : new Date()
-	);
+	const [date, setDate] = useState<Date>(entry.date ? new Date(entry.date) : new Date());
 	const [showDatePicker, setShowDatePicker] = useState(false);
 	const [patientName, setPatientName] = useState(entry.patientName || "");
 	const [patientAge, setPatientAge] = useState(entry.patientAge?.toString() || "");
-	const [patientSex, setPatientSex] = useState(entry.patientSex || "");
+	const [patientSex, setPatientSex] = useState(entry.patientSex || "Male");
 	const [uhid, setUhid] = useState(entry.uhid || "");
 	const [completeDiagnosis, setCompleteDiagnosis] = useState(entry.completeDiagnosis || "");
 	const [procedureDescription, setProcedureDescription] = useState(entry.procedureDescription || "");
-	const [performedAtLocation, setPerformedAtLocation] = useState(entry.performedAtLocation || "");
+	const [performedAtLocation, setPerformedAtLocation] = useState(entry.performedAtLocation || "ER");
 	const [skillLevel, setSkillLevel] = useState<string | null>(entry.skillLevel);
+	const [tallyCount, setTallyCount] = useState<number>(entry.totalProcedureTally ?? entry.totalImagingTally ?? 0);
+	const [imageUrls, setImageUrls] = useState<string[]>(entry.imageUrls || []);
+	const [newImageUrl, setNewImageUrl] = useState("");
+	const [showAddImageInput, setShowAddImageInput] = useState(false);
+	const [isUploadingImage, setIsUploadingImage] = useState(false);
 	const [facultyId, setFacultyId] = useState<string | null>(entry.facultyId);
 	const [saving, setSaving] = useState(false);
+
+	const handlePickGallery = async () => {
+		if (imageUrls.length >= 3) {
+			Alert.alert("Limit Reached", "Maximum 3 scan photos allowed per imaging log.");
+			return;
+		}
+		try {
+			setIsUploadingImage(true);
+			const url = await pickAndUploadImageToCloudinary("imaging");
+			if (url) {
+				setImageUrls((prev) => [...prev, url]);
+			}
+		} catch (e: any) {
+			Alert.alert("Upload Error", e.message || "Failed to upload image to Cloudinary.");
+		} finally {
+			setIsUploadingImage(false);
+		}
+	};
+
+	const handleCaptureCamera = async () => {
+		if (imageUrls.length >= 3) {
+			Alert.alert("Limit Reached", "Maximum 3 scan photos allowed per imaging log.");
+			return;
+		}
+		try {
+			setIsUploadingImage(true);
+			const url = await captureAndUploadImageToCloudinary("imaging");
+			if (url) {
+				setImageUrls((prev) => [...prev, url]);
+			}
+		} catch (e: any) {
+			Alert.alert("Upload Error", e.message || "Failed to capture photo to Cloudinary.");
+		} finally {
+			setIsUploadingImage(false);
+		}
+	};
+
+	const handleAddImageUrl = () => {
+		if (!newImageUrl.trim()) return;
+		if (imageUrls.length >= 3) {
+			Alert.alert("Limit Reached", "Maximum 3 scan photos allowed per imaging log.");
+			return;
+		}
+		setImageUrls([...imageUrls, newImageUrl.trim()]);
+		setNewImageUrl("");
+		setShowAddImageInput(false);
+	};
+
+	const handleRemoveImage = (index: number) => {
+		setImageUrls(imageUrls.filter((_, idx) => idx !== index));
+	};
 
 	const handleSave = async () => {
 		try {
 			setSaving(true);
 			await onSave({
-				date: selectedDate.toISOString(),
+				date: date.toISOString(),
 				patientName: patientName.trim() || null,
-				patientAge: patientAge ? parseInt(patientAge, 10) : null,
-				patientSex: patientSex.trim() || null,
+				patientAge: parseInt(patientAge, 10) || null,
+				patientSex,
 				uhid: uhid.trim() || null,
 				completeDiagnosis: completeDiagnosis.trim() || null,
 				procedureDescription: procedureDescription.trim() || null,
-				performedAtLocation: performedAtLocation.trim() || null,
+				performedAtLocation,
 				skillLevel,
+				totalProcedureTally: tallyCount,
+				imageUrls,
 				facultyId,
+				imagingCategory: category.enumValue,
 			});
 		} catch (e: any) {
 			Alert.alert("Save Error", e.message || "Failed to save imaging log entry");
@@ -652,57 +832,117 @@ function ImagingLogEditModal({
 		<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
 			<View style={styles.modalBackdrop}>
 				<View style={styles.editModalContent}>
+					{/* Header */}
 					<HStack align="center" justify="space-between" style={styles.editModalHeader}>
-						<VStack style={{ flex: 1 }}>
-							<Text variant="muted">Edit Imaging Entry — Sl {entry.slNo}</Text>
-							<HStack align="center" gap="1">
-								<Lock size={14} color={Colors.foreground} />
-								<Heading level={3} numberOfLines={1}>
-									{categoryLabel}
-								</Heading>
-							</HStack>
+						<VStack style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+							<Text variant="muted">Edit Imaging Log — Sl {entry.slNo}</Text>
+							<Heading level={3} numberOfLines={1}>
+								{category.label}
+							</Heading>
 						</VStack>
 						<Pressable onPress={onClose} hitSlop={8}>
 							<X size={20} color={Colors.mutedSoft} />
 						</Pressable>
 					</HStack>
 
-					<ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 14, paddingBottom: 10 }}>
+					<ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ gap: 16, paddingBottom: 10 }}>
+						{/* 1. Date Picker */}
 						<VStack gap="1">
-							<Text variant="bodyStrong">Log Date</Text>
+							<Text variant="bodyStrong">Investigation Date</Text>
 							<Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
-								<CalendarIcon size={16} color={Colors.foreground} />
-								<Text variant="bodySm">{selectedDate.toLocaleDateString()}</Text>
+								<CalendarIcon size={16} color={Colors.accent} />
+								<Text variant="bodySm" color={Colors.foreground}>
+									{date.toLocaleDateString()}
+								</Text>
 							</Pressable>
 							{showDatePicker && (
 								<DateTimePicker
-									value={selectedDate}
+									value={date}
 									mode="date"
 									display="default"
-									onChange={(event, date) => {
+									onChange={(_, selectedDate) => {
 										setShowDatePicker(false);
-										if (date) setSelectedDate(date);
+										if (selectedDate) setDate(selectedDate);
 									}}
 								/>
 							)}
 						</VStack>
 
-						<VStack gap="1">
-							<Text variant="bodyStrong">Skill Progression Level</Text>
+						{/* 2. Patient Info Inputs */}
+						<VStack gap="2">
+							<Text variant="bodyStrong">Patient Information</Text>
+							<Input
+								label="Patient Name"
+								placeholder="Enter patient full name..."
+								value={patientName}
+								onChangeText={setPatientName}
+							/>
+
+							<HStack gap="2">
+								<Input
+									label="Age (Years)"
+									placeholder="e.g. 45"
+									keyboardType="numeric"
+									value={patientAge}
+									onChangeText={setPatientAge}
+									style={{ flex: 1 }}
+								/>
+								<Input
+									label="UHID / Reg No"
+									placeholder="Hospital UHID"
+									value={uhid}
+									onChangeText={setUhid}
+									style={{ flex: 1 }}
+								/>
+							</HStack>
+
+							<VStack gap="1">
+								<Text variant="bodySm" color={Colors.muted}>Patient Sex</Text>
+								<HStack gap="2">
+									{SEX_OPTIONS.map((s) => {
+										const isSelected = patientSex === s;
+										return (
+											<Pressable
+												key={s}
+												onPress={() => setPatientSex(s)}
+												style={[styles.sexChip, isSelected && styles.sexChipSelected]}
+											>
+												<Text variant="bodySm" color={isSelected ? Colors.accent : Colors.foreground}>
+													{s}
+												</Text>
+											</Pressable>
+										);
+									})}
+								</HStack>
+							</VStack>
+						</VStack>
+
+						{/* 3. Skill Level (S/O/A/PS/PI) — Dynamic Colors */}
+						<VStack gap="2">
+							<Text variant="bodyStrong">Skill Level (S / O / A / PS / PI)</Text>
 							<HStack gap="2" style={{ flexWrap: "wrap" }}>
-								{SKILL_LEVELS.map((s) => {
-									const isSelected = skillLevel === s.value;
+								{SKILL_LEVEL_OPTIONS.map((lvl) => {
+									const isSelected = skillLevel === lvl.value;
 									return (
 										<Pressable
-											key={s.value}
-											onPress={() => setSkillLevel(s.value)}
+											key={lvl.value}
+											onPress={() => setSkillLevel(lvl.value)}
 											style={[
-												styles.choiceChip,
-												isSelected && styles.choiceChipSelected,
+												styles.dynamicChoiceChip,
+												{
+													backgroundColor: isSelected ? lvl.bgColor : Colors.surface,
+													borderColor: isSelected ? lvl.borderColor : Colors.mutedSoft,
+												},
 											]}
 										>
-											<Text variant="bodySm" color={isSelected ? Colors.accent : Colors.foreground}>
-												{s.value} ({s.description})
+											<Text
+												variant="bodySm"
+												style={{
+													color: isSelected ? lvl.textColor : Colors.foreground,
+													fontWeight: isSelected ? "700" : "400",
+												}}
+											>
+												{lvl.value} ({lvl.description})
 											</Text>
 										</Pressable>
 									);
@@ -710,64 +950,155 @@ function ImagingLogEditModal({
 							</HStack>
 						</VStack>
 
-						<Input
-							label="Patient Name"
-							placeholder="Enter patient name..."
-							value={patientName}
-							onChangeText={setPatientName}
-						/>
-
-						<HStack gap="2">
-							<Input
-								label="Age"
-								placeholder="e.g. 45"
-								keyboardType="numeric"
-								value={patientAge}
-								onChangeText={setPatientAge}
-								style={{ flex: 1 }}
-							/>
-							<Input
-								label="Sex"
-								placeholder="M / F / Other"
-								value={patientSex}
-								onChangeText={setPatientSex}
-								style={{ flex: 1 }}
-							/>
-							<Input
-								label="UHID"
-								placeholder="Hospital ID"
-								value={uhid}
-								onChangeText={setUhid}
-								style={{ flex: 1 }}
-							/>
-						</HStack>
-
+						{/* 4. Complete Diagnosis */}
 						<Input
 							label="Complete Diagnosis"
-							placeholder="Enter diagnosis..."
+							placeholder="Enter complete clinical diagnosis..."
 							value={completeDiagnosis}
 							onChangeText={setCompleteDiagnosis}
 							multiline
-							numberOfLines={2}
+							numberOfLines={3}
 						/>
 
+						{/* 5. Procedure / Imaging Description */}
 						<Input
-							label="Imaging Type / Key Findings"
+							label="Procedure / Imaging Findings"
 							placeholder="Describe ultrasound / X-ray / CT / MRI findings..."
 							value={procedureDescription}
 							onChangeText={setProcedureDescription}
 							multiline
-							numberOfLines={2}
+							numberOfLines={3}
 						/>
 
-						<Input
-							label="Performed Location"
-							placeholder="e.g. ER, Trauma Bay, ICU, OT"
-							value={performedAtLocation}
-							onChangeText={setPerformedAtLocation}
-						/>
+						{/* 6. Performed Location (Dynamic Input + Preset Chips) */}
+						<VStack gap="2">
+							<Input
+								label="Performed Location"
+								placeholder="e.g. ER, ICU, Trauma Bay, Ward 4B, Radiology..."
+								value={performedAtLocation}
+								onChangeText={setPerformedAtLocation}
+							/>
+							<VStack gap="1">
+								<Text variant="bodySm" color={Colors.muted}>Quick Location Presets:</Text>
+								<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+									{LOCATION_OPTIONS.map((loc) => {
+										const isSelected = performedAtLocation?.trim() === loc;
+										return (
+											<Pressable
+												key={loc}
+												onPress={() => setPerformedAtLocation(loc)}
+												style={[styles.locationChip, isSelected && styles.locationChipSelected]}
+											>
+												<MapPin size={12} color={isSelected ? Colors.surface : Colors.foreground} />
+												<Text variant="bodySm" color={isSelected ? Colors.surface : Colors.foreground}>
+													{loc}
+												</Text>
+											</Pressable>
+										);
+									})}
+								</ScrollView>
+							</VStack>
+						</VStack>
 
-						<VStack gap="1">
+						{/* 7. Total Procedure Tally Stepper */}
+						<VStack gap="2">
+							<Text variant="bodyStrong">Total Procedures Performed (Tally)</Text>
+							<HStack align="center" gap="3">
+								<Pressable
+									style={styles.stepperBtn}
+									onPress={() => setTallyCount(Math.max(0, tallyCount - 1))}
+								>
+									<Minus size={16} color={Colors.foreground} />
+								</Pressable>
+								<Input
+									value={tallyCount.toString()}
+									onChangeText={(val) => setTallyCount(parseInt(val, 10) || 0)}
+									keyboardType="numeric"
+									style={styles.stepperInput}
+								/>
+								<Pressable
+									style={styles.stepperBtn}
+									onPress={() => setTallyCount(tallyCount + 1)}
+								>
+									<Plus size={16} color={Colors.foreground} />
+								</Pressable>
+							</HStack>
+						</VStack>
+
+						{/* 8. Clinical Scan Photo Attachments */}
+						<VStack gap="2">
+							<HStack align="center" justify="space-between">
+								<Text variant="bodyStrong">Clinical Scan Photos / Reports</Text>
+								<Badge label={`${imageUrls.length}/3 files`} tone="neutral" />
+							</HStack>
+
+							{imageUrls.length > 0 && (
+								<HStack gap="2" style={{ flexWrap: "wrap" }}>
+									{imageUrls.map((url, idx) => (
+										<View key={idx} style={styles.imagePreviewWrapper}>
+											<Image source={{ uri: url }} style={styles.imagePreview} />
+											<Pressable
+												style={styles.removeImageBtn}
+												onPress={() => handleRemoveImage(idx)}
+												hitSlop={6}
+											>
+												<X size={12} color={Colors.surface} />
+											</Pressable>
+										</View>
+									))}
+								</HStack>
+							)}
+
+							{isUploadingImage ? (
+								<HStack align="center" justify="center" gap="2" style={styles.uploadingBox}>
+									<ActivityIndicator size="small" color={Colors.accent} />
+									<Text variant="bodySm" color={Colors.accent}>
+										Uploading scan image to Cloudinary...
+									</Text>
+								</HStack>
+							) : showAddImageInput ? (
+								<VStack gap="2" style={styles.addImageBox}>
+									<Input
+										placeholder="Enter Image / Scan URL..."
+										value={newImageUrl}
+										onChangeText={setNewImageUrl}
+									/>
+									<HStack justify="flex-end" gap="2">
+										<Button label="Cancel" variant="ghost" size="sm" onPress={() => setShowAddImageInput(false)} />
+										<Button label="Attach URL" variant="primary" size="sm" onPress={handleAddImageUrl} />
+									</HStack>
+								</VStack>
+							) : (
+								imageUrls.length < 3 && (
+									<VStack gap="2">
+										<HStack gap="2">
+											<Pressable style={[styles.uploadDashedBox, { flex: 1 }]} onPress={handleCaptureCamera}>
+												<Camera size={18} color={Colors.accent} />
+												<Text variant="bodySm" color={Colors.accent} style={{ fontWeight: "600" }}>
+													Take Photo
+												</Text>
+											</Pressable>
+
+											<Pressable style={[styles.uploadDashedBox, { flex: 1 }]} onPress={handlePickGallery}>
+												<ImageIcon size={18} color={Colors.accent} />
+												<Text variant="bodySm" color={Colors.accent} style={{ fontWeight: "600" }}>
+													Choose Gallery
+												</Text>
+											</Pressable>
+										</HStack>
+
+										<Pressable onPress={() => setShowAddImageInput(true)} style={{ alignSelf: "center", marginTop: 2 }}>
+											<Text variant="bodySm" color={Colors.muted} style={{ textDecorationLine: "underline" }}>
+												Or paste direct scan image URL
+											</Text>
+										</Pressable>
+									</VStack>
+								)
+							)}
+						</VStack>
+
+						{/* 9. Supervising Faculty Selection */}
+						<VStack gap="2">
 							<Text variant="bodyStrong">Supervising Faculty</Text>
 							<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
 								{facultyList.map((f) => {
@@ -789,6 +1120,7 @@ function ImagingLogEditModal({
 						</VStack>
 					</ScrollView>
 
+					{/* Actions Footer */}
 					<HStack justify="flex-end" gap="2" style={styles.editModalFooter}>
 						<Button label="Cancel" variant="ghost" size="sm" onPress={onClose} />
 						<Button label="Save Entry" variant="primary" size="sm" onPress={handleSave} loading={saving} />
@@ -862,6 +1194,7 @@ const styles = StyleSheet.create({
 	entryCard: {
 		padding: Spacing["4"],
 		backgroundColor: Colors.surface,
+		marginVertical: 2,
 	},
 	rejectionBanner: {
 		flexDirection: "row",
@@ -876,9 +1209,22 @@ const styles = StyleSheet.create({
 		padding: Spacing["3"],
 		borderRadius: Radius.md,
 	},
+	dynamicLevelBadge: {
+		paddingHorizontal: Spacing["2"],
+		paddingVertical: 4,
+		borderRadius: Radius.md,
+		borderWidth: 1,
+	},
 	diagnosisText: {
 		color: Colors.foreground,
 		fontStyle: "italic",
+	},
+	cardImageThumbnail: {
+		width: 48,
+		height: 48,
+		borderRadius: Radius.md,
+		borderWidth: 1,
+		borderColor: Colors.border,
 	},
 	cardFooter: {
 		marginTop: Spacing["2"],
@@ -916,7 +1262,7 @@ const styles = StyleSheet.create({
 		borderColor: Colors.mutedSoft,
 		backgroundColor: Colors.surface,
 	},
-	choiceChip: {
+	sexChip: {
 		paddingHorizontal: Spacing["3"],
 		paddingVertical: 6,
 		borderRadius: Radius.md,
@@ -924,9 +1270,86 @@ const styles = StyleSheet.create({
 		borderColor: Colors.mutedSoft,
 		backgroundColor: Colors.surface,
 	},
-	choiceChipSelected: {
+	sexChipSelected: {
 		borderColor: Colors.accent,
 		backgroundColor: Colors.accent + "15",
+	},
+	dynamicChoiceChip: {
+		paddingHorizontal: Spacing["3"],
+		paddingVertical: 8,
+		borderRadius: Radius.md,
+		borderWidth: 1,
+	},
+	locationChip: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 4,
+		paddingHorizontal: Spacing["3"],
+		paddingVertical: 6,
+		borderRadius: Radius.pill,
+		borderWidth: 1,
+		borderColor: Colors.mutedSoft,
+		backgroundColor: Colors.surface,
+	},
+	locationChipSelected: {
+		backgroundColor: Colors.foreground,
+		borderColor: Colors.foreground,
+	},
+	stepperBtn: {
+		width: 38,
+		height: 38,
+		borderRadius: Radius.md,
+		backgroundColor: Colors.surfaceMuted,
+		borderWidth: 1,
+		borderColor: Colors.border,
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	stepperInput: {
+		width: 70,
+		textAlign: "center",
+	},
+	uploadDashedBox: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: 8,
+		padding: Spacing["3"],
+		borderRadius: Radius.lg,
+		borderWidth: 1.5,
+		borderStyle: "dashed",
+		borderColor: Colors.accent,
+		backgroundColor: Colors.accent + "0D",
+	},
+	addImageBox: {
+		backgroundColor: Colors.surfaceMuted,
+		padding: Spacing["3"],
+		borderRadius: Radius.md,
+	},
+	uploadingBox: {
+		backgroundColor: Colors.accent + "15",
+		padding: Spacing["3"],
+		borderRadius: Radius.lg,
+		borderWidth: 1,
+		borderColor: Colors.accent + "40",
+	},
+	imagePreviewWrapper: {
+		position: "relative",
+	},
+	imagePreview: {
+		width: 60,
+		height: 60,
+		borderRadius: Radius.md,
+		borderWidth: 1,
+		borderColor: Colors.border,
+	},
+	removeImageBtn: {
+		position: "absolute",
+		top: -4,
+		right: -4,
+		backgroundColor: Colors.danger,
+		borderRadius: Radius.pill,
+		padding: 3,
 	},
 	facultyChip: {
 		flexDirection: "row",

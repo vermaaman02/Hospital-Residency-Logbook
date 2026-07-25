@@ -77,6 +77,20 @@ export function useDiagnosticSkills({
 	});
 
 	// Mutations
+	const addRowMutation = useMutation({
+		mutationFn: async ({ category, skillName, slNo }: { category: string; skillName?: string; slNo?: number }) => {
+			const res = await apiClient.post("/api/v1/diagnostics", {
+				action: "add",
+				category,
+				data: { skillName, slNo },
+			});
+			return res.data;
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["diagnostic-skills"] });
+		},
+	});
+
 	const updateMutation = useMutation({
 		mutationFn: async ({
 			id,
@@ -88,6 +102,7 @@ export function useDiagnosticSkills({
 				representativeDiagnosis?: string | null;
 				confidenceLevel?: string | null;
 				totalTimesPerformed?: number;
+				imageUrls?: string[];
 				facultyId?: string | null;
 				diagnosticCategory: string;
 			};
@@ -166,6 +181,10 @@ export function useDiagnosticSkills({
 		summary: summaryQuery.data,
 		isLoadingSummary: summaryQuery.isLoading,
 		refetchSummary: summaryQuery.refetch,
+
+		addRow: (category: string, skillName?: string, slNo?: number) =>
+			addRowMutation.mutateAsync({ category, skillName, slNo }),
+		isAddingRow: addRowMutation.isPending,
 
 		updateEntry: updateMutation.mutateAsync,
 		isUpdating: updateMutation.isPending,

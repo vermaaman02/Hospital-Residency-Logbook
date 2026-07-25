@@ -79,7 +79,9 @@ export async function addImagingLogRow(imagingCategory: string) {
   });
 
   if (existingEntries.length >= maxEntries) {
-    throw new Error(`Maximum entry capacity (${maxEntries} rows) reached for ${catConfig?.label || imagingCategory}.`);
+    throw new Error(
+      `All ${maxEntries} entry rows for ${catConfig?.label || imagingCategory} have already been added to your logbook.`
+    );
   }
 
   const maxSlNo = existingEntries.reduce((max, e) => Math.max(max, e.slNo), 0);
@@ -214,7 +216,9 @@ export async function updateImagingLogEntry(
     imagingType?: string | null;
     performedAtLocation?: string | null;
     skillLevel?: string | null;
+    totalProcedureTally?: number;
     totalImagingTally?: number;
+    imageUrls?: string[];
     facultyId?: string | null;
   },
 ) {
@@ -240,10 +244,11 @@ export async function updateImagingLogEntry(
       patientSex: data.patientSex,
       uhid: data.uhid,
       completeDiagnosis: data.completeDiagnosis,
-      procedureDescription: (data as any).imagingType ?? (data as any).procedureDescription ?? null,
+      procedureDescription: (data as any).procedureDescription ?? (data as any).imagingType ?? null,
       performedAtLocation: data.performedAtLocation,
       skillLevel: data.skillLevel as never,
-      totalProcedureTally: data.totalImagingTally ?? 0,
+      totalProcedureTally: data.totalProcedureTally ?? data.totalImagingTally ?? existing.totalProcedureTally ?? 0,
+      imageUrls: data.imageUrls ?? existing.imageUrls,
       facultyId: data.facultyId,
       status: existing.status === "NEEDS_REVISION" ? ("DRAFT" as never) : existing.status,
     },

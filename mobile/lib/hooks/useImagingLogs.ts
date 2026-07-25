@@ -15,7 +15,9 @@ export interface ImagingLogEntry {
 	procedureDescription: string | null;
 	performedAtLocation: string | null;
 	skillLevel: "S" | "O" | "A" | "PS" | "PI" | null;
-	totalImagingTally: number;
+	totalProcedureTally?: number;
+	totalImagingTally?: number;
+	imageUrls?: string[];
 	status: "DRAFT" | "SUBMITTED" | "SIGNED" | "NEEDS_REVISION";
 	facultyId: string | null;
 	facultyRemark: string | null;
@@ -125,7 +127,9 @@ export function useImagingLogs({
 				imagingType?: string | null;
 				performedAtLocation?: string | null;
 				skillLevel?: string | null;
+				totalProcedureTally?: number;
 				totalImagingTally?: number;
+				imageUrls?: string[];
 				facultyId?: string | null;
 			};
 		}) => {
