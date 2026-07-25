@@ -10,20 +10,24 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 import { buildSnapshot } from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
-async function resolveUser(clerkId: string) {
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
+	if (!user) throw new Error("User not found in database");
 	return user;
 }
 
@@ -346,7 +350,7 @@ export async function getResearchForReview() {
 }
 
 export async function signResearchEntry(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.researchActivity.findUnique({
@@ -391,18 +395,23 @@ export async function signResearchEntry(id: string, remark?: string) {
 		entityType: "ResearchActivity",
 		entityId: id,
 		href: "/dashboard/student/research-activities",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Research & Outreach Activity Signed",
+		`Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} has been signed.`,
+		{ type: "entry_signed", entityType: "ResearchActivity", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function rejectResearchEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.researchActivity.findUnique({
 		where: { id },
@@ -435,15 +444,22 @@ export async function rejectResearchEntry(id: string, remark: string) {
 		entityType: "ResearchActivity",
 		entityId: id,
 		href: "/dashboard/student/research-activities",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Research & Outreach Activity Needs Revision",
+		`Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} needs revision: ${remark}`,
+		{ type: "entry_rejected", entityType: "ResearchActivity", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function bulkSignResearchEntries(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.researchActivity.findMany({
@@ -481,12 +497,18 @@ export async function bulkSignResearchEntries(ids: string[]) {
 				entityType: "ResearchActivity",
 				entityId: entry.id,
 				href: "/dashboard/student/research-activities",
-			});
+			}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+			await sendRealtimeNotification(
+				entry.userId,
+				"Research & Outreach Activity Signed",
+				`Your research entry${entry.activity ? ` for "${entry.activity}"` : ""} has been signed.`,
+				{ type: "entry_signed", entityType: "ResearchActivity", entityId: entry.id }
+			).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 		}
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
 	return { success: true, signedCount: entries.length };
 }
 

@@ -339,6 +339,48 @@ function AuthenticatedShell() {
 					href: null,
 				}}
 			/>
+			<Tabs.Screen
+				name="life-support-courses"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="conferences"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="research-activities"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="disaster-drills"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="quality-improvement"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="logbook-reviews"
+				options={{
+					href: null,
+				}}
+			/>
+			<Tabs.Screen
+				name="evaluation-graph"
+				options={{
+					href: null,
+				}}
+			/>
 		</Tabs>
 	);
 }

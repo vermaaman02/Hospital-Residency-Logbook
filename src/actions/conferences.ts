@@ -9,19 +9,23 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 import { buildSnapshot } from "@/lib/entry-revisions";
 
 // ─── Helpers ────────────────────────────────────────────────
 
-async function resolveUser(clerkId: string) {
-  const user = await prisma.user.findUnique({ where: { clerkId } });
+async function resolveUser(identifier: string) {
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ clerkId: identifier }, { id: identifier }],
+    },
+  });
   if (!user) throw new Error("User not found in database");
   return user;
 }
@@ -345,7 +349,7 @@ export async function getConferencesForReview() {
 }
 
 export async function signConferenceEntry(id: string, remark?: string) {
-  const { userId } = await requireRole(["faculty", "hod"]);
+  const { userId } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await resolveUser(userId);
 
   const entry = await prisma.conferenceParticipation.findUnique({
@@ -390,18 +394,23 @@ export async function signConferenceEntry(id: string, remark?: string) {
     entityType: "ConferenceParticipation",
     entityId: id,
     href: "/dashboard/student/conferences",
-  });
+  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+  await sendRealtimeNotification(
+    entry.userId,
+    "Conference Participation Signed",
+    `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} has been signed.`,
+    { type: "entry_signed", entityType: "ConferenceParticipation", entityId: id }
+  ).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
   revalidateAll();
-  emitRealtimeEvent("entry:updated");
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
 export async function rejectConferenceEntry(id: string, remark: string) {
-  await requireRole(["faculty", "hod"]);
-  const clerkId = await requireAuth();
-  const user = await prisma.user.findUnique({ where: { clerkId } });
-  if (!user) throw new Error("User not found");
+  const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+  const user = await resolveUser(userId);
 
   const entry = await prisma.conferenceParticipation.findUnique({
     where: { id },
@@ -434,15 +443,22 @@ export async function rejectConferenceEntry(id: string, remark: string) {
     entityType: "ConferenceParticipation",
     entityId: id,
     href: "/dashboard/student/conferences",
-  });
+  }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+  await sendRealtimeNotification(
+    entry.userId,
+    "Conference Participation Needs Revision",
+    `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} needs revision: ${remark}`,
+    { type: "entry_rejected", entityType: "ConferenceParticipation", entityId: id }
+  ).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
   revalidateAll();
-  emitRealtimeEvent("entry:updated");
+  await emitRealtimeEvent("entry:updated");
   return { success: true };
 }
 
 export async function bulkSignConferenceEntries(ids: string[]) {
-  const { userId } = await requireRole(["faculty", "hod"]);
+  const { userId } = await requireRoleHybrid(["faculty", "hod"]);
   const user = await resolveUser(userId);
 
   const entries = await prisma.conferenceParticipation.findMany({
@@ -480,12 +496,18 @@ export async function bulkSignConferenceEntries(ids: string[]) {
         entityType: "ConferenceParticipation",
         entityId: entry.id,
         href: "/dashboard/student/conferences",
-      });
+      }).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+      await sendRealtimeNotification(
+        entry.userId,
+        "Conference Participation Signed",
+        `Your conference entry${entry.conferenceName ? ` for "${entry.conferenceName}"` : ""} has been signed.`,
+        { type: "entry_signed", entityType: "ConferenceParticipation", entityId: entry.id }
+      ).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
     }
   });
 
   revalidateAll();
-  emitRealtimeEvent("entry:updated");
   return { success: true, signedCount: entries.length };
 }
 

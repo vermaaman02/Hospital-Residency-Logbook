@@ -31,7 +31,13 @@ interface ExportButtonProps {
 		| "imaging"
 		| "transport"
 		| "consent"
-		| "bad-news";
+		| "bad-news"
+		| "life-support-courses"
+		| "conferences"
+		| "research-activities"
+		| "disaster-drills"
+		| "quality-improvement"
+		| "logbook-reviews";
 	label?: string;
 	size?: "sm" | "md" | "lg";
 	extraParams?: Record<string, string>;

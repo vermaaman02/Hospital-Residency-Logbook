@@ -10,18 +10,22 @@
 
 "use server";
 
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview, buildSnapshot } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 
 // ─── Helpers ────────────────────────────────────────────────
 
-async function resolveUser(clerkId: string) {
-	const user = await prisma.user.findUnique({ where: { clerkId } });
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
 	if (!user) throw new Error("User not found in database");
 	return user;
 }
@@ -326,7 +330,7 @@ export async function getCoursesForReview() {
 }
 
 export async function signCourseEntry(id: string, remark?: string) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entry = await prisma.courseAttended.findUnique({ where: { id } });
@@ -362,7 +366,7 @@ export async function signCourseEntry(id: string, remark?: string) {
 		});
 	});
 
-	// Send notification to student
+	// Send notifications (web VAPID & mobile real-time push)
 	await sendNotificationToUser(entry.userId, {
 		title: "Life-Support Courses - Course Signed",
 		body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
@@ -372,16 +376,21 @@ export async function signCourseEntry(id: string, remark?: string) {
 		href: "/dashboard/student/life-support-courses",
 	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 
+	await sendRealtimeNotification(
+		entry.userId,
+		"Life-Support Course Signed",
+		`Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
+		{ type: "entry_signed", entityType: "CourseAttended", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
+
 	revalidateAll();
 	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function rejectCourseEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.courseAttended.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -405,7 +414,7 @@ export async function rejectCourseEntry(id: string, remark: string) {
 		});
 	});
 
-	// Send notification to student
+	// Send notifications
 	await sendNotificationToUser(entry.userId, {
 		title: "Life-Support Courses - Course Needs Revision",
 		body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} needs revision: ${remark}`,
@@ -415,13 +424,20 @@ export async function rejectCourseEntry(id: string, remark: string) {
 		href: "/dashboard/student/life-support-courses",
 	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
 
+	await sendRealtimeNotification(
+		entry.userId,
+		"Life-Support Course Needs Revision",
+		`Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} needs revision: ${remark}`,
+		{ type: "entry_rejected", entityType: "CourseAttended", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
+
 	revalidateAll();
 	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function bulkSignCourseEntries(ids: string[]) {
-	const { userId } = await requireRole(["faculty", "hod"]);
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
 	const user = await resolveUser(userId);
 
 	const entries = await prisma.courseAttended.findMany({
@@ -453,7 +469,6 @@ export async function bulkSignCourseEntries(ids: string[]) {
 				remark: "Bulk signed",
 			});
 
-			// Send notification to student for each entry
 			await sendNotificationToUser(entry.userId, {
 				title: "Life-Support Courses - Course Signed",
 				body: `Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
@@ -462,6 +477,13 @@ export async function bulkSignCourseEntries(ids: string[]) {
 				entityId: entry.id,
 				href: "/dashboard/student/life-support-courses",
 			}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+			await sendRealtimeNotification(
+				entry.userId,
+				"Life-Support Course Signed",
+				`Your course entry${entry.courseName ? ` for "${entry.courseName}"` : ""} has been signed.`,
+				{ type: "entry_signed", entityType: "CourseAttended", entityId: entry.id }
+			).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 		}
 	});
 

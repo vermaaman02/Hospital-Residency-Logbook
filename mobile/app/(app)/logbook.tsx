@@ -77,7 +77,8 @@ const MODULES: Module[] = [
 	{ key: "disaster-drills", label: "Disaster Drills", icon: Siren, tone: TONES[4] },
 	{ key: "quality-improvement", label: "Quality Improvement", icon: TrendingUp, tone: TONES[0] },
 	{ key: "logbook-reviews", label: "Logbook Reviews", icon: CheckSquare, tone: TONES[1] },
-	{ key: "rotation-postings", label: "Rotation Postings", icon: RefreshCw, tone: TONES[2] },
+	{ key: "evaluation-graph", label: "My Evaluation Graph", icon: PieChart, tone: TONES[2] },
+	{ key: "rotation-postings", label: "Rotation Postings", icon: RefreshCw, tone: TONES[3] },
 ];
 
 export default function LogbookScreen() {
@@ -126,10 +127,21 @@ export default function LogbookScreen() {
 			router.push("/(app)/transport");
 		} else if (key === "consent-bad-news") {
 			router.push("/(app)/consent-bad-news");
+		} else if (key === "life-support") {
+			router.push("/(app)/life-support-courses");
+		} else if (key === "conferences") {
+			router.push("/(app)/conferences");
+		} else if (key === "research") {
+			router.push("/(app)/research-activities");
+		} else if (key === "disaster-drills") {
+			router.push("/(app)/disaster-drills");
+		} else if (key === "quality-improvement") {
+			router.push("/(app)/quality-improvement");
 		} else if (key === "logbook-reviews") {
-			router.push("/(app)/internal-assessments");
+			router.push("/(app)/logbook-reviews");
+		} else if (key === "evaluation-graph") {
+			router.push("/(app)/evaluation-graph");
 		} else {
-			// Navigate to other modules as they are implemented
 			console.log(`Module ${key} not yet implemented`);
 		}
 	};

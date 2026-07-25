@@ -9,19 +9,29 @@
 
 "use server";
 
-import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/logbook-reviews");
 	revalidatePath("/dashboard/faculty/logbook-reviews");
 	revalidatePath("/dashboard/hod/logbook-reviews");
+}
+
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
+	if (!user) throw new Error("User not found in database");
+	return user;
 }
 
 // ======================== STUDENT ACTIONS ========================
@@ -294,9 +304,8 @@ export async function getLogbookReviewsForReview() {
 }
 
 export async function signLogbookReviewEntry(id: string, remark?: string) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.logbookFacultyReview.findUnique({
 		where: { id },
@@ -339,19 +348,24 @@ export async function signLogbookReviewEntry(id: string, remark?: string) {
 			entityType: "LogbookFacultyReview",
 			entityId: id,
 			href: "/dashboard/student/logbook-reviews",
-		});
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+		await sendRealtimeNotification(
+			entry.userId,
+			"Logbook Faculty Review Signed",
+			`Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+			{ type: "entry_signed", entityType: "LogbookFacultyReview", entityId: id }
+		).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function rejectLogbookReviewEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.logbookFacultyReview.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -383,18 +397,24 @@ export async function rejectLogbookReviewEntry(id: string, remark: string) {
 			entityType: "LogbookFacultyReview",
 			entityId: id,
 			href: "/dashboard/student/logbook-reviews",
-		});
+		}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+		await sendRealtimeNotification(
+			entry.userId,
+			"Logbook Faculty Review Needs Revision",
+			`Your logbook review entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+			{ type: "entry_rejected", entityType: "LogbookFacultyReview", entityId: id }
+		).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function bulkSignLogbookReviewEntries(ids: string[]) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entries = await prisma.logbookFacultyReview.findMany({
 		where: { id: { in: ids }, status: "SUBMITTED" },
@@ -433,12 +453,19 @@ export async function bulkSignLogbookReviewEntries(ids: string[]) {
 				entityType: "LogbookFacultyReview",
 				entityId: e.id,
 				href: "/dashboard/student/logbook-reviews",
-			});
+			}).catch((err) => console.error("[NOTIFICATION_ERROR]", err));
+
+			await sendRealtimeNotification(
+				e.userId,
+				"Logbook Faculty Review Signed",
+				`Your logbook review entry${e.description ? ` for "${e.description}"` : ""} has been signed off.`,
+				{ type: "entry_signed", entityType: "LogbookFacultyReview", entityId: e.id }
+			).catch((err) => console.error("[REALTIME_NOTIF_ERROR]", err));
 		}
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 

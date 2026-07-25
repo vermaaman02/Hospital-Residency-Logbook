@@ -9,19 +9,29 @@
 
 "use server";
 
-import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/disaster-drills");
 	revalidatePath("/dashboard/faculty/disaster-drills");
 	revalidatePath("/dashboard/hod/disaster-drills");
+}
+
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
+	if (!user) throw new Error("User not found in database");
+	return user;
 }
 
 // ======================== STUDENT ACTIONS ========================
@@ -297,9 +307,8 @@ export async function getDisasterDrillsForReview() {
 }
 
 export async function signDisasterDrillEntry(id: string, remark?: string) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.disasterDrill.findUnique({
 		where: { id },
@@ -344,18 +353,23 @@ export async function signDisasterDrillEntry(id: string, remark?: string) {
 		entityType: "DisasterDrill",
 		entityId: id,
 		href: "/dashboard/student/disaster-drills",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Disaster Management Drill Signed",
+		`Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+		{ type: "entry_signed", entityType: "DisasterDrill", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function rejectDisasterDrillEntry(id: string, remark: string) {
-	await requireRole(["faculty", "hod"]);
-	const clerkId = await requireAuth();
-	const user = await prisma.user.findUnique({ where: { clerkId } });
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.disasterDrill.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -389,17 +403,23 @@ export async function rejectDisasterDrillEntry(id: string, remark: string) {
 		entityType: "DisasterDrill",
 		entityId: id,
 		href: "/dashboard/student/disaster-drills",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Disaster Management Drill Needs Revision",
+		`Your disaster drill entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+		{ type: "entry_rejected", entityType: "DisasterDrill", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function bulkSignDisasterDrillEntries(ids: string[]) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entries = await prisma.disasterDrill.findMany({
 		where: { id: { in: ids }, status: "SUBMITTED" },
@@ -438,12 +458,19 @@ export async function bulkSignDisasterDrillEntries(ids: string[]) {
 				entityType: "DisasterDrill",
 				entityId: e.id,
 				href: "/dashboard/student/disaster-drills",
-			});
+			}).catch((err) => console.error("[NOTIFICATION_ERROR]", err));
+
+			await sendRealtimeNotification(
+				e.userId,
+				"Disaster Management Drill Signed",
+				`Your disaster drill entry${e.description ? ` for "${e.description}"` : ""} has been signed off.`,
+				{ type: "entry_signed", entityType: "DisasterDrill", entityId: e.id }
+			).catch((err) => console.error("[REALTIME_NOTIF_ERROR]", err));
 		}
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 

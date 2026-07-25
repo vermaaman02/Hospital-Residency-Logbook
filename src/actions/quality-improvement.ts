@@ -9,19 +9,29 @@
 
 "use server";
 
-import { requireAuth, requireRole, ensureUserInDb } from "@/lib/auth";
+import { requireAuth, requireAuthHybrid, requireRole, requireRoleHybrid, ensureUserInDb } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { emitRealtimeEvent } from "@/lib/realtime-emit";
 import { isAutoReviewEnabled } from "./auto-review";
 import { recordSubmission, recordReview } from "@/lib/entry-revisions";
-import { sendNotificationToUser } from "@/lib/notifications";
+import { sendNotificationToUser, sendRealtimeNotification } from "@/lib/notifications";
 import { buildSnapshot } from "@/lib/entry-revisions";
 
 function revalidateAll() {
 	revalidatePath("/dashboard/student/quality-improvement");
 	revalidatePath("/dashboard/faculty/quality-improvement");
 	revalidatePath("/dashboard/hod/quality-improvement");
+}
+
+async function resolveUser(identifier: string) {
+	const user = await prisma.user.findFirst({
+		where: {
+			OR: [{ clerkId: identifier }, { id: identifier }],
+		},
+	});
+	if (!user) throw new Error("User not found in database");
+	return user;
 }
 
 // ======================== STUDENT ACTIONS ========================
@@ -297,9 +307,8 @@ export async function getQualityImprovementsForReview() {
 }
 
 export async function signQualityImprovementEntry(id: string, remark?: string) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.qualityImprovement.findUnique({
 		where: { id },
@@ -317,7 +326,7 @@ export async function signQualityImprovementEntry(id: string, remark?: string) {
 				...(remark ? { facultyRemark: remark } : {}),
 			},
 		});
-			await tx.digitalSignature.create({
+		await tx.digitalSignature.create({
 			data: {
 				entityId: id,
 				entityType: "QualityImprovement",
@@ -344,10 +353,17 @@ export async function signQualityImprovementEntry(id: string, remark?: string) {
 		entityType: "QualityImprovement",
 		entityId: id,
 		href: "/dashboard/student/quality-improvement",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Quality Improvement Signed",
+		`Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} has been signed off.`,
+		{ type: "entry_signed", entityType: "QualityImprovement", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
@@ -355,9 +371,8 @@ export async function rejectQualityImprovementEntry(
 	id: string,
 	remark: string,
 ) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entry = await prisma.qualityImprovement.findUnique({ where: { id } });
 	if (!entry) throw new Error("Entry not found");
@@ -391,17 +406,23 @@ export async function rejectQualityImprovementEntry(
 		entityType: "QualityImprovement",
 		entityId: id,
 		href: "/dashboard/student/quality-improvement",
-	});
+	}).catch((e) => console.error("[NOTIFICATION_ERROR]", e));
+
+	await sendRealtimeNotification(
+		entry.userId,
+		"Quality Improvement Needs Revision",
+		`Your quality improvement entry${entry.description ? ` for "${entry.description}"` : ""} needs revision: ${remark}`,
+		{ type: "entry_rejected", entityType: "QualityImprovement", entityId: id }
+	).catch((e) => console.error("[REALTIME_NOTIF_ERROR]", e));
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true };
 }
 
 export async function bulkSignQualityImprovementEntries(ids: string[]) {
-	await requireRole(["faculty", "hod"]);
-	const user = await ensureUserInDb();
-	if (!user) throw new Error("User not found");
+	const { userId } = await requireRoleHybrid(["faculty", "hod"]);
+	const user = await resolveUser(userId);
 
 	const entries = await prisma.qualityImprovement.findMany({
 		where: { id: { in: ids }, status: "SUBMITTED" },
@@ -440,12 +461,19 @@ export async function bulkSignQualityImprovementEntries(ids: string[]) {
 				entityType: "QualityImprovement",
 				entityId: e.id,
 				href: "/dashboard/student/quality-improvement",
-			});
+			}).catch((err) => console.error("[NOTIFICATION_ERROR]", err));
+
+			await sendRealtimeNotification(
+				e.userId,
+				"Quality Improvement Signed",
+				`Your quality improvement entry${e.description ? ` for "${e.description}"` : ""} has been signed off.`,
+				{ type: "entry_signed", entityType: "QualityImprovement", entityId: e.id }
+			).catch((err) => console.error("[REALTIME_NOTIF_ERROR]", err));
 		}
 	});
 
 	revalidateAll();
-	emitRealtimeEvent("entry:updated");
+	await emitRealtimeEvent("entry:updated");
 	return { success: true, count: entries.length };
 }
 
